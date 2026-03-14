@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FrameEcho</string>
+    <string name="app_slogan">Freeze Every Frame You Love</string>
+    <string name="select_video">Select Video</string>
+    <string name="capture_frame">Capture Frame</string>
+    <string name="export_static">Export Static</string>
+    <string name="export_motion">Export Motion Photo</string>
+    <string name="export_settings">Export Settings</string>
+    <string name="quality">Quality</string>
+    <string name="format">Format</string>
+    <string name="motion_duration">Motion Duration (seconds)</string>
+    <string name="preserve_metadata">Preserve Metadata</string>
+    <string name="remember_quick_settings">Remember Player Toggles</string>
+    <string name="remember_quick_settings_hint">Keep mute, motion photo, and metadata toggles for the next video/session</string>
+    <string name="hdr_handling">HDR Handling</string>
+    <string name="export_success">Export successful</string>
+    <string name="export_error">Export failed</string>
+    <string name="no_video_selected">No video selected</string>
+    <string name="processing">Processing…</string>
+    <string name="select_video_hint">Browse video frames and capture high-quality screenshots</string>
+    <string name="captured_info">Captured: %1$d × %2$d</string>
+    <string name="hdr_info">HDR: %1$s</string>
+    <string name="export_success_message">Exported successfully!</string>
+    <string name="export_format_fallback_message">Exported as %2$s (%1$s is not supported on this device)</string>
+    <string name="export_error_message">Export failed: %1$s</string>
+    <string name="capture_error_message">Capture error: %1$s</string>
+    <string name="capture_failed">Failed to capture frame</string>
+    <string name="motion_export_error">Motion photo export failed: %1$s</string>
+    <string name="mute">Mute</string>
+    <string name="unmute">Unmute</string>
+    <string name="hdr_auto">Auto</string>
+    <string name="hdr_sdr">SDR</string>
+    <string name="hdr_hdr">HDR</string>
+    <string name="hdr_system">System</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="motion_photo_on">Motion Photo On</string>
+    <string name="motion_photo_off">Motion Photo Off</string>
+    <string name="metadata_on">Metadata On</string>
+    <string name="metadata_off">Metadata Off</string>
+    <string name="capture_and_save">Capture &amp; Save</string>
+    <string name="forward_5s">Forward 5s</string>
+    <string name="replay_5s">Replay 5s</string>
+    <string name="next_frame">Next Frame</string>
+    <string name="prev_frame">Previous Frame</string>
+    <string name="custom_file_name">Custom File Name</string>
+    <string name="custom_file_name_hint">File name (without extension)</string>
+    <string name="restore_default_name">Restore default naming</string>
+    <string name="default_export_location">Default Export Location</string>
+    <string name="location_pictures">Pictures/FrameEcho</string>
+    <string name="location_dcim">DCIM/FrameEcho</string>
+    <string name="location_movies">Movies/FrameEcho</string>
+    <string name="current_name_format">Current: %1$s</string>
+    <string name="default_name_example">IMG_timestamp_position</string>
+    <string name="name_auto">Auto</string>
+    <string name="location_pictures_root">Pictures</string>
+    <string name="location_dcim_root">DCIM</string>
+    <string name="location_movies_root">Movies</string>
+    <string name="fine_scrubbing">Fine Scrubbing</string>
+    <string name="scrubbing_position">Scrubbing: %1$s</string>
+    <string name="fine_scrubbing_position">Fine Scrubbing: %1$s (%2$s ms)</string>
+    <string name="fine_scrubbing_frame_position">Fine Scrubbing: %1$s  F#%2$d (%3$s ms)</string>
+    <string name="swipe_up_fine_scrub">↑ Swipe up for fine control</string>
+    <string name="swipe_down_exit_fine_scrub">↓ Slide back to exit fine control</string>
+    <string name="zoom_reset">Reset</string>
+    <string name="about">About</string>
+    <string name="go_back">Go back</string>
+    <string name="app_description">A professional video frame extraction tool. Capture any moment from your videos with high quality, supporting HDR and motion photos.</string>
+    <string name="developer">Developer</string>
+    <string name="project_homepage">Project Homepage</string>
+    <string name="official_website">Official Website</string>
+    <string name="feedback">Feedback &amp; Issues</string>
+    <string name="license">License</string>
+    <string name="mit_license">MIT License</string>
+    <string name="app_version">Version</string>
+    <string name="location_custom">Custom Folder…</string>
+    <string name="custom_folder_active">Using custom folder</string>
+
+    <!-- Format descriptions -->
+    <string name="format_desc_jpeg">Universal compatibility, small file size</string>
+    <string name="format_desc_png">Lossless quality, supports transparency</string>
+    <string name="format_desc_webp">Modern format, good compression with transparency</string>
+    <string name="format_desc_heif">High efficiency, HDR support (Android 10+)</string>
+    <string name="format_desc_avif">Best compression, HDR + transparency (Android 12+)</string>
+
+    <!-- Quality hints -->
+    <string name="quality_not_applicable_png">PNG is always lossless — quality setting does not apply</string>
+    <string name="quality_hint">Higher values produce better quality but larger files</string>
+
+    <!-- HDR strategy descriptions -->
+    <string name="hdr_desc_auto">Automatically choose based on source and output format</string>
+    <string name="hdr_desc_sdr">Convert HDR to SDR for maximum compatibility</string>
+    <string name="hdr_desc_hdr">Preserve HDR data if the output format supports it</string>
+    <string name="hdr_desc_system">Use the system\'s default tone-mapping</string>
+
+    <!-- Motion photo -->
+    <string name="motion_photo_disabled_hint">Enable Motion Photo on the player to configure duration</string>
+
+    <!-- UX: user-friendly error messages -->
+    <string name="error_capture_failed">Unable to capture frame. Try a different position in the video.</string>
+    <string name="error_export_failed">Export failed. Please try again.</string>
+
+    <!-- UX: snackbar actions -->
+    <string name="snackbar_action_view">View</string>
+    <string name="snackbar_action_retry">Retry</string>
+
+    <!-- UX: loading / cancel -->
+    <string name="cancel">Cancel</string>
+    <string name="exporting">Exporting…</string>
+    <string name="video_loading">Loading…</string>
+    <string name="char_count_format">%1$d/%2$d</string>
+
+    <!-- Onboarding / New user guide -->
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_got_it">Got it!</string>
+
+    <string name="onboarding_capture_title">Capture &amp; Save</string>
+    <string name="onboarding_capture_desc">Tap the camera button in the bottom-right to capture the current frame and save it instantly.</string>
+
+    <string name="onboarding_mute_title">Mute Audio</string>
+    <string name="onboarding_mute_desc">Mute video playback and remove audio from exported motion photos.</string>
+
+    <string name="onboarding_motion_title">Motion Photo</string>
+    <string name="onboarding_motion_desc">Enable this to export a Google Motion Photo — a still image with a short video clip embedded around the captured frame.</string>
+
+    <string name="onboarding_metadata_title">Preserve Metadata</string>
+    <string name="onboarding_metadata_desc">Keep the original video\'s EXIF metadata (date, location, camera info) in the exported image.</string>
+
+    <string name="onboarding_format_title">Export Format</string>
+    <string name="onboarding_format_desc">Tap to cycle through formats: JPEG, PNG, WEBP, HEIF, AVIF. Each has different quality and compatibility trade-offs.</string>
+
+    <string name="onboarding_slider_title">Seek &amp; Fine Scrubbing</string>
+    <string name="onboarding_slider_desc">Drag the slider to seek. Swipe UP while dragging to enter fine scrubbing mode for frame-precise control.</string>
+
+    <string name="onboarding_gestures_title">Video Gestures</string>
+    <string name="onboarding_gestures_desc">Tap the video to play/pause. Pinch to zoom (up to 3x). When zoomed, drag to pan, or double-tap to reset zoom.</string>
+
+    <string name="onboarding_frame_step_title">Frame Step</string>
+    <string name="onboarding_frame_step_desc">Use the ‹‹ and ›› buttons to step backward or forward one frame at a time for precise frame selection.</string>
+
+    <string name="onboarding_show_guide">Show Guide Again</string>
+
+    <!-- Update checker -->
+    <string name="update_check_for_updates">Check for Updates</string>
+    <string name="update_current_version">Current version: %1$s</string>
+    <string name="update_available">Update Available</string>
+    <string name="update_new_version">A new version %1$s is available!</string>
+    <string name="update_release_notes">Release Notes</string>
+    <string name="update_go_to_release">Go to Release</string>
+    <string name="update_ignore_this_time">Not Now</string>
+    <string name="update_ignore_permanently">Ignore This Version</string>
+    <string name="update_already_latest">You are already on the latest version</string>
+    <string name="update_check_failed">Failed to check for updates. Please check your network.</string>
+</resources>

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FrameEcho - 定格你所爱的每一帧</title>
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="icon" href="favicon.ico" sizes="48x48">
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#BAE6FD">
+    <meta name="description" content="从视频中精准提取高质量画面，保存动态照片，保留所有珍贵记忆。">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
+        
+        body {
+            font-family: 'Inter', 'Noto Sans SC', sans-serif;
+            background-color: #FAFAFA;
+            color: #111827;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* 现代磨砂玻璃效果 */
+        .glass-nav {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .feature-card {
+            background: #FFFFFF;
+            border: 1px solid rgba(0, 0, 0, 0.04);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #2563EB 0%, #06B6D4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%);
+            color: white;
+            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 20px -3px rgba(37, 99, 235, 0.3);
+            background: linear-gradient(135deg, #1E40AF 0%, #1D4ED8 100%);
+        }
+
+        /* 平滑滚动 */
+        html { scroll-behavior: smooth; }
+
+        /* Icon 容器拟物高光 */
+        .icon-container {
+            position: relative;
+            border-radius: 26%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+            background: #fff;
+            overflow: hidden;
+        }
+        .icon-container::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            border: 1px solid rgba(255,255,255,0.4);
+            border-radius: 26%;
+            pointer-events: none;
+        }
+
+        .bg-pattern {
+            background-image: radial-gradient(#E5E7EB 1px, transparent 1px);
+            background-size: 32px 32px;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563EB',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-pattern" x-data="appData()">
+
+    <!-- 顶部导航 -->
+    <nav class="fixed w-full z-50 top-0 transition-all duration-300 glass-nav" :class="{ 'py-3': scrolled, 'py-5': !scrolled }">
+        <div class="max-w-6xl mx-auto px-6 flex justify-between items-center">
+            <div class="flex items-center gap-3 cursor-pointer" @click="window.scrollTo({top: 0, behavior: 'smooth'})">
+                <img src="icon.png" alt="FrameEcho 标志" class="w-10 h-10 rounded-xl shadow-sm border border-gray-100 object-cover">
+                <span class="font-bold text-xl tracking-tight text-gray-900">FrameEcho</span>
+            </div>
+            <div class="flex items-center gap-6 text-sm font-medium">
+                <a href="#features" class="hidden sm:block text-gray-600 hover:text-primary transition-colors">探索功能</a>
+                <a href="#developer" class="hidden sm:block text-gray-600 hover:text-primary transition-colors">开发者支持</a>
+                <a href="en.html" class="text-gray-600 hover:text-primary transition-colors font-medium">EN</a>
+                <a :href="downloadUrl" class="bg-gray-900 hover:bg-black text-white px-5 py-2.5 rounded-full shadow-md transition-all flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    <span>获取应用</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主视觉区域 -->
+    <main class="pt-40 pb-24 px-6 max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-16">
+        
+        <!-- 左侧文案 -->
+        <div class="flex-1 text-center md:text-left z-10">
+            <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white border border-gray-200 mb-8 text-sm font-medium text-gray-600 shadow-sm">
+                <span class="relative flex h-2.5 w-2.5">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                </span>
+                <span>定格你所爱的每一帧</span>
+            </div>
+            
+            <h1 class="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-tight mb-8 text-gray-900">
+                将视频里的瞬间<br />
+                变成<span class="gradient-text">永恒画面</span>
+            </h1>
+            
+            <p class="text-xl text-gray-600 mb-10 max-w-2xl mx-auto md:mx-0 leading-relaxed font-normal">
+                我们往往在事后才发现视频里藏着完美的笑容与风景。FrameEcho 帮助你极其简单地从视频中提取出那无损的一帧，并原样保存下来。
+            </p>
+            
+            <div class="flex flex-col sm:flex-row items-center gap-4 justify-center md:justify-start">
+                <button @click="downloadApk" class="w-full sm:w-auto flex items-center justify-center gap-2 btn-primary px-8 py-4 rounded-full font-semibold text-lg">
+                    <svg class="w-5 h-5 font-bold" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    <span x-text="loading ? '准备中..' : '立即下载'">立即下载</span>
+                    <span x-show="latestVersion" class="text-blue-100 text-sm ml-1 font-normal" x-text="'(' + assetSize + ')'"></span>
+                </button>
+                <a href="https://github.com/Shangjin-Xiao/FrameEcho/releases" target="_blank" class="w-full sm:w-auto px-8 py-4 rounded-full font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-all flex items-center justify-center gap-2 text-lg">
+                    版本记录
+                </a>
+            </div>
+
+            <p class="mt-8 text-sm text-gray-500 font-medium flex items-center justify-center md:justify-start gap-3">
+                <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                完全免费 · 隐私安全保障
+            </p>
+        </div>
+        
+        <!-- 右侧视觉 -->
+        <div class="flex-1 w-full max-w-md relative z-0 flex justify-center">
+            <div class="icon-container w-4/5 aspect-square bg-gradient-to-tr from-gray-100 to-white p-2">
+                <img src="icon.png" alt="FrameEcho 预览" class="w-full h-full object-cover rounded-[22%]" />
+            </div>
+            
+            <!-- 视觉点缀 -->
+            <div class="absolute -right-2 top-12 bg-white px-5 py-3 rounded-2xl flex items-center gap-3 shadow-xl shadow-gray-200/50">
+                <span class="text-xl">✨</span>
+                <div>
+                    <p class="text-sm text-gray-900 font-bold">完美画质</p>
+                </div>
+            </div>
+            <div class="absolute -left-6 bottom-16 bg-white px-5 py-3 rounded-2xl flex items-center gap-3 shadow-xl shadow-gray-200/50">
+                <span class="text-xl">🎬</span>
+                <div>
+                    <p class="text-sm text-gray-900 font-bold">动态照片</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 用户功能亮点区域 -->
+    <section id="features" class="py-24 bg-white border-t border-gray-100">
+        <div class="max-w-6xl mx-auto px-6">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl md:text-4xl font-black mb-4 text-gray-900">简单，且恰到好处</h2>
+                <p class="text-lg text-gray-500 max-w-2xl mx-auto font-medium">从打开视频到保存照片，一切都变得极其自然。</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <!-- 亮点 1 -->
+                <div class="feature-card p-10 rounded-[2rem]">
+                    <div class="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 mb-6">
+                        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900">精准到每一帧</h3>
+                    <p class="text-gray-600 leading-relaxed font-normal">进度条终于不再难拉了。极其顺滑的按需缩略图加载，让你精准定位到自己最爱的那一帧。</p>
+                </div>
+
+                <!-- 亮点 2 -->
+                <div class="feature-card p-10 rounded-[2rem]">
+                    <div class="w-12 h-12 rounded-2xl bg-cyan-50 flex items-center justify-center text-cyan-600 mb-6">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900">生成动态照片</h3>
+                    <p class="text-gray-600 leading-relaxed font-normal">不仅提取静止的照片，还可以一键保存为“动态照片”（Live Photo）。长按照片，它依旧鲜活。</p>
+                </div>
+
+                <!-- 亮点 3 -->
+                <div class="feature-card p-10 rounded-[2rem]">
+                    <div class="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 mb-6">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900">完美的无损画质</h3>
+                    <p class="text-gray-600 leading-relaxed font-normal">原样保留 HDR/杜比视界，完整保留拍摄时间、地点的元数据。让每一张抽出来的图片都富有故事。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 面向开发者/技术细节区域 -->
+    <section id="developer" class="py-24 bg-gray-50">
+        <div class="max-w-4xl mx-auto px-6">
+            <div class="text-center mb-12">
+                <span class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2 block">FOR DEVELOPERS</span>
+                <h2 class="text-3xl font-black mb-4 text-gray-900">透明的开源社区</h2>
+                <p class="text-lg text-gray-500 mx-auto font-medium">没有任何隐藏代码，欢迎开发者共同建设。</p>
+            </div>
+            
+            <div class="bg-white p-8 md:p-10 rounded-3xl border border-gray-200 flex flex-col md:flex-row items-center gap-8 shadow-sm">
+                <div class="w-20 h-20 rounded-full bg-gray-900 text-white flex items-center justify-center flex-shrink-0">
+                    <svg class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path></svg>
+                </div>
+                <div class="flex-1 text-center md:text-left">
+                    <h3 class="text-xl font-bold mb-3 text-gray-900">探索技术实现</h3>
+                    <p class="text-gray-600 mb-5 text-sm leading-relaxed">
+                        基于 Jetpack Compose 打造。了解如何实现微秒级精准截帧、微视频规范 (MicroVideo)、HDR/杜比视界色彩映射以及无损 EXIF 信息的持久化。
+                    </p>
+                    <a href="https://github.com/Shangjin-Xiao/FrameEcho" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 text-primary font-semibold hover:underline">
+                        访问 GitHub 仓库 
+                        <svg class="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="py-10 bg-white border-t border-gray-100 text-center">
+        <p class="text-gray-400 text-sm font-medium">© <span x-text="new Date().getFullYear()"></span> FrameEcho. All Rights Reserved.</p>
+    </footer>
+
+    <!-- Alpine.js 逻辑 -->
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('appData', () => ({
+                scrolled: false,
+                loading: false,
+                latestVersion: '',
+                assetSize: '',
+                downloadUrl: 'https://github.com/Shangjin-Xiao/FrameEcho/releases/latest',
+                
+                init() {
+                    window.addEventListener('scroll', () => {
+                        this.scrolled = window.scrollY > 20;
+                    });
+                    this.fetchLatestRelease();
+                },
+                
+                async fetchLatestRelease() {
+                    try {
+                        const response = await fetch('https://api.github.com/repos/Shangjin-Xiao/FrameEcho/releases/latest');
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.latestVersion = data.tag_name;
+                            const asset = data.assets.find(a => a.name.endsWith('.apk'));
+                            if (asset) {
+                                this.downloadUrl = asset.browser_download_url;
+                                this.assetSize = (asset.size / (1024 * 1024)).toFixed(1) + ' MB';
+                            }
+                        }
+                    } catch (e) {
+                        console.error('获取最新版本失败', e);
+                    }
+                },
+                
+                downloadApk() {
+                    if (this.downloadUrl) {
+                        window.location.href = this.downloadUrl;
+                    }
+                }
+            }))
+        })
+    </script>
+</body>
+</html>

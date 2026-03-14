@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">帧迹</string>
+    <string name="app_slogan">定格你所爱的每一帧</string>
+    <string name="select_video">选择视频</string>
+    <string name="capture_frame">截取帧</string>
+    <string name="export_static">导出静态图</string>
+    <string name="export_motion">导出动态照片</string>
+    <string name="export_settings">导出设置</string>
+    <string name="quality">质量</string>
+    <string name="format">格式</string>
+    <string name="motion_duration">动态照片时长（秒）</string>
+    <string name="preserve_metadata">保留元数据</string>
+    <string name="remember_quick_settings">记住播放器开关</string>
+    <string name="remember_quick_settings_hint">记住静音、动态照片和元数据开关，下一次选视频仍生效</string>
+    <string name="hdr_handling">HDR 处理</string>
+    <string name="export_success">导出成功</string>
+    <string name="export_error">导出失败</string>
+    <string name="no_video_selected">尚未选择视频</string>
+    <string name="processing">处理中…</string>
+    <string name="select_video_hint">逐帧浏览视频并截取高质量画面</string>
+    <string name="captured_info">已截取: %1$d × %2$d</string>
+    <string name="hdr_info">HDR: %1$s</string>
+    <string name="export_success_message">导出成功！</string>
+    <string name="export_format_fallback_message">已导出为 %2$s（此设备不支持 %1$s）</string>
+    <string name="export_error_message">导出失败: %1$s</string>
+    <string name="capture_error_message">截取错误: %1$s</string>
+    <string name="capture_failed">截取帧失败</string>
+    <string name="motion_export_error">动态照片导出失败: %1$s</string>
+    <string name="mute">静音</string>
+    <string name="unmute">取消静音</string>
+    <string name="hdr_auto">自动</string>
+    <string name="hdr_sdr">SDR</string>
+    <string name="hdr_hdr">HDR</string>
+    <string name="hdr_system">系统</string>
+    <string name="play">播放</string>
+    <string name="pause">暂停</string>
+    <string name="motion_photo_on">动态照片 开</string>
+    <string name="motion_photo_off">动态照片 关</string>
+    <string name="metadata_on">元数据 开</string>
+    <string name="metadata_off">元数据 关</string>
+    <string name="capture_and_save">截取并保存</string>
+    <string name="forward_5s">前进 5 秒</string>
+    <string name="replay_5s">后退 5 秒</string>
+    <string name="next_frame">下一帧</string>
+    <string name="prev_frame">上一帧</string>
+    <string name="custom_file_name">自定义文件名</string>
+    <string name="custom_file_name_hint">文件名（不含扩展名）</string>
+    <string name="restore_default_name">恢复默认命名</string>
+    <string name="default_export_location">默认导出位置</string>
+    <string name="location_pictures">图片/FrameEcho</string>
+    <string name="location_dcim">DCIM/FrameEcho</string>
+    <string name="location_movies">电影/FrameEcho</string>
+    <string name="current_name_format">当前: %1$s</string>
+    <string name="default_name_example">IMG_时间戳_位置</string>
+    <string name="name_auto">自动</string>
+    <string name="location_pictures_root">图片</string>
+    <string name="location_dcim_root">DCIM</string>
+    <string name="location_movies_root">电影</string>
+    <string name="fine_scrubbing">精细调节</string>
+    <string name="scrubbing_position">拖动预览：%1$s</string>
+    <string name="fine_scrubbing_position">精细调节：%1$s（%2$s 毫秒）</string>
+    <string name="fine_scrubbing_frame_position">精细调节：%1$s  第%2$d帧（%3$s 毫秒）</string>
+    <string name="swipe_up_fine_scrub">↑ 上滑开启精细调节</string>
+    <string name="swipe_down_exit_fine_scrub">↓ 划回退出精细调节</string>
+    <string name="zoom_reset">重置缩放</string>
+    <string name="about">关于</string>
+    <string name="go_back">返回</string>
+    <string name="app_description">专业的视频帧提取工具。高质量截取视频中的任意画面，支持 HDR 与动态照片。</string>
+    <string name="developer">开发者</string>
+    <string name="project_homepage">项目主页</string>
+    <string name="official_website">官方网站</string>
+    <string name="feedback">反馈与建议</string>
+    <string name="license">许可证</string>
+    <string name="mit_license">MIT License</string>
+    <string name="app_version">版本</string>
+    <string name="location_custom">自定义文件夹…</string>
+    <string name="custom_folder_active">正在使用自定义文件夹</string>
+
+    <!-- Format descriptions -->
+    <string name="format_desc_jpeg">通用兼容，文件体积小</string>
+    <string name="format_desc_png">无损画质，支持透明通道</string>
+    <string name="format_desc_webp">现代格式，兼顾压缩率与透明通道</string>
+    <string name="format_desc_heif">高效编码，支持 HDR（Android 10+）</string>
+    <string name="format_desc_avif">最佳压缩，支持 HDR + 透明通道（Android 12+）</string>
+
+    <!-- Quality hints -->
+    <string name="quality_not_applicable_png">PNG 始终为无损格式，质量设置不适用</string>
+    <string name="quality_hint">数值越高画质越好，但文件越大</string>
+
+    <!-- HDR strategy descriptions -->
+    <string name="hdr_desc_auto">根据源视频和输出格式自动选择最佳策略</string>
+    <string name="hdr_desc_sdr">将 HDR 转换为 SDR，确保最大兼容性</string>
+    <string name="hdr_desc_hdr">若输出格式支持，则保留 HDR 数据</string>
+    <string name="hdr_desc_system">使用系统默认色调映射</string>
+
+    <!-- Motion photo -->
+    <string name="motion_photo_disabled_hint">在播放器中开启动态照片后可配置时长</string>
+
+    <!-- UX: user-friendly error messages -->
+    <string name="error_capture_failed">无法截取帧，请尝试视频的其他位置</string>
+    <string name="error_export_failed">导出失败，请重试</string>
+
+    <!-- UX: snackbar actions -->
+    <string name="snackbar_action_view">查看</string>
+    <string name="snackbar_action_retry">重试</string>
+
+    <!-- UX: loading / cancel -->
+    <string name="cancel">取消</string>
+    <string name="exporting">正在导出…</string>
+    <string name="video_loading">加载中…</string>
+    <string name="char_count_format">%1$d/%2$d</string>
+
+    <!-- Onboarding / 新用户引导 -->
+    <string name="onboarding_skip">跳过</string>
+    <string name="onboarding_next">下一步</string>
+    <string name="onboarding_got_it">知道了！</string>
+
+    <string name="onboarding_capture_title">截取并保存</string>
+    <string name="onboarding_capture_desc">点击右下角的相机按钮，即可截取当前帧并立即保存。</string>
+
+    <string name="onboarding_mute_title">静音</string>
+    <string name="onboarding_mute_desc">静音播放视频，同时去除导出动态照片中的音频。</string>
+
+    <string name="onboarding_motion_title">动态照片</string>
+    <string name="onboarding_motion_desc">开启后可导出 Google 动态照片——在静态图片中嵌入截取帧前后的短视频片段。</string>
+
+    <string name="onboarding_metadata_title">保留元数据</string>
+    <string name="onboarding_metadata_desc">将原始视频的 EXIF 元数据（日期、位置、相机信息等）写入导出的图片。</string>
+
+    <string name="onboarding_format_title">导出格式</string>
+    <string name="onboarding_format_desc">点击可在 JPEG、PNG、WEBP、HEIF、AVIF 之间循环切换。每种格式在画质与兼容性上各有优劣。</string>
+
+    <string name="onboarding_slider_title">拖动与精细调节</string>
+    <string name="onboarding_slider_desc">拖动进度条可快速定位。拖动时向上滑动可进入精细调节模式，实现逐帧精准控制。</string>
+
+    <string name="onboarding_gestures_title">视频手势</string>
+    <string name="onboarding_gestures_desc">点击视频可播放/暂停。双指缩放可放大画面（最大 3 倍）。放大后可拖动平移，双击可重置缩放。</string>
+
+    <string name="onboarding_frame_step_title">逐帧步进</string>
+    <string name="onboarding_frame_step_desc">使用 ‹‹ 和 ›› 按钮可逐帧前进或后退，精确选取目标画面。</string>
+
+    <string name="onboarding_show_guide">再次显示引导</string>
+
+    <!-- 检查更新 -->
+    <string name="update_check_for_updates">检查更新</string>
+    <string name="update_current_version">当前版本：%1$s</string>
+    <string name="update_available">发现新版本</string>
+    <string name="update_new_version">新版本 %1$s 已发布！</string>
+    <string name="update_release_notes">更新日志</string>
+    <string name="update_go_to_release">前往下载</string>
+    <string name="update_ignore_this_time">暂不更新</string>
+    <string name="update_ignore_permanently">忽略此版本</string>
+    <string name="update_already_latest">当前已是最新版本</string>
+    <string name="update_check_failed">检查更新失败，请检查网络连接</string>
+</resources>

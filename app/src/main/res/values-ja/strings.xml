@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FrameEcho</string>
+    <string name="select_video">ビデオを選択</string>
+    <string name="capture_frame">フレームをキャプチャ</string>
+    <string name="export_static">静止画をエクスポート</string>
+    <string name="export_motion">モーションフォトをエクスポート</string>
+    <string name="export_settings">エクスポート設定</string>
+    <string name="quality">品質</string>
+    <string name="format">フォーマット</string>
+    <string name="motion_duration">モーション期間（秒）</string>
+    <string name="preserve_metadata">メタデータを保持</string>
+    <string name="remember_quick_settings">クイック設定を記憶する</string>
+    <string name="remember_quick_settings_hint">ミュート、モーションフォト、メタデータの切り替えを次のビデオ/セッションでも維持する</string>
+    <string name="hdr_handling">HDRの処理</string>
+    <string name="export_success">エクスポート成功</string>
+    <string name="export_error">エクスポート失敗</string>
+    <string name="no_video_selected">ビデオが選択されていません</string>
+    <string name="processing">処理中…</string>
+    <string name="select_video_hint">ビデオフレームを閲覧し、高品質のスクリーンショットをキャプチャする</string>
+    <string name="captured_info">キャプチャ済み: %1$d × %2$d</string>
+    <string name="hdr_info">HDR: %1$s</string>
+    <string name="export_success_message">正常にエクスポートされました！</string>
+    <string name="export_format_fallback_message">%2$sとしてエクスポートされました（%1$sはこのデバイスでサポートされていません）</string>
+    <string name="export_error_message">エクスポート失敗: %1$s</string>
+    <string name="capture_error_message">キャプチャエラー: %1$s</string>
+    <string name="capture_failed">フレームのキャプチャに失敗しました</string>
+    <string name="motion_export_error">モーションフォトのエクスポートに失敗しました: %1$s</string>
+    <string name="mute">ミュート</string>
+    <string name="unmute">ミュート解除</string>
+    <string name="hdr_auto">自動</string>
+    <string name="hdr_sdr">SDR</string>
+    <string name="hdr_hdr">HDR</string>
+    <string name="hdr_system">システム</string>
+    <string name="play">再生</string>
+    <string name="pause">一時停止</string>
+    <string name="motion_photo_on">モーションフォト オン</string>
+    <string name="motion_photo_off">モーションフォト オフ</string>
+    <string name="metadata_on">メタデータ オン</string>
+    <string name="metadata_off">メタデータ オフ</string>
+    <string name="capture_and_save">キャプチャして保存</string>
+    <string name="forward_5s">5秒進む</string>
+    <string name="replay_5s">5秒戻る</string>
+    <string name="custom_file_name">カスタムファイル名</string>
+    <string name="custom_file_name_hint">ファイル名（拡張子なし）</string>
+    <string name="restore_default_name">デフォルトの命名規則を復元</string>
+    <string name="default_export_location">デフォルトのエクスポート先</string>
+    <string name="location_pictures">Pictures/FrameEcho</string>
+    <string name="location_dcim">DCIM/FrameEcho</string>
+    <string name="location_movies">Movies/FrameEcho</string>
+    <string name="current_name_format">現在: %1$s</string>
+    <string name="default_name_example">IMG_タイムスタンプ_位置</string>
+    <string name="name_auto">自動</string>
+    <string name="location_pictures_root">Pictures</string>
+    <string name="location_dcim_root">DCIM</string>
+    <string name="location_movies_root">Movies</string>
+    <string name="fine_scrubbing">微調整</string>
+    <string name="scrubbing_position">スクラブ位置: %1$s</string>
+    <string name="fine_scrubbing_position">微調整: %1$s (%2$s ms)</string>
+    <string name="fine_scrubbing_frame_position">微調整: %1$s  F#%2$d (%3$s ms)</string>
+    <string name="swipe_up_fine_scrub">↑ 上にスワイプして微調整</string>
+    <string name="swipe_down_exit_fine_scrub">↓ 下にスワイプして微調整を終了</string>
+    <string name="zoom_reset">リセット</string>
+    <string name="about">概要</string>
+    <string name="go_back">戻る</string>
+    <string name="app_description">プロフェッショナルなビデオフレーム抽出ツール。HDRおよびモーションフォトをサポートし、ビデオのあらゆる瞬間を高品質でキャプチャします。</string>
+    <string name="developer">開発者</string>
+    <string name="project_homepage">プロジェクトのホームページ</string>
+    <string name="official_website">公式ウェブサイト</string>
+    <string name="feedback">フィードバックと問題</string>
+    <string name="license">ライセンス</string>
+    <string name="mit_license">MITライセンス</string>
+    <string name="app_version">バージョン</string>
+    <string name="location_custom">カスタムフォルダ…</string>
+    <string name="custom_folder_active">カスタムフォルダを使用中</string>
+
+    <!-- Format descriptions -->
+    <string name="format_desc_jpeg">普遍的な互換性、ファイルサイズが小さい</string>
+    <string name="format_desc_png">ロスレス品質、透明度をサポート</string>
+    <string name="format_desc_webp">最新のフォーマット、透明度のある優れた圧縮</string>
+    <string name="format_desc_heif">高効率、HDRサポート（Android 10以降）</string>
+    <string name="format_desc_avif">最高の圧縮率、HDR + 透明度をサポート（Android 12以降）</string>
+
+    <!-- Quality hints -->
+    <string name="quality_not_applicable_png">PNGは常にロスレスです — 品質設定は適用されません</string>
+    <string name="quality_hint">値を高くすると品質が向上しますが、ファイルサイズは大きくなります</string>
+
+    <!-- HDR strategy descriptions -->
+    <string name="hdr_desc_auto">ソースと出力フォーマットに基づいて自動的に選択します</string>
+    <string name="hdr_desc_sdr">最大の互換性のためにHDRをSDRに変換します</string>
+    <string name="hdr_desc_hdr">出力フォーマットがサポートしている場合はHDRデータを保持します</string>
+    <string name="hdr_desc_system">システムのデフォルトのトーンマッピングを使用します</string>
+
+    <!-- Motion photo -->
+    <string name="motion_photo_disabled_hint">プレイヤーでモーションフォトを有効にして期間を設定します</string>
+
+    <!-- UX: user-friendly error messages -->
+    <string name="error_capture_failed">フレームをキャプチャできません。ビデオの別の位置でお試しください。</string>
+    <string name="error_export_failed">エクスポートに失敗しました。もう一度お試しください。</string>
+
+    <!-- UX: snackbar actions -->
+    <string name="snackbar_action_view">表示</string>
+    <string name="snackbar_action_retry">再試行</string>
+
+    <!-- UX: loading / cancel -->
+    <string name="cancel">キャンセル</string>
+    <string name="exporting">エクスポート中…</string>
+    <string name="video_loading">読み込み中…</string>
+    <string name="char_count_format">%1$d/%2$d</string>
+
+    <!-- Onboarding / 新規ユーザーガイド -->
+    <string name="onboarding_skip">スキップ</string>
+    <string name="onboarding_next">次へ</string>
+    <string name="onboarding_got_it">了解！</string>
+
+    <string name="onboarding_capture_title">キャプチャして保存</string>
+    <string name="onboarding_capture_desc">右下のカメラボタンをタップすると、現在のフレームをキャプチャしてすぐに保存できます。</string>
+
+    <string name="onboarding_mute_title">ミュート / ミュート解除</string>
+    <string name="onboarding_mute_desc">音声の再生をオン/オフに切り替えます。フレームを静かに閲覧したい時に便利です。</string>
+
+    <string name="onboarding_motion_title">モーションフォト</string>
+    <string name="onboarding_motion_desc">有効にすると、Googleモーションフォト形式でエクスポートできます。静止画にキャプチャフレーム前後の短い動画クリップが埋め込まれます。</string>
+
+    <string name="onboarding_metadata_title">メタデータを保持</string>
+    <string name="onboarding_metadata_desc">元のビデオのEXIFメタデータ（日付、位置、カメラ情報）をエクスポート画像に保持します。</string>
+
+    <string name="onboarding_format_title">エクスポート形式</string>
+    <string name="onboarding_format_desc">タップしてJPEG、PNG、WEBP、HEIF、AVIFを順番に切り替えます。各形式には画質と互換性のトレードオフがあります。</string>
+
+    <string name="onboarding_slider_title">シーク＆微調整</string>
+    <string name="onboarding_slider_desc">スライダーをドラッグしてシークします。ドラッグ中に上にスワイプすると微調整モードに入り、フレーム単位の精密な制御が可能です。</string>
+
+    <string name="onboarding_gestures_title">ビデオジェスチャー</string>
+    <string name="onboarding_gestures_desc">ビデオをタップで再生/一時停止。ピンチで最大3倍までズーム。ズーム中はドラッグでパン、ダブルタップでズームをリセットできます。</string>
+
+    <string name="onboarding_show_guide">ガイドを再表示</string>
+
+    <!-- アップデート確認 -->
+    <string name="update_check_for_updates">アップデートを確認</string>
+    <string name="update_current_version">現在のバージョン：%1$s</string>
+    <string name="update_available">アップデートが利用可能</string>
+    <string name="update_new_version">新しいバージョン %1$s が利用可能です！</string>
+    <string name="update_release_notes">リリースノート</string>
+    <string name="update_go_to_release">リリースページへ</string>
+    <string name="update_ignore_this_time">今はしない</string>
+    <string name="update_ignore_permanently">このバージョンを無視</string>
+    <string name="update_already_latest">最新バージョンを使用中です</string>
+    <string name="update_check_failed">アップデートの確認に失敗しました。ネットワーク接続を確認してください。</string>
+</resources>
