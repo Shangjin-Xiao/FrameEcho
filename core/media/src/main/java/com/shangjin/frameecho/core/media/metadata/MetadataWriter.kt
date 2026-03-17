@@ -74,10 +74,10 @@ object MetadataWriter {
 
         // Device info
         metadata.make?.let {
-            exif.setAttribute(ExifInterface.TAG_MAKE, it)
+            exif.setAttribute(ExifInterface.TAG_MAKE, sanitizeMetadataString(it))
         }
         metadata.model?.let {
-            exif.setAttribute(ExifInterface.TAG_MODEL, it)
+            exif.setAttribute(ExifInterface.TAG_MODEL, sanitizeMetadataString(it))
         }
 
         // Camera settings
