@@ -32,6 +32,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
@@ -362,6 +364,7 @@ fun PlaybackControls(
                     // Previous frame
                     if (frameDurationMs > 0L) {
                         TooltipWrapper(label = stringResource(R.string.prev_frame)) {
+                            val prevFrameContentDesc = stringResource(R.string.prev_frame)
                             IconButton(
                                 onClick = {
                                     if (exoPlayer.isPlaying) exoPlayer.pause()
@@ -371,7 +374,7 @@ fun PlaybackControls(
                                     onUpdatePosition(newPos)
                                     hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 },
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(36.dp).semantics { contentDescription = prevFrameContentDesc }
                             ) {
                                 Text(
                                     text = "‹‹",
@@ -383,13 +386,14 @@ fun PlaybackControls(
                     }
 
                     TooltipWrapper(label = stringResource(R.string.replay_5s)) {
+                        val replayContentDesc = stringResource(R.string.replay_5s)
                         IconButton(
                             onClick = {
                                 val newPos = maxOf(0L, exoPlayer.currentPosition - seekIntervalMs)
                                 onSeekTo(newPos)
                                 onUpdatePosition(newPos)
                             },
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(40.dp).semantics { contentDescription = replayContentDesc }
                         ) {
                             Text(
                                 text = "-${seekIntervalMs / 1000}s",
@@ -415,13 +419,14 @@ fun PlaybackControls(
                         }
                     }
                     TooltipWrapper(label = stringResource(R.string.forward_5s)) {
+                        val forwardContentDesc = stringResource(R.string.forward_5s)
                         IconButton(
                             onClick = {
                                 val newPos = minOf(durationMs, exoPlayer.currentPosition + seekIntervalMs)
                                 onSeekTo(newPos)
                                 onUpdatePosition(newPos)
                             },
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(40.dp).semantics { contentDescription = forwardContentDesc }
                         ) {
                             Text(
                                 text = "+${seekIntervalMs / 1000}s",
@@ -434,6 +439,7 @@ fun PlaybackControls(
                     // Next frame
                     if (frameDurationMs > 0L) {
                         TooltipWrapper(label = stringResource(R.string.next_frame)) {
+                            val nextFrameContentDesc = stringResource(R.string.next_frame)
                             IconButton(
                                 onClick = {
                                     if (exoPlayer.isPlaying) exoPlayer.pause()
@@ -443,7 +449,7 @@ fun PlaybackControls(
                                     onUpdatePosition(newPos)
                                     hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 },
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(36.dp).semantics { contentDescription = nextFrameContentDesc }
                             ) {
                                 Text(
                                     text = "››",
