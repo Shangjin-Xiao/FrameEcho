@@ -118,10 +118,14 @@ object DateTimeUtils {
         if (!hasZ) return null
 
         for (formatter in OFFSET_INPUT_FORMATTERS) {
-            try {
-                return OffsetDateTime.parse(dateStr, formatter)
-            } catch (_: DateTimeParseException) {
-                continue
+            val pos = java.text.ParsePosition(0)
+            val parsed = formatter.parseUnresolved(dateStr, pos)
+            if (parsed != null && pos.errorIndex < 0 && pos.index == dateStr.length) {
+                try {
+                    return OffsetDateTime.parse(dateStr, formatter)
+                } catch (_: DateTimeParseException) {
+                    continue
+                }
             }
         }
         return null
@@ -142,21 +146,30 @@ object DateTimeUtils {
         }
 
         for (formatter in formatters) {
-            try {
-                return LocalDateTime.parse(dateStr, formatter)
-            } catch (_: DateTimeParseException) {
-                continue
+            val pos = java.text.ParsePosition(0)
+            val parsed = formatter.parseUnresolved(dateStr, pos)
+            if (parsed != null && pos.errorIndex < 0 && pos.index == dateStr.length) {
+                try {
+                    return LocalDateTime.parse(dateStr, formatter)
+                } catch (_: DateTimeParseException) {
+                    continue
+                }
             }
         }
         return null
     }
 
     private fun parseLocalDate(dateStr: String): LocalDate? {
-        return try {
-            LocalDate.parse(dateStr, FMT_SPACE_SEP_LOCAL)
-        } catch (_: DateTimeParseException) {
-            null
+        val pos = java.text.ParsePosition(0)
+        val parsed = FMT_SPACE_SEP_LOCAL.parseUnresolved(dateStr, pos)
+        if (parsed != null && pos.errorIndex < 0 && pos.index == dateStr.length) {
+            try {
+                return LocalDate.parse(dateStr, FMT_SPACE_SEP_LOCAL)
+            } catch (_: DateTimeParseException) {
+                return null
+            }
         }
+        return null
     }
 
     private fun formatOffsetIso(offsetDateTime: OffsetDateTime): String {
