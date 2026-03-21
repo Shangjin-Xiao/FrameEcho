@@ -82,8 +82,8 @@ object MetadataWriter {
 
         // Camera settings
         metadata.iso?.let {
+            // TAG_ISO_SPEED_RATINGS is deprecated in favor of TAG_PHOTOGRAPHIC_SENSITIVITY
             exif.setAttribute(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, it.toString())
-            exif.setAttribute(ExifInterface.TAG_ISO_SPEED_RATINGS, it.toString())
         }
         metadata.exposureTime?.let { raw ->
             val normalized = ExifUtils.normalizeExposureTime(raw)
