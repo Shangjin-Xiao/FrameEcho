@@ -1,6 +1,9 @@
+@file:androidx.annotation.OptIn(UnstableApi::class)
+
 package com.shangjin.frameecho.app.ui.player.components
 
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.media3.common.util.UnstableApi
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box

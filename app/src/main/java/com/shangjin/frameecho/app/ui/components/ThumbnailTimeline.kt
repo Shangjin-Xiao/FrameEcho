@@ -7,7 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -62,7 +62,7 @@ fun ThumbnailTimeline(
     val currentRequestThumbnail by rememberUpdatedState(requestThumbnail)
     val currentOnThumbnailClick by rememberUpdatedState(onThumbnailClick)
 
-    BoxWithConstraints(modifier = modifier) {
+    Box(modifier = modifier) {
 
         LazyRow(
             state = listState,

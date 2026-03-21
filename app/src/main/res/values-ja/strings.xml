@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">FrameEcho</string>
+    <string name="app_slogan">お気に入りのフレームを残そう</string>
     <string name="select_video">ビデオを選択</string>
     <string name="capture_frame">フレームをキャプチャ</string>
     <string name="export_static">静止画をエクスポート</string>
@@ -41,6 +42,8 @@
     <string name="capture_and_save">キャプチャして保存</string>
     <string name="forward_5s">5秒進む</string>
     <string name="replay_5s">5秒戻る</string>
+    <string name="next_frame">次のフレーム</string>
+    <string name="prev_frame">前のフレーム</string>
     <string name="custom_file_name">カスタムファイル名</string>
     <string name="custom_file_name_hint">ファイル名（拡張子なし）</string>
     <string name="restore_default_name">デフォルトの命名規則を復元</string>
@@ -133,6 +136,9 @@
 
     <string name="onboarding_gestures_title">ビデオジェスチャー</string>
     <string name="onboarding_gestures_desc">ビデオをタップで再生/一時停止。ピンチで最大3倍までズーム。ズーム中はドラッグでパン、ダブルタップでズームをリセットできます。</string>
+
+    <string name="onboarding_frame_step_title">フレームステップ</string>
+    <string name="onboarding_frame_step_desc">‹‹ と ›› ボタンを使って、1フレームずつ前後に移動し、正確なフレーム選択が可能です。</string>
 
     <string name="onboarding_show_guide">ガイドを再表示</string>
 

@@ -1,6 +1,9 @@
+@file:androidx.annotation.OptIn(UnstableApi::class)
+
 package com.shangjin.frameecho.app.ui.player.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.media3.common.util.UnstableApi
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut

@@ -542,12 +542,14 @@ class FrameExporter(private val context: Context) {
                     val sampleTime = extractor.sampleTime
                     if (sampleTime < 0 || sampleTime > endUs) break
 
-                    val sampleSizeHint = extractor.sampleSize
-                    if (sampleSizeHint > 0 &&
-                        sampleSizeHint <= Int.MAX_VALUE &&
-                        sampleSizeHint.toInt() > buffer.capacity()
-                    ) {
-                        buffer = ByteBuffer.allocateDirect(sampleSizeHint.toInt())
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        val sampleSizeHint = extractor.sampleSize
+                        if (sampleSizeHint > 0 &&
+                            sampleSizeHint <= Int.MAX_VALUE &&
+                            sampleSizeHint.toInt() > buffer.capacity()
+                        ) {
+                            buffer = ByteBuffer.allocateDirect(sampleSizeHint.toInt())
+                        }
                     }
 
                     buffer.clear()
@@ -557,7 +559,7 @@ class FrameExporter(private val context: Context) {
                     bufferInfo.offset = 0
                     bufferInfo.size = sampleSize
                     bufferInfo.presentationTimeUs = (sampleTime - actualStartUs).coerceAtLeast(0L)
-                    bufferInfo.flags = extractor.sampleFlags
+                    bufferInfo.flags = convertSampleToCodecFlags(extractor.sampleFlags)
 
                     muxer.writeSampleData(muxerVideoTrack, buffer, bufferInfo)
                     videoSamplesWritten++
@@ -578,12 +580,14 @@ class FrameExporter(private val context: Context) {
                         val sampleTime = extractor.sampleTime
                         if (sampleTime < 0 || sampleTime > endUs) break
 
-                        val sampleSizeHint = extractor.sampleSize
-                        if (sampleSizeHint > 0 &&
-                            sampleSizeHint <= Int.MAX_VALUE &&
-                            sampleSizeHint.toInt() > buffer.capacity()
-                        ) {
-                            buffer = ByteBuffer.allocateDirect(sampleSizeHint.toInt())
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            val sampleSizeHint = extractor.sampleSize
+                            if (sampleSizeHint > 0 &&
+                                sampleSizeHint <= Int.MAX_VALUE &&
+                                sampleSizeHint.toInt() > buffer.capacity()
+                            ) {
+                                buffer = ByteBuffer.allocateDirect(sampleSizeHint.toInt())
+                            }
                         }
 
                         buffer.clear()
@@ -593,7 +597,7 @@ class FrameExporter(private val context: Context) {
                         bufferInfo.offset = 0
                         bufferInfo.size = sampleSize
                         bufferInfo.presentationTimeUs = (sampleTime - actualStartUs).coerceAtLeast(0L)
-                        bufferInfo.flags = extractor.sampleFlags
+                        bufferInfo.flags = convertSampleToCodecFlags(extractor.sampleFlags)
 
                         muxer.writeSampleData(muxerAudioTrack, buffer, bufferInfo)
                         extractor.advance()
@@ -1085,10 +1089,30 @@ internal fun ExportFormat.toCompressFormat(
 
 private fun getWebpCompressFormat(quality: Int, sdkInt: Int): Bitmap.CompressFormat {
     return if (sdkInt >= Build.VERSION_CODES.R) {
-        if (quality >= 100) Bitmap.CompressFormat.WEBP_LOSSLESS
-        else Bitmap.CompressFormat.WEBP_LOSSY
+        getWebpCompressFormatApi30(quality)
     } else {
         @Suppress("DEPRECATION")
         Bitmap.CompressFormat.WEBP
     }
+}
+
+@android.annotation.TargetApi(Build.VERSION_CODES.R)
+private fun getWebpCompressFormatApi30(quality: Int): Bitmap.CompressFormat {
+    return if (quality >= 100) Bitmap.CompressFormat.WEBP_LOSSLESS
+    else Bitmap.CompressFormat.WEBP_LOSSY
+}
+
+/**
+ * Convert MediaExtractor sample flags to MediaCodec buffer flags.
+ *
+ * MediaExtractor.SAMPLE_FLAG_SYNC (1) maps to MediaCodec.BUFFER_FLAG_KEY_FRAME (1).
+ * Other extractor-specific flags (e.g. SAMPLE_FLAG_ENCRYPTED) are filtered out
+ * since they have no valid MediaCodec.BufferInfo counterpart.
+ */
+private fun convertSampleToCodecFlags(sampleFlags: Int): Int {
+    var codecFlags = 0
+    if (sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) {
+        codecFlags = codecFlags or MediaCodec.BUFFER_FLAG_KEY_FRAME
+    }
+    return codecFlags
 }

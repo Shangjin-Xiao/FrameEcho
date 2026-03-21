@@ -1,5 +1,6 @@
 package com.shangjin.frameecho.core.media.extraction
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
@@ -296,7 +297,10 @@ class FrameExtractor(
 
     /**
      * Internal thumbnail extraction with API compatibility check.
+     * Uses getScaledFrameAtTime on API 27+ (guarded by [sdkInt] runtime check),
+     * falls back to manual scaling on older devices.
      */
+    @SuppressLint("NewApi") // Runtime-guarded by sdkInt >= 27
     private fun extractThumbnailInternal(
         retriever: MediaMetadataRetriever,
         timestampUs: Long,

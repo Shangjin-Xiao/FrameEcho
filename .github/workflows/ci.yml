@@ -5,7 +5,7 @@ on:
 
 jobs:
   test:
-    name: Build Debug + Unit Tests
+    name: Lint + Unit Tests + Build
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,18 +27,24 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+      - name: Run Android Lint
+        run: ./gradlew lint --no-daemon --stacktrace
 
       - name: Run unit tests
         run: ./gradlew test --no-daemon --stacktrace
 
-      - name: Upload Debug APK
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload lint reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: frameecho-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 14
+          name: lint-reports
+          path: |
+            **/build/reports/lint-results*.html
+            **/build/reports/lint-results*.xml
+          retention-days: 7
 
       - name: Upload test reports
         if: always()
@@ -49,3 +55,10 @@ jobs:
             **/build/reports/tests/
             **/build/test-results/
           retention-days: 7
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: frameecho-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14

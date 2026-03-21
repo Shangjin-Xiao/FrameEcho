@@ -1,6 +1,9 @@
+@file:androidx.annotation.OptIn(UnstableApi::class)
+
 package com.shangjin.frameecho.app.ui.player
 
 import android.Manifest
+import androidx.media3.common.util.UnstableApi
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
