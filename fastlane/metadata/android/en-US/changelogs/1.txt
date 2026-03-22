@@ -1,0 +1,8 @@
+First stable release. Key features:
+- Precise frame extraction
+- Multi-format export: JPEG, PNG, WebP, HEIF, AVIF
+- Motion Photo: Follows Google MicroVideo spec
+- HDR Support: Detects HDR10, HDR10+, HLG, Dolby Vision
+- Lossless EXIF preservation
+- Flexible export configuration
+- Material 3 UI

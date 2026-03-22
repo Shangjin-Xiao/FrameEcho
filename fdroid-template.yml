@@ -1,0 +1,25 @@
+Categories:
+  - Multimedia
+License: MIT
+AuthorName: Shangjin Xiao
+WebSite: https://frameecho.shangjinyun.cn
+SourceCode: https://github.com/Shangjin-Xiao/FrameEcho
+IssueTracker: https://github.com/Shangjin-Xiao/FrameEcho/issues
+Translation: https://github.com/Shangjin-Xiao/FrameEcho
+Changelog: https://github.com/Shangjin-Xiao/FrameEcho/releases
+
+RepoType: git
+Repo: https://github.com/Shangjin-Xiao/FrameEcho
+
+Builds:
+  - versionName: '1.0.0'
+    versionCode: 1
+    commit: v1.0.0
+    subdir: app
+    gradle:
+      - yes
+
+AutoUpdateMode: Version v%v
+UpdateCheckMode: Tags
+CurrentVersion: '1.0.0'
+CurrentVersionCode: 1

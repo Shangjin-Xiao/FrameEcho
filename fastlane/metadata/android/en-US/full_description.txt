@@ -1,0 +1,18 @@
+FrameEcho - Freeze Every Frame You Love
+
+High-performance video frame capture for Android.
+Extract perfect screenshots from any video with HDR awareness, motion photo export, and full EXIF preservation. Quick-access toggles and a settings sheet let you choose format, quality, export folder, filename template, mute audio and HDR tone-mapping.
+
+Features
+- Microsecond-Precise Frame Capture: Always uses MediaMetadataRetriever.OPTION_CLOSEST; never falls back to keyframe seeking.
+- Static & Motion Photo Export: JPEG, PNG, WebP, HEIF, AVIF; motion photo follows Google MicroVideo spec.
+- Mute Audio Option: Omit audio when exporting motion photos.
+- HDR & Dolby Vision Aware: Detects HDR10, HDR10+, HLG, Dolby Vision; tone-maps to sRGB for SDR, preserves HDR for HEIF/AVIF.
+- Configurable HDR Tone-Mapping: Automatic, force SDR, preserve HDR or follow system setting.
+- Custom File Names & Export Locations: Presets, manual input with length validation, root folders or SAF-picked custom directory.
+- Lossless Metadata Preservation: Full EXIF from source video written to exported image.
+- Quality & Resolution Controls: Adjustable quality and optional max resolution with bounds checks.
+- 4K Source OOM-Safe: Explicit memory management, thumbnail caching, runs on IO thread.
+- Lazy Thumbnail Timeline: LazyRow-based strip with on-demand thumbnails and live position indicator.
+- Material 3 UI: Dynamic Color (Android 12+), custom playback controls, modern export settings.
+- Scoped Storage & SAF: Strict MediaStore API usage; gallery refreshes immediately after export.
