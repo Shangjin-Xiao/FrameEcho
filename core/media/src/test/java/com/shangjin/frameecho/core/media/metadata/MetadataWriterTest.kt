@@ -2,6 +2,7 @@ package com.shangjin.frameecho.core.media.metadata
 
 import android.util.Log
 import androidx.exifinterface.media.ExifInterface
+import com.shangjin.frameecho.core.media.utils.LogUtils
 import com.shangjin.frameecho.core.model.VideoMetadata
 import io.mockk.every
 import io.mockk.mockk
@@ -21,11 +22,13 @@ class MetadataWriterTest {
     fun setup() {
         mockkStatic(Log::class)
         every { Log.isLoggable(any(), any()) } returns false
+        mockkStatic(LogUtils::class)
     }
 
     @After
     fun teardown() {
         unmockkStatic(Log::class)
+        unmockkStatic(LogUtils::class)
     }
 
     @Test

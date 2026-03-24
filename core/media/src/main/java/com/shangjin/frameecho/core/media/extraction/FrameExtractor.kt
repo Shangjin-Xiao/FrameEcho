@@ -8,6 +8,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import com.shangjin.frameecho.core.media.colorspace.ColorSpaceDetector
 import com.shangjin.frameecho.core.media.metadata.MetadataExtractor
+import com.shangjin.frameecho.core.media.utils.LogUtils
 import com.shangjin.frameecho.core.model.CapturedFrame
 import com.shangjin.frameecho.core.model.ColorSpaceInfo
 import com.shangjin.frameecho.core.model.VideoMetadata
@@ -255,30 +256,14 @@ class FrameExtractor(
             retriever.setDataSource(context, videoUri)
             block(retriever)
         } catch (e: Exception) {
-            if (isDebuggable()) {
-                android.util.Log.e("FrameExtractor", errorMessage, e)
-            } else {
-                android.util.Log.e("FrameExtractor", "$errorMessage: ${e.javaClass.simpleName}")
-            }
+            LogUtils.e(context, "FrameExtractor", errorMessage, e)
             defaultValue
         } finally {
             try {
                 retriever.release()
             } catch (e: Exception) {
-                if (isDebuggable()) {
-                    android.util.Log.w("FrameExtractor", "Failed to release retriever", e)
-                } else {
-                    android.util.Log.w("FrameExtractor", "Failed to release retriever: ${e.javaClass.simpleName}")
-                }
+                LogUtils.w(context, "FrameExtractor", "Failed to release retriever", e)
             }
-        }
-    }
-
-    private fun isDebuggable(): Boolean {
-        return try {
-            (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-        } catch (e: Exception) {
-            false
         }
     }
 
