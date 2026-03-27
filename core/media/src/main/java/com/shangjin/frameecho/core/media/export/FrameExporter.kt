@@ -13,6 +13,8 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.documentfile.provider.DocumentFile
+import androidx.heifwriter.AvifWriter
+import androidx.heifwriter.HeifWriter
 import com.shangjin.frameecho.core.media.colorspace.HdrToneMapper
 import com.shangjin.frameecho.core.media.metadata.MetadataWriter
 import com.shangjin.frameecho.core.media.utils.DateTimeUtils
@@ -43,6 +45,36 @@ class FrameExporter(private val context: Context) {
     companion object {
         private const val XMP_NAMESPACE_URI = "http://ns.adobe.com/xap/1.0/\u0000"
         private const val DEFAULT_CUSTOM_FILENAME = "FrameEcho"
+    }
+
+    /**
+     * Resolve the effective export config by checking native encoder availability.
+     *
+     * On API 28+, HEIF uses HeifWriter (HEVC encoder) and AVIF uses AvifWriter (AV1 encoder).
+     * If the required encoder is not available or the API level is too low, falls back to JPEG.
+     */
+    private fun resolveEffectiveConfig(config: ExportConfig): ExportConfig {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            return when (config.format) {
+                ExportFormat.HEIF, ExportFormat.AVIF -> config.copy(format = ExportFormat.JPEG)
+                else -> config
+            }
+        }
+        return when (config.format) {
+            ExportFormat.HEIF -> if (hasEncoder(MediaFormat.MIMETYPE_VIDEO_HEVC)) config
+                else config.copy(format = ExportFormat.JPEG)
+            ExportFormat.AVIF -> if (hasEncoder(MediaFormat.MIMETYPE_VIDEO_AV1)) config
+                else config.copy(format = ExportFormat.JPEG)
+            else -> config
+        }
+    }
+
+    /**
+     * Check whether the device has at least one encoder for the given MIME type.
+     */
+    private fun hasEncoder(mimeType: String): Boolean {
+        val codecList = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
+        return codecList.codecInfos.any { it.isEncoder && it.supportedTypes.any { t -> t.equals(mimeType, ignoreCase = true) } }
     }
 
     /**
@@ -87,14 +119,11 @@ class FrameExporter(private val context: Context) {
             val resultWidth = finalBitmap.width
             val resultHeight = finalBitmap.height
 
-            // HEIF/AVIF encoding via Bitmap.compress is unsupported on all current
-            // Android versions (Bitmap.CompressFormat has no HEIC/AVIF enum value).
-            // Fall back to JPEG so filename, MIME type and actual bytes are all consistent.
+            // HEIF encoding is supported on API 28+ via HeifWriter (requires HEVC encoder).
+            // AVIF encoding is supported on API 28+ via AvifWriter (requires AV1 encoder).
+            // On API < 28 or when no hardware encoder is available, fall back to JPEG.
             val requestedFormat = config.format
-            val effectiveConfig = when (config.format) {
-                ExportFormat.HEIF, ExportFormat.AVIF -> config.copy(format = ExportFormat.JPEG)
-                else -> config
-            }
+            val effectiveConfig = resolveEffectiveConfig(config)
 
             // Generate output file
             val fileName = generateFileName(frame, effectiveConfig)
@@ -846,12 +875,16 @@ class FrameExporter(private val context: Context) {
         ) ?: throw java.io.IOException("Failed to create MediaStore entry — storage may be full or unavailable")
 
         try {
-            val outputStream = context.contentResolver.openOutputStream(uri)
-                ?: throw java.io.IOException("Failed to open output stream for MediaStore entry")
-            outputStream.use {
-                val compressFormat = config.format.toCompressFormat(config.quality)
-                if (!bitmap.compress(compressFormat, config.quality, it)) {
-                    throw java.io.IOException("Failed to compress bitmap (format: ${config.format}, config: ${bitmap.config})")
+            if ((config.format == ExportFormat.HEIF || config.format == ExportFormat.AVIF) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                encodeNextGenFormatToUri(bitmap, uri, config.format, config.quality)
+            } else {
+                val outputStream = context.contentResolver.openOutputStream(uri)
+                    ?: throw java.io.IOException("Failed to open output stream for MediaStore entry")
+                outputStream.use {
+                    val compressFormat = config.format.toCompressFormat(config.quality)
+                    if (!bitmap.compress(compressFormat, config.quality, it)) {
+                        throw java.io.IOException("Failed to compress bitmap (format: ${config.format}, config: ${bitmap.config})")
+                    }
                 }
             }
 
@@ -884,12 +917,16 @@ class FrameExporter(private val context: Context) {
             ?: throw java.io.IOException("Failed to create file in custom directory")
         val uri = docFile.uri
         try {
-            val outputStream = context.contentResolver.openOutputStream(uri)
-                ?: throw java.io.IOException("Failed to open output stream for custom directory")
-            outputStream.use {
-                val compressFormat = config.format.toCompressFormat(config.quality)
-                if (!bitmap.compress(compressFormat, config.quality, it)) {
-                    throw java.io.IOException("Failed to compress bitmap (format: ${config.format}, config: ${bitmap.config})")
+            if ((config.format == ExportFormat.HEIF || config.format == ExportFormat.AVIF) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                encodeNextGenFormatToUri(bitmap, uri, config.format, config.quality)
+            } else {
+                val outputStream = context.contentResolver.openOutputStream(uri)
+                    ?: throw java.io.IOException("Failed to open output stream for custom directory")
+                outputStream.use {
+                    val compressFormat = config.format.toCompressFormat(config.quality)
+                    if (!bitmap.compress(compressFormat, config.quality, it)) {
+                        throw java.io.IOException("Failed to compress bitmap (format: ${config.format}, config: ${bitmap.config})")
+                    }
                 }
             }
             return uri
@@ -932,6 +969,62 @@ class FrameExporter(private val context: Context) {
         } catch (e: Exception) {
             try { docFile.delete() } catch (deleteException: Exception) { android.util.Log.w("FrameExporter", "Failed to delete file after export failure", deleteException) }
             throw e
+        }
+    }
+
+    /**
+     * Encode a bitmap as HEIF or AVIF and write the result to the given URI.
+     *
+     * Uses HeifWriter (HEVC) for HEIF and AvifWriter (AV1) for AVIF.
+     * Both writers only support writing to a file path, so we encode to a temp file
+     * and then copy the bytes to the target URI via ContentResolver.
+     */
+    @android.annotation.TargetApi(Build.VERSION_CODES.P)
+    private fun encodeNextGenFormatToUri(bitmap: Bitmap, uri: Uri, format: ExportFormat, quality: Int) {
+        val suffix = if (format == ExportFormat.AVIF) ".avif" else ".heif"
+        val tempFile = java.io.File.createTempFile("ngimg_", suffix, context.cacheDir)
+        try {
+            when (format) {
+                ExportFormat.HEIF -> {
+                    val writer = HeifWriter.Builder(
+                        tempFile.absolutePath,
+                        bitmap.width,
+                        bitmap.height,
+                        HeifWriter.INPUT_MODE_BITMAP
+                    )
+                        .setQuality(quality)
+                        .setMaxImages(1)
+                        .build()
+                    writer.start()
+                    writer.addBitmap(bitmap)
+                    writer.stop(0)
+                    writer.close()
+                }
+                ExportFormat.AVIF -> {
+                    val writer = AvifWriter.Builder(
+                        tempFile.absolutePath,
+                        bitmap.width,
+                        bitmap.height,
+                        AvifWriter.INPUT_MODE_BITMAP
+                    )
+                        .setQuality(quality)
+                        .setMaxImages(1)
+                        .build()
+                    writer.start()
+                    writer.addBitmap(bitmap)
+                    writer.stop(0)
+                    writer.close()
+                }
+                else -> throw IllegalArgumentException("Unsupported format for next-gen encoder: $format")
+            }
+
+            val outputStream = context.contentResolver.openOutputStream(uri)
+                ?: throw java.io.IOException("Failed to open output stream for $format export")
+            outputStream.use { os ->
+                java.io.FileInputStream(tempFile).use { it.copyTo(os) }
+            }
+        } finally {
+            tempFile.delete()
         }
     }
 
@@ -1064,12 +1157,10 @@ class FrameExporter(private val context: Context) {
 /**
  * Convert ExportFormat to Android's Bitmap.CompressFormat.
  *
- * Note: As of Android 15 (API 35), Bitmap.CompressFormat does NOT include
- * HEIC/HEIF or AVIF. Encoding those formats requires platform-specific APIs
- * such as `HeifWriter` (from `androidx.heifwriter`). Until native encoding is
- * implemented, HEIF and AVIF fall back to JPEG here. Callers (e.g.
- * [FrameExporter.exportStaticFrame]) are responsible for adjusting file
- * extension, MIME type and [ExportResult.Success.requestedFormat] accordingly.
+ * HEIF/AVIF encoding is handled separately via HeifWriter/AvifWriter in
+ * [FrameExporter.encodeNextGenFormatToUri] on API 28+. This function is only
+ * called for formats that use Bitmap.compress. HEIF and AVIF fall back to
+ * JPEG here for safety (callers must not reach this path on API 28+).
  */
 internal fun ExportFormat.toCompressFormat(
     quality: Int,
@@ -1080,8 +1171,6 @@ internal fun ExportFormat.toCompressFormat(
         ExportFormat.PNG -> Bitmap.CompressFormat.PNG
         ExportFormat.WEBP -> getWebpCompressFormat(quality, sdkInt)
         ExportFormat.HEIF, ExportFormat.AVIF -> {
-            // Bitmap.CompressFormat has no HEIC/AVIF enum value on any public SDK.
-            // Proper encoding requires HeifWriter / ImageWriter; fall back to JPEG.
             Bitmap.CompressFormat.JPEG
         }
     }

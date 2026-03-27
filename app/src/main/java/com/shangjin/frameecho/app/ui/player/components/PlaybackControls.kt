@@ -25,6 +25,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -82,13 +84,13 @@ fun PlaybackControls(
     // Slider user-dragging state
     var isSliderDragging by remember { mutableStateOf(false) }
     var isFineScrubbing by remember { mutableStateOf(false) }
-    var sliderDragStartFraction by remember { mutableStateOf(0f) }
-    var sliderDragStartPositionMs by remember { mutableStateOf(0L) }
+    var sliderDragStartFraction by remember { mutableFloatStateOf(0f) }
+    var sliderDragStartPositionMs by remember { mutableLongStateOf(0L) }
     var wasPlayingBeforeSliderDrag by remember { mutableStateOf(false) }
-    var fineScrubOffsetMs by remember { mutableStateOf(0L) }
+    var fineScrubOffsetMs by remember { mutableLongStateOf(0L) }
     var sliderTargetPositionMs by remember { mutableStateOf<Long?>(null) }
     // Local slider fraction for instant visual feedback during drag (bypasses StateFlow)
-    var localSliderFraction by remember { mutableStateOf(0f) }
+    var localSliderFraction by remember { mutableFloatStateOf(0f) }
 
     // Frame duration calculation for frame-precise seeking
     val frameDurationMs = remember(videoFrameRate) {
@@ -105,7 +107,7 @@ fun PlaybackControls(
 
     val previewPositionMs = sliderTargetPositionMs ?: currentPositionMs
     // Track last frame boundary for haptic feedback on frame crossings
-    var lastFrameBoundaryMs by remember { mutableStateOf(0L) }
+    var lastFrameBoundaryMs by remember { mutableLongStateOf(0L) }
 
     Surface(
         tonalElevation = 1.dp,

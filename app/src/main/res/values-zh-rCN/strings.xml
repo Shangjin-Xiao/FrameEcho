@@ -4,8 +4,6 @@
     <string name="app_slogan">定格你所爱的每一帧</string>
     <string name="select_video">选择视频</string>
     <string name="capture_frame">截取帧</string>
-    <string name="export_static">导出静态图</string>
-    <string name="export_motion">导出动态照片</string>
     <string name="export_settings">导出设置</string>
     <string name="quality">质量</string>
     <string name="format">格式</string>
@@ -14,19 +12,12 @@
     <string name="remember_quick_settings">记住播放器开关</string>
     <string name="remember_quick_settings_hint">记住静音、动态照片和元数据开关，下一次选视频仍生效</string>
     <string name="hdr_handling">HDR 处理</string>
-    <string name="export_success">导出成功</string>
-    <string name="export_error">导出失败</string>
     <string name="no_video_selected">尚未选择视频</string>
-    <string name="processing">处理中…</string>
     <string name="select_video_hint">逐帧浏览视频并截取高质量画面</string>
     <string name="captured_info">已截取: %1$d × %2$d</string>
     <string name="hdr_info">HDR: %1$s</string>
     <string name="export_success_message">导出成功！</string>
     <string name="export_format_fallback_message">已导出为 %2$s（此设备不支持 %1$s）</string>
-    <string name="export_error_message">导出失败: %1$s</string>
-    <string name="capture_error_message">截取错误: %1$s</string>
-    <string name="capture_failed">截取帧失败</string>
-    <string name="motion_export_error">动态照片导出失败: %1$s</string>
     <string name="mute">静音</string>
     <string name="unmute">取消静音</string>
     <string name="hdr_auto">自动</string>
@@ -46,7 +37,6 @@
     <string name="prev_frame">上一帧</string>
     <string name="custom_file_name">自定义文件名</string>
     <string name="custom_file_name_hint">文件名（不含扩展名）</string>
-    <string name="restore_default_name">恢复默认命名</string>
     <string name="default_export_location">默认导出位置</string>
     <string name="location_pictures">图片/FrameEcho</string>
     <string name="location_dcim">DCIM/FrameEcho</string>
@@ -57,7 +47,6 @@
     <string name="location_pictures_root">图片</string>
     <string name="location_dcim_root">DCIM</string>
     <string name="location_movies_root">电影</string>
-    <string name="fine_scrubbing">精细调节</string>
     <string name="scrubbing_position">拖动预览：%1$s</string>
     <string name="fine_scrubbing_position">精细调节：%1$s（%2$s 毫秒）</string>
     <string name="fine_scrubbing_frame_position">精细调节：%1$s  第%2$d帧（%3$s 毫秒）</string>
@@ -81,8 +70,8 @@
     <string name="format_desc_jpeg">通用兼容，文件体积小</string>
     <string name="format_desc_png">无损画质，支持透明通道</string>
     <string name="format_desc_webp">现代格式，兼顾压缩率与透明通道</string>
-    <string name="format_desc_heif">高效编码，支持 HDR（Android 10+）</string>
-    <string name="format_desc_avif">最佳压缩，支持 HDR + 透明通道（Android 12+）</string>
+    <string name="format_desc_heif">高效编码，支持 HDR（需要 HEVC 编码器）</string>
+    <string name="format_desc_avif">最佳压缩，支持 HDR + 透明通道（需要 AV1 编码器）</string>
 
     <!-- Quality hints -->
     <string name="quality_not_applicable_png">PNG 始终为无损格式，质量设置不适用</string>
@@ -94,16 +83,12 @@
     <string name="hdr_desc_hdr">若输出格式支持，则保留 HDR 数据</string>
     <string name="hdr_desc_system">使用系统默认色调映射</string>
 
-    <!-- Motion photo -->
-    <string name="motion_photo_disabled_hint">在播放器中开启动态照片后可配置时长</string>
-
     <!-- UX: user-friendly error messages -->
     <string name="error_capture_failed">无法截取帧，请尝试视频的其他位置</string>
     <string name="error_export_failed">导出失败，请重试</string>
 
     <!-- UX: snackbar actions -->
     <string name="snackbar_action_view">查看</string>
-    <string name="snackbar_action_retry">重试</string>
 
     <!-- UX: loading / cancel -->
     <string name="cancel">取消</string>

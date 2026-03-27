@@ -4,8 +4,6 @@
     <string name="app_slogan">お気に入りのフレームを残そう</string>
     <string name="select_video">ビデオを選択</string>
     <string name="capture_frame">フレームをキャプチャ</string>
-    <string name="export_static">静止画をエクスポート</string>
-    <string name="export_motion">モーションフォトをエクスポート</string>
     <string name="export_settings">エクスポート設定</string>
     <string name="quality">品質</string>
     <string name="format">フォーマット</string>
@@ -14,19 +12,12 @@
     <string name="remember_quick_settings">クイック設定を記憶する</string>
     <string name="remember_quick_settings_hint">ミュート、モーションフォト、メタデータの切り替えを次のビデオ/セッションでも維持する</string>
     <string name="hdr_handling">HDRの処理</string>
-    <string name="export_success">エクスポート成功</string>
-    <string name="export_error">エクスポート失敗</string>
     <string name="no_video_selected">ビデオが選択されていません</string>
-    <string name="processing">処理中…</string>
     <string name="select_video_hint">ビデオフレームを閲覧し、高品質のスクリーンショットをキャプチャする</string>
     <string name="captured_info">キャプチャ済み: %1$d × %2$d</string>
     <string name="hdr_info">HDR: %1$s</string>
     <string name="export_success_message">正常にエクスポートされました！</string>
     <string name="export_format_fallback_message">%2$sとしてエクスポートされました（%1$sはこのデバイスでサポートされていません）</string>
-    <string name="export_error_message">エクスポート失敗: %1$s</string>
-    <string name="capture_error_message">キャプチャエラー: %1$s</string>
-    <string name="capture_failed">フレームのキャプチャに失敗しました</string>
-    <string name="motion_export_error">モーションフォトのエクスポートに失敗しました: %1$s</string>
     <string name="mute">ミュート</string>
     <string name="unmute">ミュート解除</string>
     <string name="hdr_auto">自動</string>
@@ -46,7 +37,6 @@
     <string name="prev_frame">前のフレーム</string>
     <string name="custom_file_name">カスタムファイル名</string>
     <string name="custom_file_name_hint">ファイル名（拡張子なし）</string>
-    <string name="restore_default_name">デフォルトの命名規則を復元</string>
     <string name="default_export_location">デフォルトのエクスポート先</string>
     <string name="location_pictures">Pictures/FrameEcho</string>
     <string name="location_dcim">DCIM/FrameEcho</string>
@@ -57,7 +47,6 @@
     <string name="location_pictures_root">Pictures</string>
     <string name="location_dcim_root">DCIM</string>
     <string name="location_movies_root">Movies</string>
-    <string name="fine_scrubbing">微調整</string>
     <string name="scrubbing_position">スクラブ位置: %1$s</string>
     <string name="fine_scrubbing_position">微調整: %1$s (%2$s ms)</string>
     <string name="fine_scrubbing_frame_position">微調整: %1$s  F#%2$d (%3$s ms)</string>
@@ -81,8 +70,8 @@
     <string name="format_desc_jpeg">普遍的な互換性、ファイルサイズが小さい</string>
     <string name="format_desc_png">ロスレス品質、透明度をサポート</string>
     <string name="format_desc_webp">最新のフォーマット、透明度のある優れた圧縮</string>
-    <string name="format_desc_heif">高効率、HDRサポート（Android 10以降）</string>
-    <string name="format_desc_avif">最高の圧縮率、HDR + 透明度をサポート（Android 12以降）</string>
+    <string name="format_desc_heif">高効率、HDRサポート（HEVCエンコーダーが必要）</string>
+    <string name="format_desc_avif">最高の圧縮率、HDR + 透明度をサポート（AV1エンコーダーが必要）</string>
 
     <!-- Quality hints -->
     <string name="quality_not_applicable_png">PNGは常にロスレスです — 品質設定は適用されません</string>
@@ -94,16 +83,12 @@
     <string name="hdr_desc_hdr">出力フォーマットがサポートしている場合はHDRデータを保持します</string>
     <string name="hdr_desc_system">システムのデフォルトのトーンマッピングを使用します</string>
 
-    <!-- Motion photo -->
-    <string name="motion_photo_disabled_hint">プレイヤーでモーションフォトを有効にして期間を設定します</string>
-
     <!-- UX: user-friendly error messages -->
     <string name="error_capture_failed">フレームをキャプチャできません。ビデオの別の位置でお試しください。</string>
     <string name="error_export_failed">エクスポートに失敗しました。もう一度お試しください。</string>
 
     <!-- UX: snackbar actions -->
     <string name="snackbar_action_view">表示</string>
-    <string name="snackbar_action_retry">再試行</string>
 
     <!-- UX: loading / cancel -->
     <string name="cancel">キャンセル</string>

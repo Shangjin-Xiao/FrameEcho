@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.shangjin.frameecho.core.common"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26

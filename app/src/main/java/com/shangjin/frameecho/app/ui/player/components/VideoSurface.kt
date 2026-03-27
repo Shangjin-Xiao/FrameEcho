@@ -38,6 +38,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -78,13 +80,13 @@ fun VideoSurface(
     modifier: Modifier = Modifier
 ) {
     // Zoom and pan state
-    var videoScale by remember { mutableStateOf(1f) }
-    var videoOffsetX by remember { mutableStateOf(0f) }
-    var videoOffsetY by remember { mutableStateOf(0f) }
+    var videoScale by remember { mutableFloatStateOf(1f) }
+    var videoOffsetX by remember { mutableFloatStateOf(0f) }
+    var videoOffsetY by remember { mutableFloatStateOf(0f) }
 
     // Tap-to-play/pause visual feedback (null = hidden)
     var tapFeedbackIsPlaying by remember { mutableStateOf<Boolean?>(null) }
-    var lastTapTimeMs by remember { mutableStateOf(0L) }
+    var lastTapTimeMs by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(tapFeedbackIsPlaying) {
         if (tapFeedbackIsPlaying != null) {

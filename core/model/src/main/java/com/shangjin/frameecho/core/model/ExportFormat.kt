@@ -28,7 +28,7 @@ enum class ExportFormat(
         supportsHdr = false
     ),
     HEIF(
-        extension = "heif",
+        extension = "heic",
         mimeType = "image/heif",
         supportsAlpha = false,
         supportsHdr = true

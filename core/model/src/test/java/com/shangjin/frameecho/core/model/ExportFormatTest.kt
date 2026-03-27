@@ -50,7 +50,7 @@ class ExportFormatTest {
 
     @Test
     fun `HEIF has correct extension and mimeType`() {
-        assertEquals("heif", ExportFormat.HEIF.extension)
+        assertEquals("heic", ExportFormat.HEIF.extension)
         assertEquals("image/heif", ExportFormat.HEIF.mimeType)
     }
 

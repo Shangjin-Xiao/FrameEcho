@@ -1,23 +1,24 @@
 [versions]
-agp = "8.7.2"
+agp = "8.9.1"
 kotlin = "2.1.10"
-coreKtx = "1.15.0"
-lifecycle = "2.8.7"
-activityCompose = "1.9.3"
-composeBom = "2025.02.00"
-media3 = "1.9.2"
+coreKtx = "1.18.0"
+lifecycle = "2.10.0"
+activityCompose = "1.13.0"
+composeBom = "2025.05.01"
+media3 = "1.9.3"
 coroutines = "1.10.1"
-navigationCompose = "2.8.7"
+navigationCompose = "2.9.7"
 junit = "4.13.2"
-junitExt = "1.2.1"
-espresso = "3.6.1"
+junitExt = "1.3.0"
+espresso = "3.7.0"
 mockk = "1.13.16"
 turbine = "1.2.0"
 kxml2 = "2.3.0"
-documentFile = "1.0.1"
-exifinterface = "1.4.0"
-material = "1.12.0"
-datastore = "1.1.4"
+documentFile = "1.1.0"
+exifinterface = "1.4.2"
+heifwriter = "1.1.0"
+material = "1.13.0"
+datastore = "1.2.1"
 
 [libraries]
 # AndroidX Core
@@ -47,6 +48,7 @@ androidx-media3-common = { group = "androidx.media3", name = "media3-common", ve
 # Metadata
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
 androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentFile" }
+androidx-heifwriter = { group = "androidx.heifwriter", name = "heifwriter", version.ref = "heifwriter" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 

@@ -6,13 +6,13 @@ plugins {
 
 android {
     namespace = "com.shangjin.frameecho"
-    compileSdk = 35
+    compileSdk = 36
     val resolvedVersionName = providers.gradleProperty("VERSION_NAME").orElse("1.0.0").get()
 
     defaultConfig {
         applicationId = "com.shangjin.frameecho"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = resolvedVersionName
 

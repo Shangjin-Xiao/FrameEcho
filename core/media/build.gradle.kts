@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.shangjin.frameecho.core.media"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26
@@ -30,6 +30,7 @@ dependencies {
     implementation(libs.androidx.media3.common)
     implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.documentfile)
+    implementation(libs.androidx.heifwriter)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
 

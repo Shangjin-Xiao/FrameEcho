@@ -4,8 +4,6 @@
     <string name="app_slogan">Freeze Every Frame You Love</string>
     <string name="select_video">Select Video</string>
     <string name="capture_frame">Capture Frame</string>
-    <string name="export_static">Export Static</string>
-    <string name="export_motion">Export Motion Photo</string>
     <string name="export_settings">Export Settings</string>
     <string name="quality">Quality</string>
     <string name="format">Format</string>
@@ -14,19 +12,12 @@
     <string name="remember_quick_settings">Remember Player Toggles</string>
     <string name="remember_quick_settings_hint">Keep mute, motion photo, and metadata toggles for the next video/session</string>
     <string name="hdr_handling">HDR Handling</string>
-    <string name="export_success">Export successful</string>
-    <string name="export_error">Export failed</string>
     <string name="no_video_selected">No video selected</string>
-    <string name="processing">Processing…</string>
     <string name="select_video_hint">Browse video frames and capture high-quality screenshots</string>
     <string name="captured_info">Captured: %1$d × %2$d</string>
     <string name="hdr_info">HDR: %1$s</string>
     <string name="export_success_message">Exported successfully!</string>
     <string name="export_format_fallback_message">Exported as %2$s (%1$s is not supported on this device)</string>
-    <string name="export_error_message">Export failed: %1$s</string>
-    <string name="capture_error_message">Capture error: %1$s</string>
-    <string name="capture_failed">Failed to capture frame</string>
-    <string name="motion_export_error">Motion photo export failed: %1$s</string>
     <string name="mute">Mute</string>
     <string name="unmute">Unmute</string>
     <string name="hdr_auto">Auto</string>
@@ -46,7 +37,6 @@
     <string name="prev_frame">Previous Frame</string>
     <string name="custom_file_name">Custom File Name</string>
     <string name="custom_file_name_hint">File name (without extension)</string>
-    <string name="restore_default_name">Restore default naming</string>
     <string name="default_export_location">Default Export Location</string>
     <string name="location_pictures">Pictures/FrameEcho</string>
     <string name="location_dcim">DCIM/FrameEcho</string>
@@ -57,7 +47,6 @@
     <string name="location_pictures_root">Pictures</string>
     <string name="location_dcim_root">DCIM</string>
     <string name="location_movies_root">Movies</string>
-    <string name="fine_scrubbing">Fine Scrubbing</string>
     <string name="scrubbing_position">Scrubbing: %1$s</string>
     <string name="fine_scrubbing_position">Fine Scrubbing: %1$s (%2$s ms)</string>
     <string name="fine_scrubbing_frame_position">Fine Scrubbing: %1$s  F#%2$d (%3$s ms)</string>
@@ -81,8 +70,8 @@
     <string name="format_desc_jpeg">Universal compatibility, small file size</string>
     <string name="format_desc_png">Lossless quality, supports transparency</string>
     <string name="format_desc_webp">Modern format, good compression with transparency</string>
-    <string name="format_desc_heif">High efficiency, HDR support (Android 10+)</string>
-    <string name="format_desc_avif">Best compression, HDR + transparency (Android 12+)</string>
+    <string name="format_desc_heif">High efficiency, HDR support (requires HEVC encoder)</string>
+    <string name="format_desc_avif">Best compression, HDR + transparency (requires AV1 encoder)</string>
 
     <!-- Quality hints -->
     <string name="quality_not_applicable_png">PNG is always lossless — quality setting does not apply</string>
@@ -94,16 +83,12 @@
     <string name="hdr_desc_hdr">Preserve HDR data if the output format supports it</string>
     <string name="hdr_desc_system">Use the system\'s default tone-mapping</string>
 
-    <!-- Motion photo -->
-    <string name="motion_photo_disabled_hint">Enable Motion Photo on the player to configure duration</string>
-
     <!-- UX: user-friendly error messages -->
     <string name="error_capture_failed">Unable to capture frame. Try a different position in the video.</string>
     <string name="error_export_failed">Export failed. Please try again.</string>
 
     <!-- UX: snackbar actions -->
     <string name="snackbar_action_view">View</string>
-    <string name="snackbar_action_retry">Retry</string>
 
     <!-- UX: loading / cancel -->
     <string name="cancel">Cancel</string>

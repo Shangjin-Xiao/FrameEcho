@@ -30,6 +30,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -93,7 +95,7 @@ fun PlayerScreen(
     val allOnboardingSteps = rememberAllOnboardingSteps()
     var unseenSteps by remember { mutableStateOf<List<com.shangjin.frameecho.app.ui.components.OnboardingStep>>(emptyList()) }
     var showOnboarding by remember { mutableStateOf(false) }
-    var onboardingStep by remember { mutableStateOf(0) }
+    var onboardingStep by remember { mutableIntStateOf(0) }
 
     // Trigger onboarding when a video is loaded — only show unseen steps
     LaunchedEffect(uiState.videoUri) {
@@ -176,7 +178,7 @@ fun PlayerScreen(
 
     // Scrub sync state (shared between PlaybackControls and ThumbnailTimeline)
     var isScrubbing by remember { mutableStateOf(false) }
-    var scrubPreviewPositionMs by remember { mutableStateOf(0L) }
+    var scrubPreviewPositionMs by remember { mutableLongStateOf(0L) }
 
     // Capture flash effect
     var showCaptureFlash by remember { mutableStateOf(false) }
