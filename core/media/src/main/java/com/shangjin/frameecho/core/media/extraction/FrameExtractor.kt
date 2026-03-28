@@ -2,11 +2,11 @@ package com.shangjin.frameecho.core.media.extraction
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import com.shangjin.frameecho.core.media.colorspace.ColorSpaceDetector
+import androidx.core.graphics.scale
 import com.shangjin.frameecho.core.media.metadata.MetadataExtractor
 import com.shangjin.frameecho.core.media.utils.LogUtils
 import com.shangjin.frameecho.core.model.CapturedFrame
@@ -305,7 +305,7 @@ class FrameExtractor(
                 MediaMetadataRetriever.OPTION_CLOSEST_SYNC
             )
             fullBitmap?.let {
-                val scaled = Bitmap.createScaledBitmap(it, targetWidth, targetHeight, true)
+                val scaled = it.scale(targetWidth, targetHeight, true)
                 if (scaled != it) {
                     it.recycle()
                 }

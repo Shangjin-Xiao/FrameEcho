@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import androidx.core.net.toUri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -323,7 +324,7 @@ fun PlayerScreen(
                     try {
                         val viewIntent = Intent(Intent.ACTION_VIEW).apply {
                             setDataAndType(
-                                Uri.parse(result.outputPath),
+                                result.outputPath.toUri(),
                                 result.format.mimeType
                             )
                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

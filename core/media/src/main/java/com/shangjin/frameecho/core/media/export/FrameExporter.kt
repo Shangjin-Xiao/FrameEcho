@@ -15,6 +15,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 import androidx.documentfile.provider.DocumentFile
+import androidx.core.graphics.scale
 import androidx.heifwriter.AvifWriter
 import androidx.heifwriter.HeifWriter
 import com.shangjin.frameecho.core.media.colorspace.HdrToneMapper
@@ -1083,7 +1084,7 @@ class FrameExporter(private val context: Context) {
         val newWidth = (bitmap.width * scale).toInt().coerceAtLeast(1)
         val newHeight = (bitmap.height * scale).toInt().coerceAtLeast(1)
 
-        return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+        return bitmap.scale(newWidth, newHeight, true)
     }
 
     /**

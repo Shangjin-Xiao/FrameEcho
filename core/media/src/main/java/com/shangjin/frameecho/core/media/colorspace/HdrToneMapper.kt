@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.ColorSpace as AndroidColorSpace
 import android.graphics.Paint
 import android.os.Build
+import androidx.core.graphics.createBitmap
 import com.shangjin.frameecho.core.model.ColorGamut
 import com.shangjin.frameecho.core.model.ColorSpaceInfo
 import com.shangjin.frameecho.core.model.ColorSpaceType
@@ -58,7 +59,7 @@ object HdrToneMapper {
         // RGBA_1010102 (10-bit) is unsupported by Bitmap.compress for JPEG/PNG/WebP.
         val config = Bitmap.Config.ARGB_8888
 
-        val output = Bitmap.createBitmap(
+        val output = createBitmap(
             bitmap.width,
             bitmap.height,
             config,
