@@ -7,6 +7,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import com.shangjin.frameecho.core.media.utils.DateTimeUtils
 import com.shangjin.frameecho.core.media.utils.ExifUtils
+import com.shangjin.frameecho.core.media.utils.LogUtils
 import com.shangjin.frameecho.core.media.utils.getIntegerSafe
 import com.shangjin.frameecho.core.model.VideoMetadata
 
@@ -90,14 +91,14 @@ object MetadataExtractor {
                 base
             }
         } catch (e: Exception) {
-            android.util.Log.e(TAG, "Failed to extract metadata", e)
+            LogUtils.e(context, TAG, "Failed to extract metadata", e)
             VideoMetadata(sourceFileName = videoUri.lastPathSegment)
         } finally {
             if (shouldRelease) {
                 try {
                     useRetriever.release()
                 } catch (e: Exception) {
-                    android.util.Log.w(TAG, "Failed to release retriever", e)
+                    LogUtils.w(context, TAG, "Failed to release retriever", e)
                 }
             }
         }

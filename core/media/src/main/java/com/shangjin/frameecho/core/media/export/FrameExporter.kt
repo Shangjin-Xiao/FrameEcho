@@ -17,6 +17,7 @@ import androidx.heifwriter.AvifWriter
 import androidx.heifwriter.HeifWriter
 import com.shangjin.frameecho.core.media.colorspace.HdrToneMapper
 import com.shangjin.frameecho.core.media.metadata.MetadataWriter
+import com.shangjin.frameecho.core.media.utils.LogUtils
 import com.shangjin.frameecho.core.media.utils.DateTimeUtils
 import com.shangjin.frameecho.core.model.CapturedFrame
 import com.shangjin.frameecho.core.model.ColorSpaceInfo
@@ -383,7 +384,7 @@ class FrameExporter(private val context: Context) {
                 seekMode = MediaExtractor.SEEK_TO_PREVIOUS_SYNC
             )
         } catch (e: Exception) {
-            android.util.Log.w("FrameExporter", "PREVIOUS_SYNC extraction failed, will retry", e)
+            LogUtils.w(context, "FrameExporter", "PREVIOUS_SYNC extraction failed, will retry", e)
             null
         }
 
@@ -413,11 +414,11 @@ class FrameExporter(private val context: Context) {
         val mime = original.getString(MediaFormat.KEY_MIME)
             ?: throw java.io.IOException("Video track has no MIME type")
         val width = try { original.getInteger(MediaFormat.KEY_WIDTH) } catch (e: Exception) {
-            android.util.Log.w("FrameExporter", "Failed to get KEY_WIDTH, falling back to 1920", e)
+            LogUtils.w(context, "FrameExporter", "Failed to get KEY_WIDTH, falling back to 1920", e)
             1920
         }
         val height = try { original.getInteger(MediaFormat.KEY_HEIGHT) } catch (e: Exception) {
-            android.util.Log.w("FrameExporter", "Failed to get KEY_HEIGHT, falling back to 1080", e)
+            LogUtils.w(context, "FrameExporter", "Failed to get KEY_HEIGHT, falling back to 1080", e)
             1080
         }
 
@@ -436,7 +437,7 @@ class FrameExporter(private val context: Context) {
                     }
                 }
             } catch (e: Exception) {
-                android.util.Log.w("FrameExporter", "Failed to copy CSD key: $csdKey", e)
+                LogUtils.w(context, "FrameExporter", "Failed to copy CSD key: $csdKey", e)
             }
         }
 
@@ -451,7 +452,7 @@ class FrameExporter(private val context: Context) {
                     clean.setInteger(key, original.getInteger(key))
                 }
             } catch (e: Exception) {
-                android.util.Log.w("FrameExporter", "Failed to copy optional int key: $key", e)
+                LogUtils.w(context, "FrameExporter", "Failed to copy optional int key: $key", e)
             }
         }
 
@@ -461,7 +462,7 @@ class FrameExporter(private val context: Context) {
                 clean.setLong(MediaFormat.KEY_DURATION, original.getLong(MediaFormat.KEY_DURATION))
             }
         } catch (e: Exception) {
-            android.util.Log.w("FrameExporter", "Failed to copy KEY_DURATION", e)
+            LogUtils.w(context, "FrameExporter", "Failed to copy KEY_DURATION", e)
         }
 
         return clean
@@ -522,13 +523,13 @@ class FrameExporter(private val context: Context) {
             val muxerVideoTrack: Int = try {
                 muxer.addTrack(videoFormat)
             } catch (e: Exception) {
-                android.util.Log.w("FrameExporter",
+                LogUtils.w(context, "FrameExporter",
                     "addTrack failed with original format (${videoFormat.getString(MediaFormat.KEY_MIME)}), using clean format", e)
                 // Release the failed muxer and recreate with clean format
                 try {
                     muxer.release()
                 } catch (releaseException: Exception) {
-                    android.util.Log.w("FrameExporter", "Failed to release failed muxer", releaseException)
+                    LogUtils.w(context, "FrameExporter", "Failed to release failed muxer", releaseException)
                 }
                 tempFile.delete()
                 tempFile = java.io.File.createTempFile("motion_clip_", ".mp4", context.cacheDir)
@@ -544,7 +545,7 @@ class FrameExporter(private val context: Context) {
                     try {
                         muxer.addTrack(audioFormat)
                     } catch (e: Exception) {
-                        android.util.Log.w("FrameExporter", "addTrack failed for audio, skipping audio", e)
+                        LogUtils.w(context, "FrameExporter", "addTrack failed for audio, skipping audio", e)
                         -1
                     }
                 } else -1
@@ -642,14 +643,14 @@ class FrameExporter(private val context: Context) {
                 try {
                     muxer.release()
                 } catch (e: Exception) {
-                    android.util.Log.w("FrameExporter", "Failed to release muxer", e)
+                    LogUtils.w(context, "FrameExporter", "Failed to release muxer", e)
                 }
             }
         } finally {
             try {
                 extractor.release()
             } catch (e: Exception) {
-                android.util.Log.w("FrameExporter", "Failed to release extractor", e)
+                LogUtils.w(context, "FrameExporter", "Failed to release extractor", e)
             }
         }
 
@@ -668,13 +669,13 @@ class FrameExporter(private val context: Context) {
             )?.toLongOrNull() ?: return -1L
             durationMs * 1000L
         } catch (e: Exception) {
-            android.util.Log.w("FrameExporter", "Failed to retrieve video duration", e)
+            LogUtils.w(context, "FrameExporter", "Failed to retrieve video duration", e)
             -1L
         } finally {
             try {
                 retriever.release()
             } catch (e: Exception) {
-                android.util.Log.w("FrameExporter", "Failed to release retriever", e)
+                LogUtils.w(context, "FrameExporter", "Failed to release retriever", e)
             }
         }
     }
@@ -843,7 +844,7 @@ class FrameExporter(private val context: Context) {
 
             return uri
         } catch (e: Exception) {
-            try { context.contentResolver.delete(uri, null, null) } catch (deleteException: Exception) { android.util.Log.w("FrameExporter", "Failed to delete URI after export failure", deleteException) }
+            try { context.contentResolver.delete(uri, null, null) } catch (deleteException: Exception) { LogUtils.w(context, "FrameExporter", "Failed to delete URI after export failure", deleteException) }
             throw e
         }
     }
@@ -897,7 +898,7 @@ class FrameExporter(private val context: Context) {
 
             return uri
         } catch (e: Exception) {
-            try { context.contentResolver.delete(uri, null, null) } catch (deleteException: Exception) { android.util.Log.w("FrameExporter", "Failed to delete URI after export failure", deleteException) }
+            try { context.contentResolver.delete(uri, null, null) } catch (deleteException: Exception) { LogUtils.w(context, "FrameExporter", "Failed to delete URI after export failure", deleteException) }
             throw e
         }
     }
@@ -931,7 +932,7 @@ class FrameExporter(private val context: Context) {
             }
             return uri
         } catch (e: Exception) {
-            try { docFile.delete() } catch (deleteException: Exception) { android.util.Log.w("FrameExporter", "Failed to delete file after export failure", deleteException) }
+            try { docFile.delete() } catch (deleteException: Exception) { LogUtils.w(context, "FrameExporter", "Failed to delete file after export failure", deleteException) }
             throw e
         }
     }
@@ -967,7 +968,7 @@ class FrameExporter(private val context: Context) {
             }
             return uri
         } catch (e: Exception) {
-            try { docFile.delete() } catch (deleteException: Exception) { android.util.Log.w("FrameExporter", "Failed to delete file after export failure", deleteException) }
+            try { docFile.delete() } catch (deleteException: Exception) { LogUtils.w(context, "FrameExporter", "Failed to delete file after export failure", deleteException) }
             throw e
         }
     }
@@ -1039,7 +1040,7 @@ class FrameExporter(private val context: Context) {
                 exif.saveAttributes()
             }
         } catch (e: Exception) {
-            android.util.Log.w("FrameExporter", "Failed to write metadata to URI", e)
+            LogUtils.w(context, "FrameExporter", "Failed to write metadata to URI", e)
         }
     }
 
@@ -1059,7 +1060,7 @@ class FrameExporter(private val context: Context) {
             exif.saveAttributes()
             return tempFile.readBytes()
         } catch (e: Exception) {
-            android.util.Log.w("FrameExporter", "Failed to write EXIF to JPEG bytes", e)
+            LogUtils.w(context, "FrameExporter", "Failed to write EXIF to JPEG bytes", e)
             return jpegBytes // Return original bytes on failure
         } finally {
             tempFile.delete()

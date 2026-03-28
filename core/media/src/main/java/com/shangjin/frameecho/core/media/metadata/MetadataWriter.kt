@@ -1,8 +1,10 @@
 package com.shangjin.frameecho.core.media.metadata
 
+import android.content.Context
 import androidx.exifinterface.media.ExifInterface
 import com.shangjin.frameecho.core.media.utils.DateTimeUtils
 import com.shangjin.frameecho.core.media.utils.ExifUtils
+import com.shangjin.frameecho.core.media.utils.LogUtils
 import com.shangjin.frameecho.core.model.VideoMetadata
 import java.io.File
 
@@ -21,17 +23,18 @@ object MetadataWriter {
     /**
      * Write video metadata to an image file's EXIF data.
      *
+     * @param context The context for debuggable checking in logs
      * @param imageFile The exported image file
      * @param metadata Video metadata to write
      */
-    fun writeMetadata(imageFile: File, metadata: VideoMetadata) {
+    fun writeMetadata(context: Context, imageFile: File, metadata: VideoMetadata) {
         try {
             val exif = ExifInterface(imageFile)
             writeExifData(exif, metadata)
             exif.saveAttributes()
         } catch (e: Exception) {
             // Log but don't fail the export
-            android.util.Log.w("MetadataWriter", "Failed to write EXIF metadata", e)
+            LogUtils.w(context, "MetadataWriter", "Failed to write EXIF metadata", e)
         }
     }
 
