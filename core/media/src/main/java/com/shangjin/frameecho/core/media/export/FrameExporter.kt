@@ -1,5 +1,6 @@
 package com.shangjin.frameecho.core.media.export
 
+import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
@@ -12,6 +13,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 import androidx.documentfile.provider.DocumentFile
 import androidx.heifwriter.AvifWriter
 import androidx.heifwriter.HeifWriter
@@ -980,7 +982,8 @@ class FrameExporter(private val context: Context) {
      * Both writers only support writing to a file path, so we encode to a temp file
      * and then copy the bytes to the target URI via ContentResolver.
      */
-    @android.annotation.TargetApi(Build.VERSION_CODES.P)
+    @RequiresApi(Build.VERSION_CODES.P)
+    @SuppressLint("RestrictedApi")
     private fun encodeNextGenFormatToUri(bitmap: Bitmap, uri: Uri, format: ExportFormat, quality: Int) {
         val suffix = if (format == ExportFormat.AVIF) ".avif" else ".heif"
         val tempFile = java.io.File.createTempFile("ngimg_", suffix, context.cacheDir)
@@ -1177,6 +1180,7 @@ internal fun ExportFormat.toCompressFormat(
     }
 }
 
+@SuppressLint("NewApi")
 private fun getWebpCompressFormat(quality: Int, sdkInt: Int): Bitmap.CompressFormat {
     return if (sdkInt >= Build.VERSION_CODES.R) {
         getWebpCompressFormatApi30(quality)
@@ -1186,7 +1190,7 @@ private fun getWebpCompressFormat(quality: Int, sdkInt: Int): Bitmap.CompressFor
     }
 }
 
-@android.annotation.TargetApi(Build.VERSION_CODES.R)
+@RequiresApi(Build.VERSION_CODES.R)
 private fun getWebpCompressFormatApi30(quality: Int): Bitmap.CompressFormat {
     return if (quality >= 100) Bitmap.CompressFormat.WEBP_LOSSLESS
     else Bitmap.CompressFormat.WEBP_LOSSY
