@@ -45,4 +45,24 @@ class MediaFormatExtTest {
         val result = format.getIntegerSafe("key", 100)
         assertEquals(100, result)
     }
+
+    @Test
+    fun `getIntegerSafe returns default when getInteger throws ClassCastException`() {
+        val format = mockk<MediaFormat>()
+        every { format.containsKey("key") } returns true
+        every { format.getInteger("key") } throws ClassCastException("Stub!")
+
+        val result = format.getIntegerSafe("key", 100)
+        assertEquals(100, result)
+    }
+
+    @Test
+    fun `getIntegerSafe returns default when getInteger throws NullPointerException`() {
+        val format = mockk<MediaFormat>()
+        every { format.containsKey("key") } returns true
+        every { format.getInteger("key") } throws NullPointerException("Stub!")
+
+        val result = format.getIntegerSafe("key", 100)
+        assertEquals(100, result)
+    }
 }
