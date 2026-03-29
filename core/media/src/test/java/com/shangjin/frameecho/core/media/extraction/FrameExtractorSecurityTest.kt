@@ -78,11 +78,7 @@ class FrameExtractorSecurityTest {
 
         frameExtractor.extractFrame(uri, 0L)
 
-        // Verify sanitized log is called (This will fail until fix is implemented)
-        // For now, I'm asserting what SHOULD happen after the fix.
-        // If I want to "reproduce" the vulnerability, I should assert the vulnerable behavior.
-        // But since I'm implementing TDD-style, I will write the test for the desired behavior
-        // and expect it to fail first.
+        // Verify sanitized log is called
         verify { Log.e("FrameExtractor", "Failed to extract frame at 0: RuntimeException") }
 
         // Verify full exception is NOT logged
