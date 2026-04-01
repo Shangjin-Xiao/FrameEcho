@@ -20,6 +20,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.shangjin.frameecho.R
@@ -52,7 +54,11 @@ fun PlayerBottomBar(
             TooltipWrapper(
                 label = stringResource(if (isMuted) R.string.unmute else R.string.mute)
             ) {
-                IconButton(onClick = onToggleMute) {
+                val muteDesc = stringResource(if (isMuted) R.string.unmute else R.string.mute)
+                IconButton(
+                    onClick = onToggleMute,
+                    modifier = Modifier.semantics { contentDescription = muteDesc }
+                ) {
                     Icon(
                         if (isMuted) Icons.AutoMirrored.Filled.VolumeOff
                         else Icons.AutoMirrored.Filled.VolumeUp,
@@ -68,8 +74,10 @@ fun PlayerBottomBar(
                     if (motionPhotoEnabled) R.string.motion_photo_on else R.string.motion_photo_off
                 )
             ) {
+                val motionDesc = stringResource(if (motionPhotoEnabled) R.string.motion_photo_on else R.string.motion_photo_off)
                 IconButton(
                     onClick = onToggleMotionPhoto,
+                    modifier = Modifier.semantics { contentDescription = motionDesc },
                     colors = if (motionPhotoEnabled) {
                         IconButtonDefaults.iconButtonColors(
                             contentColor = MaterialTheme.colorScheme.primary
@@ -94,8 +102,10 @@ fun PlayerBottomBar(
                     if (preserveMetadata) R.string.metadata_on else R.string.metadata_off
                 )
             ) {
+                val metaDesc = stringResource(if (preserveMetadata) R.string.metadata_on else R.string.metadata_off)
                 IconButton(
                     onClick = onToggleMetadata,
+                    modifier = Modifier.semantics { contentDescription = metaDesc },
                     colors = if (preserveMetadata) {
                         IconButtonDefaults.iconButtonColors(
                             contentColor = MaterialTheme.colorScheme.primary
@@ -115,8 +125,12 @@ fun PlayerBottomBar(
                 }
             }
             // Format quick-cycle
-            TooltipWrapper(label = stringResource(R.string.format)) {
-                FilledTonalIconButton(onClick = onCycleFormat) {
+            val formatDesc = stringResource(R.string.format)
+            TooltipWrapper(label = formatDesc) {
+                FilledTonalIconButton(
+                    onClick = onCycleFormat,
+                    modifier = Modifier.semantics { contentDescription = formatDesc }
+                ) {
                     Text(
                         text = formatExtension.uppercase(),
                         style = MaterialTheme.typography.labelSmall
