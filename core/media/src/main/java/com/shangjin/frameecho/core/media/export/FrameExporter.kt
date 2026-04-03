@@ -65,9 +65,9 @@ class FrameExporter(private val context: Context) {
             }
         }
         return when (config.format) {
-            ExportFormat.HEIF -> if (hasEncoder(MediaFormat.MIMETYPE_VIDEO_HEVC)) config
+            ExportFormat.HEIF -> if (hasEncoder(MediaFormat.MIMETYPE_VIDEO_HEVC) || hasEncoder("image/vnd.android.heic")) config
                 else config.copy(format = ExportFormat.JPEG)
-            ExportFormat.AVIF -> if (hasEncoder(MediaFormat.MIMETYPE_VIDEO_AV1)) config
+            ExportFormat.AVIF -> if (hasEncoder(MediaFormat.MIMETYPE_VIDEO_AV1) || hasEncoder("image/avif")) config
                 else config.copy(format = ExportFormat.JPEG)
             else -> config
         }
@@ -77,7 +77,7 @@ class FrameExporter(private val context: Context) {
      * Check whether the device has at least one encoder for the given MIME type.
      */
     private fun hasEncoder(mimeType: String): Boolean {
-        val codecList = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
+        val codecList = android.media.MediaCodecList(android.media.MediaCodecList.ALL_CODECS)
         return codecList.codecInfos.any { it.isEncoder && it.supportedTypes.any { t -> t.equals(mimeType, ignoreCase = true) } }
     }
 
