@@ -58,7 +58,22 @@ object UpdateChecker {
                 return@withContext null
             }
 
-            val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
+            // Impose a 1MB limit to prevent Unbounded HTTP Response Reading (DoS/OOM)
+            val maxBytes = 1024 * 1024
+            val responseBody = buildString {
+                connection.inputStream.bufferedReader().use { reader ->
+                    val buffer = CharArray(8192)
+                    var charsRead: Int
+                    var totalChars = 0
+                    while (reader.read(buffer).also { charsRead = it } != -1) {
+                        totalChars += charsRead
+                        if (totalChars > maxBytes) {
+                            throw java.io.IOException("Response exceeded maximum size limit of $maxBytes bytes")
+                        }
+                        append(buffer, 0, charsRead)
+                    }
+                }
+            }
             connection.disconnect()
 
             val json = JSONObject(responseBody)
