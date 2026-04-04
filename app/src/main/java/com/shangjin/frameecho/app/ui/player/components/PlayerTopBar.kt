@@ -15,6 +15,7 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.shangjin.frameecho.R
+import com.shangjin.frameecho.app.ui.components.TooltipWrapper
 
 /**
  * Top app bar for the player screen.
@@ -41,26 +42,32 @@ fun PlayerTopBar(
             )
         },
         actions = {
-            IconButton(onClick = onSelectVideo) {
-                Icon(
-                    Icons.Default.VideoFile,
-                    contentDescription = stringResource(R.string.select_video)
-                )
-            }
-            if (hasVideo) {
-                IconButton(onClick = onOpenSettings) {
+            TooltipWrapper(label = stringResource(R.string.select_video)) {
+                IconButton(onClick = onSelectVideo) {
                     Icon(
-                        Icons.Default.Settings,
-                        contentDescription = stringResource(R.string.export_settings)
+                        Icons.Default.VideoFile,
+                        contentDescription = stringResource(R.string.select_video)
                     )
                 }
             }
+            if (hasVideo) {
+                TooltipWrapper(label = stringResource(R.string.export_settings)) {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = stringResource(R.string.export_settings)
+                        )
+                    }
+                }
+            }
             if (!hasVideo) {
-                IconButton(onClick = onNavigateToAbout) {
-                    Icon(
-                        Icons.Outlined.Info,
-                        contentDescription = stringResource(R.string.about)
-                    )
+                TooltipWrapper(label = stringResource(R.string.about)) {
+                    IconButton(onClick = onNavigateToAbout) {
+                        Icon(
+                            Icons.Outlined.Info,
+                            contentDescription = stringResource(R.string.about)
+                        )
+                    }
                 }
             }
         },
