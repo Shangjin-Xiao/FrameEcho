@@ -52,33 +52,82 @@ class FrameExporter(private val context: Context) {
     }
 
     /**
-     * Resolve the effective export config by checking native encoder availability.
+     * Resolve the effective export config by probing the same encoder stack used for export.
      *
-     * On API 28+, HEIF uses HeifWriter (HEVC encoder) and AVIF uses AvifWriter (AV1 encoder).
-     * If the required encoder is not available or the API level is too low, falls back to JPEG.
+     * HEIF/AVIF support is device-, codec-, and size-dependent. Mirroring HeifWriter/
+     * AvifWriter initialization avoids false "unsupported" results when MIME-based checks
+     * disagree with the actual encoder selection logic in androidx.heifwriter.
      */
-    private fun resolveEffectiveConfig(config: ExportConfig): ExportConfig {
+    private fun resolveEffectiveConfig(config: ExportConfig, width: Int, height: Int): ExportConfig {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
             return when (config.format) {
                 ExportFormat.HEIF, ExportFormat.AVIF -> config.copy(format = ExportFormat.JPEG)
                 else -> config
             }
         }
-        return when (config.format) {
-            ExportFormat.HEIF -> if (hasEncoder(MediaFormat.MIMETYPE_VIDEO_HEVC) || hasEncoder("image/vnd.android.heic")) config
-                else config.copy(format = ExportFormat.JPEG)
-            ExportFormat.AVIF -> if (hasEncoder(MediaFormat.MIMETYPE_VIDEO_AV1) || hasEncoder("image/avif")) config
-                else config.copy(format = ExportFormat.JPEG)
-            else -> config
+
+        val isSupported = when (config.format) {
+            ExportFormat.HEIF, ExportFormat.AVIF -> canInitializeNextGenWriter(
+                format = config.format,
+                width = width,
+                height = height,
+                quality = config.quality
+            )
+            else -> true
         }
+
+        return if (isSupported) config else config.copy(format = ExportFormat.JPEG)
     }
 
-    /**
-     * Check whether the device has at least one encoder for the given MIME type.
-     */
-    private fun hasEncoder(mimeType: String): Boolean {
-        val codecList = android.media.MediaCodecList(android.media.MediaCodecList.ALL_CODECS)
-        return codecList.codecInfos.any { it.isEncoder && it.supportedTypes.any { t -> t.equals(mimeType, ignoreCase = true) } }
+    @RequiresApi(Build.VERSION_CODES.P)
+    @SuppressLint("RestrictedApi")
+    private fun canInitializeNextGenWriter(
+        format: ExportFormat,
+        width: Int,
+        height: Int,
+        quality: Int
+    ): Boolean {
+        val suffix = when (format) {
+            ExportFormat.HEIF -> ".heic"
+            ExportFormat.AVIF -> ".avif"
+            else -> return true
+        }
+        val tempFile = java.io.File.createTempFile("codec_probe_", suffix, context.cacheDir)
+        return try {
+            when (format) {
+                ExportFormat.HEIF -> {
+                    val writer = HeifWriter.Builder(
+                        tempFile.absolutePath,
+                        width,
+                        height,
+                        HeifWriter.INPUT_MODE_BITMAP
+                    )
+                        .setQuality(quality)
+                        .setMaxImages(1)
+                        .build()
+                    writer.close()
+                }
+                ExportFormat.AVIF -> {
+                    val writer = AvifWriter.Builder(
+                        tempFile.absolutePath,
+                        width,
+                        height,
+                        AvifWriter.INPUT_MODE_BITMAP
+                    )
+                        .setQuality(quality)
+                        .setMaxImages(1)
+                        .build()
+                    writer.close()
+                }
+                else -> Unit
+            }
+            true
+        } catch (e: Exception) {
+            LogUtils.w(context, "FrameExporter", "${format.name} writer probe failed, falling back to JPEG", e)
+            false
+        } finally {
+            tempFile.delete()
+        }
     }
 
     /**
@@ -127,7 +176,11 @@ class FrameExporter(private val context: Context) {
             // AVIF encoding is supported on API 28+ via AvifWriter (requires AV1 encoder).
             // On API < 28 or when no hardware encoder is available, fall back to JPEG.
             val requestedFormat = config.format
-            val effectiveConfig = resolveEffectiveConfig(config)
+            val effectiveConfig = resolveEffectiveConfig(
+                config = config,
+                width = resultWidth,
+                height = resultHeight
+            )
 
             // Generate output file
             val fileName = generateFileName(frame, effectiveConfig)
