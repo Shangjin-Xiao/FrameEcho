@@ -59,34 +59,16 @@ fun ThumbnailTimeline(
 
     // Use rememberUpdatedState to ensure the latest lambdas are used
     // without triggering recomposition of the items block.
-    val currentRequestThumbnail by rememberUpdatedState(requestThumbnail)
-    val currentOnThumbnailClick by rememberUpdatedState(onThumbnailClick)
-
     Box(modifier = modifier) {
 
-        LazyRow(
-            state = listState,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            items(thumbnailCount) { index ->
-                // Wrap the lambdas in remember to provide stable instances to ThumbnailItem.
-                // These will only be recreated if the index changes (which it doesn't for a given item).
-                val requestLoad = remember(index) {
-                    { currentRequestThumbnail(index) }
-                }
-                val onClick = remember(index) {
-                    { currentOnThumbnailClick(index) }
-                }
-
-                ThumbnailItem(
-                    index = index,
-                    bitmap = getThumbnail(index),
-                    isSelected = index == selectedIndex,
-                    requestLoad = requestLoad,
-                    onClick = onClick
-                )
-            }
-        }
+        ThumbnailTimelineList(
+            thumbnailCount = thumbnailCount,
+            selectedIndex = selectedIndex,
+            listState = listState,
+            getThumbnail = getThumbnail,
+            requestThumbnail = requestThumbnail,
+            onThumbnailClick = onThumbnailClick
+        )
 
         // Auto-scroll to follow playback position smoothly.
         // Uses animateScrollToItem for natural visual movement.
@@ -106,6 +88,47 @@ fun ThumbnailTimeline(
                     listState.animateScrollToItem(targetIndex.coerceAtLeast(0), -offset)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ThumbnailTimelineList(
+    thumbnailCount: Int,
+    selectedIndex: Int,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    getThumbnail: (index: Int) -> Bitmap?,
+    requestThumbnail: (index: Int) -> Unit,
+    onThumbnailClick: (index: Int) -> Unit
+) {
+    val currentRequestThumbnail by rememberUpdatedState(requestThumbnail)
+    val currentOnThumbnailClick by rememberUpdatedState(onThumbnailClick)
+    val currentGetThumbnail by rememberUpdatedState(getThumbnail)
+
+    LazyRow(
+        state = listState,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        items(
+            count = thumbnailCount,
+            key = { it }
+        ) { index ->
+            // Wrap the lambdas in remember to provide stable instances to ThumbnailItem.
+            // These will only be recreated if the index changes (which it doesn't for a given item).
+            val requestLoad = remember(index) {
+                { currentRequestThumbnail(index) }
+            }
+            val onClick = remember(index) {
+                { currentOnThumbnailClick(index) }
+            }
+
+            ThumbnailItem(
+                index = index,
+                bitmap = currentGetThumbnail(index),
+                isSelected = index == selectedIndex,
+                requestLoad = requestLoad,
+                onClick = onClick
+            )
         }
     }
 }
