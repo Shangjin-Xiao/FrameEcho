@@ -5,6 +5,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import com.shangjin.frameecho.core.media.utils.DateTimeUtils
 import com.shangjin.frameecho.core.media.utils.ExifUtils
 import com.shangjin.frameecho.core.media.utils.LogUtils
@@ -230,31 +231,53 @@ object MetadataExtractor {
 
     private fun getStringFromKeys(format: MediaFormat, vararg keys: String): String? {
         for (key in keys) {
-            if (!format.containsKey(key)) continue
-            val value = runCatching { format.getString(key) }.getOrNull()
-            if (!value.isNullOrBlank()) return value
+            if (Build.VERSION.SDK_INT >= 29 && !format.containsKey(key)) continue
+            try {
+                val value = format.getString(key)
+                if (!value.isNullOrBlank()) return value
+            } catch (e: NullPointerException) {
+                // Key not found, ignore and try next
+            } catch (e: ClassCastException) {
+                // Wrong type, ignore and try next
+            }
         }
         return null
     }
 
     private fun getIntFromKeys(format: MediaFormat, vararg keys: String): Int? {
         for (key in keys) {
-            if (!format.containsKey(key)) continue
-            val value = runCatching { format.getInteger(key) }.getOrNull()
-            if (value != null) return value
+            if (Build.VERSION.SDK_INT >= 29 && !format.containsKey(key)) continue
+            try {
+                return format.getInteger(key)
+            } catch (e: NullPointerException) {
+                // Key not found, ignore and try next
+            } catch (e: ClassCastException) {
+                // Wrong type, ignore and try next
+            }
         }
         return null
     }
 
     private fun getFloatFromKeys(format: MediaFormat, vararg keys: String): Float? {
         for (key in keys) {
-            if (!format.containsKey(key)) continue
-            val floatValue = runCatching { format.getFloat(key) }.getOrNull()
-            if (floatValue != null) return floatValue
+            if (Build.VERSION.SDK_INT >= 29 && !format.containsKey(key)) continue
+            try {
+                return format.getFloat(key)
+            } catch (e: NullPointerException) {
+                // Key not found, proceed to fallback string parsing
+            } catch (e: ClassCastException) {
+                // Wrong type, proceed to fallback string parsing
+            }
 
-            val stringValue = runCatching { format.getString(key) }.getOrNull()
-            val parsedFloat = stringValue?.toFloatOrNull()
-            if (parsedFloat != null) return parsedFloat
+            try {
+                val stringValue = format.getString(key)
+                val parsedFloat = stringValue?.toFloatOrNull()
+                if (parsedFloat != null) return parsedFloat
+            } catch (e: NullPointerException) {
+                // Key not found, ignore and try next
+            } catch (e: ClassCastException) {
+                // Wrong type, ignore and try next
+            }
         }
         return null
     }
