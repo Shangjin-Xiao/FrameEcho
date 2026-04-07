@@ -48,6 +48,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.shangjin.frameecho.core.media.utils.LogUtils
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
@@ -135,7 +136,7 @@ fun PlayerScreen(
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
             } catch (e: SecurityException) {
-                android.util.Log.w("PlayerScreen", "Failed to take persistable URI permission", e)
+                LogUtils.w(context, "PlayerScreen", "Failed to take persistable URI permission", e)
             }
             viewModel.setCustomExportTreeUri(uri)
         }
