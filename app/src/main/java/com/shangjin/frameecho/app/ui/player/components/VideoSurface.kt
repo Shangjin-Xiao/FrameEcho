@@ -188,12 +188,14 @@ fun VideoSurface(
                         }
                     }
                 }
-                .graphicsLayer(
-                    scaleX = videoScale,
-                    scaleY = videoScale,
-                    translationX = videoOffsetX,
+                // Bolt optimization: use lambda graphicsLayer to defer state reads to the draw phase.
+                // This prevents recomposition during zooming and panning.
+                .graphicsLayer {
+                    scaleX = videoScale
+                    scaleY = videoScale
+                    translationX = videoOffsetX
                     translationY = videoOffsetY
-                )
+                }
         )
 
         // Loading/exporting overlay
