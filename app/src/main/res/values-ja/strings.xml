@@ -89,6 +89,7 @@
 
     <!-- UX: snackbar actions -->
     <string name="snackbar_action_view">表示</string>
+    <string name="chooser_title_view_export">エクスポートされたファイルを表示</string>
 
     <!-- UX: loading / cancel -->
     <string name="cancel">キャンセル</string>

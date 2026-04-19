@@ -302,6 +302,7 @@ fun PlayerScreen(
     val exportSuccessMsg = stringResource(R.string.export_success_message)
     val exportFallbackMsg = stringResource(R.string.export_format_fallback_message)
     val viewActionLabel = stringResource(R.string.snackbar_action_view)
+    val chooserTitle = stringResource(R.string.chooser_title_view_export)
 
     // Show export result
     LaunchedEffect(uiState.exportResult) {
@@ -329,7 +330,8 @@ fun PlayerScreen(
                             )
                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
-                        context.startActivity(viewIntent)
+                        val chooser = Intent.createChooser(viewIntent, chooserTitle)
+                        context.startActivity(chooser)
                     } catch (_: Exception) { }
                 }
                 viewModel.clearExportResult()
