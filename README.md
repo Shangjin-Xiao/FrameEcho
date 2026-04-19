@@ -19,13 +19,6 @@ Android 高性能视频抽帧应用
 
 [English ↓](#-frameecho-1)　·　[官网](https://frameecho.shangjinyun.cn)　·　[下载](https://github.com/Shangjin-Xiao/FrameEcho/releases)
 
-<br/>
-<p align="center">
-  <img src="docs/screenshot_empty.jpg" height="400" alt="尚未选择视频"/>
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="docs/screenshot_player.jpg" height="400" alt="视频抽帧界面"/>
-</p>
-
 </div>
 
 ---
@@ -47,6 +40,21 @@ Android 高性能视频抽帧应用
 - **Material 3 界面** — 动态取色（Android 12+）、自定义播放控件（±5 秒快进/后退、实时拖动预览）、`ModalBottomSheet` 导出设置
 - **Scoped Storage & SAF** — 严格使用 `MediaStore` API，支持保存到共享相册、DCIM、Movies 或自定义路径
 - **中英双语** — 跟随系统语言自动切换
+
+## 📱 界面预览
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshot_empty.jpg" width="240" alt="尚未选择视频" /></td>
+    <td align="center"><img src="docs/screenshot_player.jpg" width="240" alt="视频抽帧界面" /></td>
+    <td align="center"><img src="docs/screenshot_export.jpg" width="240" alt="导出设置界面" /></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>首页状态</strong><br/>选择视频后即可开始精准定位帧。</td>
+    <td align="center"><strong>抽帧预览</strong><br/>时间线缩略图和播放器联动，方便精确停在目标画面。</td>
+    <td align="center"><strong>导出设置</strong><br/>格式、质量、目录、HDR 与动态照片选项集中在底部面板。</td>
+  </tr>
+</table>
 
 ## 🏗️ 架构
 
@@ -125,15 +133,6 @@ Extract perfect screenshots from any video with HDR awareness, motion photo expo
 
 [Website](https://frameecho.shangjinyun.cn)　·　[Releases](https://github.com/Shangjin-Xiao/FrameEcho/releases)
 
-<br/>
-<p align="center">
-  <img src="docs/screenshot_empty.jpg" height="400" alt="No Video Selected"/>
-  &nbsp;&nbsp;
-  <img src="docs/screenshot_player.jpg" height="400" alt="Video Player Screen"/>
-  &nbsp;&nbsp;
-  <img src="docs/screenshot_export.jpg" height="400" alt="Export Settings"/>
-</p>
-
 </div>
 
 ## ✨ Features
@@ -151,6 +150,21 @@ Extract perfect screenshots from any video with HDR awareness, motion photo expo
 - **Lazy Thumbnail Timeline** — `LazyRow`‑based strip with on-demand 120px thumbnails and live position indicator
 - **Material 3 UI** — Dynamic Color (Android 12+), custom playback controls, `ModalBottomSheet` export settings
 - **Scoped Storage & SAF** — strict `MediaStore` API; gallery refreshes immediately after export
+
+## 📱 Screens
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshot_empty.jpg" width="240" alt="No Video Selected" /></td>
+    <td align="center"><img src="docs/screenshot_player.jpg" width="240" alt="Video Player Screen" /></td>
+    <td align="center"><img src="docs/screenshot_export.jpg" width="240" alt="Export Settings" /></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Start clean</strong><br/>Open a video and jump straight into frame-accurate capture.</td>
+    <td align="center"><strong>Capture view</strong><br/>Timeline thumbnails and playback stay in sync for precise frame picking.</td>
+    <td align="center"><strong>Export sheet</strong><br/>Format, quality, HDR, metadata, and motion-photo options live in one place.</td>
+  </tr>
+</table>
 
 ## 🏗️ Architecture
 

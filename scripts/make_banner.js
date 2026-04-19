@@ -86,9 +86,9 @@ async function makeBanner() {
     </g>
 
     <!-- Mockups Visualization -->
-    <g transform="translate(720, 50)">
+    <g transform="translate(760, 50)">
         <!-- Export Screen (Right, Back) -->
-        <g transform="translate(260, 40) rotate(12)" filter="url(#mainShadow)">
+        <g transform="translate(220, 40) rotate(12)" filter="url(#mainShadow)">
             <rect width="240" height="500" rx="36" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2" />
             <image href="${imgExport}" width="240" height="518" clip-path="url(#phoneClip)" preserveAspectRatio="xMidYMid slice" opacity="0.9"/>
             <rect width="240" height="500" rx="36" fill="none" stroke="white" stroke-opacity="0.5" stroke-width="4" />
