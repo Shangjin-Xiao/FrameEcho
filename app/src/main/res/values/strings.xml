@@ -89,6 +89,7 @@
 
     <!-- UX: snackbar actions -->
     <string name="snackbar_action_view">View</string>
+    <string name="chooser_title_view_export">View Exported File</string>
 
     <!-- UX: loading / cancel -->
     <string name="cancel">Cancel</string>
