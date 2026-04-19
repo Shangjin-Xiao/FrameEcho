@@ -196,10 +196,11 @@
         <g transform="translate(150, 0)">
             <text x="0" y="40" font-family="'Inter', -apple-system, sans-serif" font-weight="900" font-size="72" fill="url(#premiumText)" letter-spacing="-3">FrameEcho</text>
             <text x="2" y="95" font-family="'Inter', -apple-system, sans-serif" font-weight="600" font-size="28" fill="#0369A1" opacity="0.9">定格你所爱的每一帧</text>
-            <text x="2" y="130" font-family="'Inter', -apple-system, sans-serif" font-weight="400" font-size="20" fill="#0284C7" opacity="0.7">High-Performance Frame Capture</text>
+            <text x="2" y="128" font-family="'Inter', -apple-system, sans-serif" font-weight="500" font-size="22" fill="#0284C7" opacity="0.82">Freeze Every Frame You Love</text>
+            <text x="2" y="160" font-family="'Inter', -apple-system, sans-serif" font-weight="400" font-size="20" fill="#0284C7" opacity="0.7">High-Performance Frame Capture</text>
             
             <!-- Features Badges -->
-            <g transform="translate(0, 170)">
+            <g transform="translate(0, 200)">
                 <rect width="100" height="28" rx="14" fill="#0284C7" />
                 <text x="50" y="19" font-family="sans-serif" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="middle">HDR AWARE</text>
                 
@@ -210,7 +211,7 @@
     </g>
 
     <!-- Mockups Visualization -->
-    <g transform="translate(760, 50)">
+    <g transform="translate(745, 50)">
         <!-- Export Screen (Right, Back) -->
         <g transform="translate(220, 40) rotate(12)" filter="url(#mainShadow)">
             <rect width="240" height="500" rx="36" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2" />
