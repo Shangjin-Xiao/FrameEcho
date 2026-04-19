@@ -1,11 +1,12 @@
 <div align="center">
 
-<img src="docs/icon.png" width="120" alt="FrameEcho Icon"/>
+<img src="docs/banner.svg" alt="FrameEcho Banner" width="100%" />
+
+<br/>
 
 # FrameEcho
 
 **定格你所爱的每一帧**
-
 Android 高性能视频抽帧应用
 
 从任意视频中精确截取完美画面，支持 HDR、动态照片与完整 EXIF 保留。通过快捷按钮和底部设置面板可调整格式、质量、导出目录、文件名、静音、HDR 色调映射等。
@@ -17,6 +18,13 @@ Android 高性能视频抽帧应用
 [![Build](https://img.shields.io/github/actions/workflow/status/Shangjin-Xiao/FrameEcho/android-ci.yml?label=CI)](https://github.com/Shangjin-Xiao/FrameEcho/actions)
 
 [English ↓](#-frameecho-1)　·　[官网](https://frameecho.shangjinyun.cn)　·　[下载](https://github.com/Shangjin-Xiao/FrameEcho/releases)
+
+<br/>
+<p align="center">
+  <img src="docs/screenshot_empty.jpg" height="400" alt="尚未选择视频"/>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/screenshot_player.jpg" height="400" alt="视频抽帧界面"/>
+</p>
 
 </div>
 
@@ -116,6 +124,15 @@ High-performance video frame capture for Android
 Extract perfect screenshots from any video with HDR awareness, motion photo export, and full EXIF preservation. Quick‑access toggles and a settings sheet let you choose format, quality, export folder, filename template, mute audio and HDR tone‑mapping.
 
 [Website](https://frameecho.shangjinyun.cn)　·　[Releases](https://github.com/Shangjin-Xiao/FrameEcho/releases)
+
+<br/>
+<p align="center">
+  <img src="docs/screenshot_empty.jpg" height="400" alt="No Video Selected"/>
+  &nbsp;&nbsp;
+  <img src="docs/screenshot_player.jpg" height="400" alt="Video Player Screen"/>
+  &nbsp;&nbsp;
+  <img src="docs/screenshot_export.jpg" height="400" alt="Export Settings"/>
+</p>
 
 </div>
 
