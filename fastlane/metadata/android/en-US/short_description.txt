@@ -1,1 +1,1 @@
-High-performance video frame capture app for Android with motion photo support.
+Android frame capture app with HDR screenshots and motion photo export.

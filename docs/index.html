@@ -4,14 +4,47 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FrameEcho - 定格你所爱的每一帧</title>
+    <meta name="robots" content="index,follow,max-image-preview:large">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="icon" type="image/svg+xml" href="icon.svg">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
     <link rel="icon" href="favicon.ico" sizes="48x48">
     <link rel="manifest" href="site.webmanifest">
+    <link rel="canonical" href="https://frameecho.shangjinyun.cn/">
+    <link rel="alternate" hreflang="zh-CN" href="https://frameecho.shangjinyun.cn/">
+    <link rel="alternate" hreflang="en" href="https://frameecho.shangjinyun.cn/en.html">
+    <link rel="alternate" hreflang="x-default" href="https://frameecho.shangjinyun.cn/">
     <meta name="theme-color" content="#BAE6FD">
     <meta name="description" content="从视频中精准提取高质量画面，保存动态照片，保留所有珍贵记忆。">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="zh_CN">
+    <meta property="og:site_name" content="FrameEcho">
+    <meta property="og:title" content="FrameEcho - 定格你所爱的每一帧">
+    <meta property="og:description" content="Android 高性能视频抽帧应用，支持 HDR 感知、动态照片导出与完整 EXIF 保留。">
+    <meta property="og:url" content="https://frameecho.shangjinyun.cn/">
+    <meta property="og:image" content="https://frameecho.shangjinyun.cn/icon.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="FrameEcho - 定格你所爱的每一帧">
+    <meta name="twitter:description" content="Android 高性能视频抽帧应用，支持 HDR 感知、动态照片导出与完整 EXIF 保留。">
+    <meta name="twitter:image" content="https://frameecho.shangjinyun.cn/icon.png">
+    <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            "name": "FrameEcho",
+            "applicationCategory": "MultimediaApplication",
+            "operatingSystem": "Android",
+            "inLanguage": "zh-CN",
+            "url": "https://frameecho.shangjinyun.cn/",
+            "downloadUrl": "https://github.com/Shangjin-Xiao/FrameEcho/releases/latest",
+            "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "USD"
+            }
+        }
+    </script>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Alpine.js -->
@@ -114,6 +147,7 @@
             <div class="flex items-center gap-6 text-sm font-medium">
                 <a href="#features" class="hidden sm:block text-gray-600 hover:text-primary transition-colors">探索功能</a>
                 <a href="#developer" class="hidden sm:block text-gray-600 hover:text-primary transition-colors">开发者支持</a>
+                <a href="#friend-links" class="hidden sm:block text-gray-600 hover:text-primary transition-colors">友情链接</a>
                 <a href="en.html" class="text-gray-600 hover:text-primary transition-colors font-medium">EN</a>
                 <a :href="downloadUrl" class="bg-gray-900 hover:bg-black text-white px-5 py-2.5 rounded-full shadow-md transition-all flex items-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
@@ -246,6 +280,27 @@
                         <svg class="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
                     </a>
                 </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="friend-links" class="py-24 bg-white border-t border-gray-100">
+        <div class="max-w-4xl mx-auto px-6">
+            <div class="text-center mb-12">
+                <span class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2 block">友情链接</span>
+                <h2 class="text-3xl font-black mb-4 text-gray-900">探索相关站点</h2>
+                <p class="text-lg text-gray-500 mx-auto font-medium">访问我的个人主页与 ThoughtEcho 项目站点。</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <a href="https://shangjinyun.cn/" target="_blank" rel="noopener noreferrer" class="feature-card p-8 rounded-3xl block">
+                    <h3 class="text-xl font-bold mb-2 text-gray-900">mypage</h3>
+                    <p class="text-gray-600 text-sm leading-relaxed">开发者个人主页，汇总项目与创作日常。</p>
+                </a>
+                <a href="https://note.shangjinyun.cn/" target="_blank" rel="noopener noreferrer" class="feature-card p-8 rounded-3xl block">
+                    <h3 class="text-xl font-bold mb-2 text-gray-900">ThoughtEcho</h3>
+                    <p class="text-gray-600 text-sm leading-relaxed">你的专属灵感摘录本，支持本地优先与 AI 洞察。</p>
+                </a>
             </div>
         </div>
     </section>

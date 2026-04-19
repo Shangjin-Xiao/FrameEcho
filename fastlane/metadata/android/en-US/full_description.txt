@@ -1,18 +1,28 @@
 FrameEcho - Freeze Every Frame You Love
 
-High-performance video frame capture for Android.
-Extract perfect screenshots from any video with HDR awareness, motion photo export, and full EXIF preservation. Quick-access toggles and a settings sheet let you choose format, quality, export folder, filename template, mute audio and HDR tone-mapping.
+FrameEcho is an Android app for video frame extraction and high-quality screenshot capture. Pick the exact frame you want, then export it as a still image or motion photo.
 
-Features
-- Microsecond-Precise Frame Capture: Always uses MediaMetadataRetriever.OPTION_CLOSEST; never falls back to keyframe seeking.
-- Static & Motion Photo Export: JPEG, PNG, WebP, HEIF, AVIF; motion photo follows Google MicroVideo spec.
-- Mute Audio Option: Omit audio when exporting motion photos.
-- HDR & Dolby Vision Aware: Detects HDR10, HDR10+, HLG, Dolby Vision; tone-maps to sRGB for SDR, preserves HDR for HEIF/AVIF.
-- Configurable HDR Tone-Mapping: Automatic, force SDR, preserve HDR or follow system setting.
-- Custom File Names & Export Locations: Presets, manual input with length validation, root folders or SAF-picked custom directory.
-- Lossless Metadata Preservation: Full EXIF from source video written to exported image.
-- Quality & Resolution Controls: Adjustable quality and optional max resolution with bounds checks.
-- 4K Source OOM-Safe: Explicit memory management, thumbnail caching, runs on IO thread.
-- Lazy Thumbnail Timeline: LazyRow-based strip with on-demand thumbnails and live position indicator.
-- Material 3 UI: Dynamic Color (Android 12+), custom playback controls, modern export settings.
-- Scoped Storage & SAF: Strict MediaStore API usage; gallery refreshes immediately after export.
+Best for
+- Capturing perfect moments from travel videos, concerts, family clips, and short-form content.
+- Saving clean, high-quality screenshots for sharing or archiving.
+- Exporting motion photos to keep short moments alive.
+
+Key features
+- Precise frame picking with smooth timeline scrubbing.
+- Still image and motion photo export.
+- HDR-aware processing for HDR10, HDR10+, HLG, and Dolby Vision sources.
+- EXIF metadata preservation where supported.
+- Multiple output formats: JPEG, PNG, WebP, HEIF, AVIF.
+- Adjustable quality and resolution limits.
+
+Designed for speed and clarity
+- On-demand thumbnail loading for responsive seeking.
+- Streamlined export panel for format, quality, filename, and destination.
+- Clean Material 3 interface with practical controls.
+
+Privacy
+- No account required.
+- Files are processed when you explicitly choose and export media.
+- Processing is designed to stay local on your device.
+
+If you want a focused Android frame capture app with quality-first export options, FrameEcho is built for you.
