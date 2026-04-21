@@ -329,7 +329,8 @@ fun PlayerScreen(
                             )
                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
-                        context.startActivity(viewIntent)
+                        val chooser = Intent.createChooser(viewIntent, null)
+                        context.startActivity(chooser)
                     } catch (_: Exception) { }
                 }
                 viewModel.clearExportResult()
