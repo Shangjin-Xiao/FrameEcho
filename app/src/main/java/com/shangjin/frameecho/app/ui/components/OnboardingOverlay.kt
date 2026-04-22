@@ -61,6 +61,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.shangjin.frameecho.R
+import com.shangjin.frameecho.app.ui.components.TooltipWrapper
 
 /**
  * Defines the position of a tooltip bubble relative to its anchor.
@@ -125,17 +126,21 @@ fun OnboardingOverlay(
             }
     ) {
         // Skip button — top-right
-        IconButton(
-            onClick = onSkip,
+        TooltipWrapper(
+            label = stringResource(R.string.onboarding_skip),
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(top = 48.dp, end = 16.dp)
         ) {
-            Icon(
-                Icons.Default.Close,
-                contentDescription = stringResource(R.string.onboarding_skip),
-                tint = Color.White
-            )
+            IconButton(
+                onClick = onSkip
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = stringResource(R.string.onboarding_skip),
+                    tint = Color.White
+                )
+            }
         }
 
         // Step indicator — top-center
