@@ -49,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import com.shangjin.frameecho.app.ui.components.TooltipWrapper
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -125,17 +126,19 @@ fun OnboardingOverlay(
             }
     ) {
         // Skip button — top-right
-        IconButton(
-            onClick = onSkip,
+        TooltipWrapper(
+            label = stringResource(R.string.onboarding_skip),
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(top = 48.dp, end = 16.dp)
         ) {
-            Icon(
-                Icons.Default.Close,
-                contentDescription = stringResource(R.string.onboarding_skip),
-                tint = Color.White
-            )
+            IconButton(onClick = onSkip) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = stringResource(R.string.onboarding_skip),
+                    tint = Color.White
+                )
+            }
         }
 
         // Step indicator — top-center

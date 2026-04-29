@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import com.shangjin.frameecho.BuildConfig
 import com.shangjin.frameecho.R
 import com.shangjin.frameecho.app.ui.components.OnboardingManager
+import com.shangjin.frameecho.app.ui.components.TooltipWrapper
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,11 +80,13 @@ fun AboutScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.about)) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.go_back)
-                        )
+                    TooltipWrapper(label = stringResource(R.string.go_back)) {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.go_back)
+                            )
+                        }
                     }
                 }
             )
