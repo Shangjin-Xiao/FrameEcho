@@ -23,7 +23,6 @@ import com.shangjin.frameecho.core.media.metadata.MetadataWriter
 import com.shangjin.frameecho.core.media.utils.LogUtils
 import com.shangjin.frameecho.core.media.utils.DateTimeUtils
 import com.shangjin.frameecho.core.model.CapturedFrame
-import com.shangjin.frameecho.core.model.ColorSpaceInfo
 import com.shangjin.frameecho.core.model.ExportConfig
 import com.shangjin.frameecho.core.model.ExportDirectory
 import com.shangjin.frameecho.core.model.ExportFormat
