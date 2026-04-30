@@ -329,7 +329,9 @@ fun PlayerScreen(
                             )
                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
-                        context.startActivity(viewIntent)
+                        // Security: Wrap implicit intent with chooser to prevent hijacking
+                        val chooserIntent = Intent.createChooser(viewIntent, null)
+                        context.startActivity(chooserIntent)
                     } catch (_: Exception) { }
                 }
                 viewModel.clearExportResult()
