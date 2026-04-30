@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shangjin.frameecho.core.media.extraction.FrameExtractor
 import com.shangjin.frameecho.core.media.export.FrameExporter
+import com.shangjin.frameecho.core.media.utils.LogUtils
 import com.shangjin.frameecho.core.model.CapturedFrame
 import com.shangjin.frameecho.core.model.ExportConfig
 import com.shangjin.frameecho.core.model.ExportResult
@@ -86,6 +87,7 @@ class PlayerViewModel : ViewModel() {
     private var frameExtractor: FrameExtractor? = null
     private var frameExporter: FrameExporter? = null
     private var preferencesStore: PlayerPreferencesStore? = null
+    private var appContext: Context? = null
 
     /** Thumbnail cache: index → Bitmap. Kept outside UiState to avoid serialization issues. */
     private val _thumbnailCache = mutableStateMapOf<Int, Bitmap>()
@@ -114,6 +116,7 @@ class PlayerViewModel : ViewModel() {
     }
 
     fun initialize(context: Context) {
+        appContext = context.applicationContext
         if (frameExtractor == null) {
             frameExtractor = FrameExtractor(context.applicationContext)
             frameExporter = FrameExporter(context.applicationContext)
@@ -296,7 +299,9 @@ class PlayerViewModel : ViewModel() {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    android.util.Log.w("PlayerViewModel", "Failed to load thumbnail batch", e)
+                    appContext?.let { ctx ->
+                        LogUtils.w(ctx, "PlayerViewModel", "Failed to load thumbnail batch", e)
+                    }
                 }
             }
         }
