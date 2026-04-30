@@ -89,4 +89,25 @@ class FrameExtractorTest {
         verify(exactly = 1) { anyConstructed<MediaMetadataRetriever>().getFrameAtTime(1000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) }
         verify(exactly = 1) { Bitmap.createScaledBitmap(mockBitmap, 100, 100, true) }
     }
+
+    @Test
+    fun `releaseBitmap calls recycle when not recycled`() {
+        val bitmap = mockk<Bitmap>()
+        every { bitmap.isRecycled } returns false
+        every { bitmap.recycle() } returns Unit
+
+        frameExtractor.releaseBitmap(bitmap)
+
+        verify(exactly = 1) { bitmap.recycle() }
+    }
+
+    @Test
+    fun `releaseBitmap does not call recycle when already recycled`() {
+        val bitmap = mockk<Bitmap>()
+        every { bitmap.isRecycled } returns true
+
+        frameExtractor.releaseBitmap(bitmap)
+
+        verify(exactly = 0) { bitmap.recycle() }
+    }
 }
