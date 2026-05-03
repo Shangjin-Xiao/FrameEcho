@@ -73,4 +73,50 @@ class FrameExporterTest {
                 xmpString.contains("Item:Semantic=\"MotionPhoto\" Item:Length=\"1000\" Item:Padding=\"0\""))
         }
     }
+
+    @Test
+    fun `sanitizeFileName should remove control characters`() {
+        val exporter = FrameExporter(mockk())
+        val input = "file\u0000name\u001Ftest\u007F"
+        assertTrue("Control characters should be removed", exporter.sanitizeFileName(input) == "filenametest")
+    }
+
+    @Test
+    fun `sanitizeFileName should replace illegal filesystem characters`() {
+        val exporter = FrameExporter(mockk())
+        val input = "a\\b/c:d*e?f\"g<h>i|j"
+        val expected = "a_b_c_d_e_f_g_h_i_j"
+        assertTrue("Illegal characters should be replaced by underscores", exporter.sanitizeFileName(input) == expected)
+    }
+
+    @Test
+    fun `sanitizeFileName should collapse multiple dots and prevent path traversal`() {
+        val exporter = FrameExporter(mockk())
+
+        assertTrue("Double dots should be replaced and trimmed", exporter.sanitizeFileName("..") == "FrameEcho")
+        assertTrue("Triple dots should be replaced and trimmed", exporter.sanitizeFileName("...") == "FrameEcho")
+        assertTrue("Path traversal sequence should be sanitized and trimmed", exporter.sanitizeFileName("../../etc/passwd") == "etc_passwd")
+        assertTrue("Multiple dots within name should be collapsed", exporter.sanitizeFileName("my...file..name") == "my_file_name")
+    }
+
+    @Test
+    fun `sanitizeFileName should remove leading and trailing dots, underscores and slashes`() {
+        val exporter = FrameExporter(mockk())
+
+        assertTrue("Leading dot should be removed", exporter.sanitizeFileName(".hidden") == "hidden")
+        assertTrue("Leading slash should be removed", exporter.sanitizeFileName("/absolute/path") == "absolute_path")
+        assertTrue("Leading traversal should be handled and trimmed", exporter.sanitizeFileName("../test") == "test")
+        assertTrue("Trailing junk should be trimmed", exporter.sanitizeFileName("test.txt.") == "test.txt")
+        assertTrue("Complex junk at boundaries should be trimmed", exporter.sanitizeFileName("._./test_.._") == "test")
+    }
+
+    @Test
+    fun `sanitizeFileName should handle blank or fully sanitized input`() {
+        val exporter = FrameExporter(mockk())
+
+        assertTrue("Blank input should return default", exporter.sanitizeFileName("") == "FrameEcho")
+        assertTrue("Whitespace input should return default", exporter.sanitizeFileName("   ") == "FrameEcho")
+        assertTrue("Fully sanitized input should return default", exporter.sanitizeFileName("../..") == "FrameEcho")
+        assertTrue("Input with only illegal characters should return default", exporter.sanitizeFileName("/\\:*?\"<>|") == "FrameEcho")
+    }
 }

@@ -1161,12 +1161,20 @@ class FrameExporter(private val context: Context) {
         return "${prefix}_${timestamp}_${timeStr}.${extension}"
     }
 
-    private fun sanitizeFileName(fileName: String): String {
+    /**
+     * Sanitize custom filename to prevent path traversal and illegal characters.
+     */
+    internal fun sanitizeFileName(fileName: String): String {
         return fileName
-            .replace('\u0000', '_')           // Strip null bytes
+            // 1. Remove control characters (0x00-0x1F, 0x7F)
+            .filter { it >= ' ' && it != '\u007F' }
+            // 2. Replace illegal filesystem characters with underscores
             .replace(Regex("[\\\\/:*?\"<>|]"), "_")
-            .replace("..", "_")               // Prevent path traversal sequences
-            .trim()
+            // 3. Collapse multiple dots to prevent path traversal (e.g., ".." or "...")
+            .replace(Regex("\\.\\.+"), "_")
+            // 4. Trim leading/trailing underscores, dots, and whitespace to prevent hidden files
+            //    and ensure we don't start/end with separators or traversal markers.
+            .trim { it == '_' || it == '.' || it.isWhitespace() }
             .ifBlank { DEFAULT_CUSTOM_FILENAME }
     }
 

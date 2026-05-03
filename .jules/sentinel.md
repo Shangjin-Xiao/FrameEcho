@@ -1,12 +1,12 @@
-## 2026-02-24 - [Metadata Injection Prevention]
-**Vulnerability:** User-controlled data (filenames, codecs) containing control characters or excessive length can be written to EXIF tags, potentially causing metadata corruption or parser issues.
-**Learning:** `ExifInterface` does not automatically sanitize or truncate strings. Filenames from `VideoMetadata` are user-controlled and can contain garbage.
-**Prevention:** Sanitize all string inputs to EXIF tags by removing control characters (including newlines) and enforcing a reasonable length limit before writing.
-## 2026-03-24 - [PII Leakage in Logs]
-**Vulnerability:** Full stack traces containing PII (like absolute file paths, URIs, or MediaStore data) are leaked into system logs on production builds when exceptions occur during frame extraction or export.
-**Learning:** `android.util.Log` calls in core library modules unconditionally dump stack traces regardless of the application's debuggable state.
-**Prevention:** Use a centralized `LogUtils` wrapper that checks `ApplicationInfo.FLAG_DEBUGGABLE` via a `Context` parameter. In release builds, log only the exception's class name to prevent sensitive data exposure.
-## 2026-04-28 - [Implicit Intent Hijacking]
-**Vulnerability:** Launching an implicit `ACTION_VIEW` intent with sensitive content (like exported file URIs) without user interaction can lead to intent hijacking. A malicious app can register as the default handler and silently intercept the URI and data.
-**Learning:** `Intent.ACTION_VIEW` relies on the Android system to resolve the appropriate application. If a default app is already set, or if a malicious app claims to handle the intent, sensitive data might be leaked.
-**Prevention:** Wrap implicit intents for sensitive actions (like opening files or sharing) in `Intent.createChooser()`. This forces the system to display an app selection dialog, requiring explicit user action to choose the handling application.
+## 2024-12-23 - 修复自定义文件名中的路径穿越漏洞
+
+**漏洞:** 之前的 `sanitizeFileName` 函数仅执行单次 `..` 替换，且未充分过滤控制字符或非法路径分隔符。这可能允许攻击者通过恶意文件名（如 `../../../etc/passwd`）将文件写入预定导出目录之外。
+
+**学习:** 简单的字符串替换（如 `replace("..", "_")`）不足以防御路径穿越。攻击者可以使用 `...` 或绝对路径。此外，如果处理后的文件名仅包含非法字符（被替换为下划线），可能会导致生成隐藏文件（如 `.jpg` 变成 `_.jpg`）或无意义的文件名。
+
+**预防:**
+1. 过滤所有控制字符（0x00-0x1F, 0x7F）。
+2. 使用正则表达式 `[\\\\/:*?\"<>|]` 替换所有平台相关的非法字符。
+3. 使用正则表达式 `\.\.+` 将连续的两个或多个点替换为单个下划线，彻底阻止 `..` 序列。
+4. 使用 `trim { it == '_' || it == '.' || it.isWhitespace() }` 清理边界上的下划线和点，防止生成隐藏文件并确保文件名合法。
+5. 始终提供默认回退文件名。
