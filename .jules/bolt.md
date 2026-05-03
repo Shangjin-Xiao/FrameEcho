@@ -13,3 +13,7 @@
 ## 2026-04-30 - Compose modifier .graphicsLayer optimization
 **Learning:** Calling `Modifier.graphicsLayer(...)` by passing state variables directly as arguments triggers a full recomposition of the composable every time the state changes.
 **Action:** Use the lambda version `Modifier.graphicsLayer { ... }` which defers reading of state variables to the drawing phase. This prevents full recompositions during high-frequency gesture events like zoom or pan, improving CPU usage and UI framerate.
+
+## 2026-05-21 - 使用 Kotlin 标准库 copyTo 优化流拷贝
+**Learning:** 在 Kotlin 中，手动编写循环和缓冲区管理来进行 InputStream 到 OutputStream 的拷贝不仅冗长，而且容易出错。使用标准库提供的 `copyTo` 扩展函数更具惯用性，且其内部实现了高效的缓冲区管理，能显著减少模板代码并降低出错风险。
+**Action:** 在需要流拷贝的场景下，优先选择 `inputStream.copyTo(outputStream, bufferSize)`。

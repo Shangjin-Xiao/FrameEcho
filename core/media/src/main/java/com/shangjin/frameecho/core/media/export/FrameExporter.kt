@@ -881,13 +881,7 @@ class FrameExporter(private val context: Context) {
                 os.write(jpegBytes)
 
                 if (videoFile.exists() && videoFile.length() > 0) {
-                    java.io.FileInputStream(videoFile).use { inputStream ->
-                        val buffer = ByteArray(65536)
-                        var bytesRead: Int
-                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                            os.write(buffer, 0, bytesRead)
-                        }
-                    }
+                    java.io.FileInputStream(videoFile).use { it.copyTo(os, bufferSize = 65536) }
                 }
             }
 
@@ -1012,13 +1006,7 @@ class FrameExporter(private val context: Context) {
             outputStream.use { os ->
                 os.write(jpegBytes)
                 if (videoFile.exists() && videoFile.length() > 0) {
-                    java.io.FileInputStream(videoFile).use { inputStream ->
-                        val buffer = ByteArray(65536)
-                        var bytesRead: Int
-                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                            os.write(buffer, 0, bytesRead)
-                        }
-                    }
+                    java.io.FileInputStream(videoFile).use { it.copyTo(os, bufferSize = 65536) }
                 }
             }
             return uri
