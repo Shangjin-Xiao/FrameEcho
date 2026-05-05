@@ -1163,10 +1163,10 @@ class FrameExporter(private val context: Context) {
 
     private fun sanitizeFileName(fileName: String): String {
         return fileName
-            .replace('\u0000', '_')           // Strip null bytes
-            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
-            .replace("..", "_")               // Prevent path traversal sequences
-            .trim()
+            .replace(Regex("[\\x00-\\x1F\\x7F]"), "") // Strip control characters
+            .replace(Regex("[\\\\/:*?\"<>|]"), "_")   // Replace illegal filesystem characters
+            .replace(Regex("\\.\\.+"), "_")           // Prevent path traversal sequences
+            .trim { it == '_' || it == '.' || it.isWhitespace() } // Remove leading/trailing artifacts
             .ifBlank { DEFAULT_CUSTOM_FILENAME }
     }
 
