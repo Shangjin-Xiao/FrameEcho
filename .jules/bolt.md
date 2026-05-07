@@ -13,3 +13,7 @@
 ## 2026-04-30 - Compose modifier .graphicsLayer optimization
 **Learning:** Calling `Modifier.graphicsLayer(...)` by passing state variables directly as arguments triggers a full recomposition of the composable every time the state changes.
 **Action:** Use the lambda version `Modifier.graphicsLayer { ... }` which defers reading of state variables to the drawing phase. This prevents full recompositions during high-frequency gesture events like zoom or pan, improving CPU usage and UI framerate.
+
+## 2026-05-07 - InputStream.copyTo over manual buffer loops
+**Learning:** Writing manual `while` loops with pre-allocated `ByteArray` buffers to copy data from an `InputStream` to an `OutputStream` is an anti-pattern in Kotlin. It clutters the codebase and may not leverage internal optimizations.
+**Action:** Use the Kotlin standard library extension `InputStream.copyTo(out: OutputStream, bufferSize: Int)`. It handles the buffer allocation and looping efficiently and more idiomatically. Specify a large buffer size (like 64KB) for large media files to reduce IO overhead.
