@@ -328,7 +328,9 @@ fun AboutScreen(
                             )
                         },
                         modifier = Modifier.clickable(role = Role.Button) {
-                            onboardingManager.resetOnboarding()
+                            scope.launch {
+                                onboardingManager.resetOnboarding()
+                            }
                             onNavigateBack()
                         }
                     )
