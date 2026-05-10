@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -94,6 +95,7 @@ fun PlayerScreen(
 
     // Onboarding state — version-based, only shows unseen steps
     val onboardingManager = remember { OnboardingManager(context) }
+    val scope = rememberCoroutineScope()
     val allOnboardingSteps = rememberAllOnboardingSteps()
     var unseenSteps by remember { mutableStateOf<List<com.shangjin.frameecho.app.ui.components.OnboardingStep>>(emptyList()) }
     var showOnboarding by remember { mutableStateOf(false) }
@@ -541,13 +543,17 @@ fun PlayerScreen(
                 onSkip = {
                     showOnboarding = false
                     // Mark all steps (both seen and unseen) as seen
-                    onboardingManager.markAllSeen(allOnboardingSteps.map { it.key })
-                    onboardingManager.markOnboardingCompleted()
+                    scope.launch {
+                        onboardingManager.markAllSeen(allOnboardingSteps.map { it.key })
+                        onboardingManager.markOnboardingCompleted()
+                    }
                 },
                 onFinish = {
                     showOnboarding = false
-                    onboardingManager.markAllSeen(allOnboardingSteps.map { it.key })
-                    onboardingManager.markOnboardingCompleted()
+                    scope.launch {
+                        onboardingManager.markAllSeen(allOnboardingSteps.map { it.key })
+                        onboardingManager.markOnboardingCompleted()
+                    }
                 }
             )
         }
