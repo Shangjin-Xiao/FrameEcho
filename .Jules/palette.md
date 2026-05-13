@@ -6,3 +6,6 @@
 ## 2025-02-17 - TooltipWrapper on TopAppBar Actions
 **Learning:** Wrapping `IconButton`s in the `TopAppBar` with a `TooltipWrapper` is a clean way to provide explicit text descriptions that screen readers combine into a proper group, while simultaneously giving visual users a helpful long-press hint. It serves as both an accessibility fix and a UI polish.
 **Action:** Consistently use `TooltipWrapper` for any icon-only actions placed in `TopAppBar` to ensure discoverability and accessibility.
+## $(date +%Y-%m-%d) - Jetpack Compose Structural Headings
+**Learning:** In Jetpack Compose, text elements acting as visual section headers are not automatically identified as structural headings by screen readers (like TalkBack), making navigation difficult for visually impaired users.
+**Action:** Always explicitly apply `Modifier.semantics { heading() }` to visual section headers in Jetpack Compose to enable native screen reader structural heading navigation.

@@ -441,8 +441,7 @@ private fun SettingSectionHeader(
         Text(
             text = title,
             style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.semantics { heading() }
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
