@@ -13,3 +13,6 @@
 ## 2026-04-30 - Compose modifier .graphicsLayer optimization
 **Learning:** Calling `Modifier.graphicsLayer(...)` by passing state variables directly as arguments triggers a full recomposition of the composable every time the state changes.
 **Action:** Use the lambda version `Modifier.graphicsLayer { ... }` which defers reading of state variables to the drawing phase. This prevents full recompositions during high-frequency gesture events like zoom or pan, improving CPU usage and UI framerate.
+## 2026-05-14 - Refactoring Android DataStore to use suspend functions instead of runBlocking
+**Learning:** Using `runBlocking` to access Jetpack DataStore preferences (even during initial ViewModel load) blocks the main thread, leading to UI jank and potential ANR errors. It is a critical performance anti-pattern.
+**Action:** Always map DataStore read (`data.first()`) and write (`edit {}`) operations to `suspend` functions. In the ViewModel, wrap these function calls inside `viewModelScope.launch` to safely execute them on background threads without blocking UI rendering.
