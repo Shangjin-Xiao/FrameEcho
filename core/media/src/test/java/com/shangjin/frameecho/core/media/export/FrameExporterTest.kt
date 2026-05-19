@@ -38,6 +38,50 @@ class FrameExporterTest {
     }
 
     @Test
+    fun `sanitizeFileName should handle control characters`() {
+        val context = mockk<Context>()
+        val exporter = FrameExporter(context)
+
+        val input = "file\u0000name\u001Ftest\u007F.txt"
+        val expected = "file_name_test_.txt"
+
+        assertTrue(exporter.sanitizeFileName(input) == expected)
+    }
+
+    @Test
+    fun `sanitizeFileName should handle consecutive dots`() {
+        val context = mockk<Context>()
+        val exporter = FrameExporter(context)
+
+        val input = "file...name..test.txt"
+        val expected = "file_name_test.txt"
+
+        assertTrue(exporter.sanitizeFileName(input) == expected)
+    }
+
+    @Test
+    fun `sanitizeFileName should trim bounding dots and underscores`() {
+        val context = mockk<Context>()
+        val exporter = FrameExporter(context)
+
+        val input = "_.file.name._"
+        val expected = "file.name"
+
+        assertTrue(exporter.sanitizeFileName(input) == expected)
+    }
+
+    @Test
+    fun `sanitizeFileName should handle illegal file characters`() {
+        val context = mockk<Context>()
+        val exporter = FrameExporter(context)
+
+        val input = "file/\\:*?\"<>|name"
+        val expected = "file_________name"
+
+        assertTrue(exporter.sanitizeFileName(input) == expected)
+    }
+
+    @Test
     fun `injectMotionPhotoXmp should work with valid jpeg bytes`() {
         val context = mockk<Context>()
         val exporter = FrameExporter(context)
