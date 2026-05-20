@@ -42,6 +42,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
@@ -190,7 +192,9 @@ fun ExportSettingsSheet(
                     text = stringResource(R.string.custom_folder_active),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 4.dp)
+                    modifier = Modifier
+            .padding(vertical = 4.dp)
+            .semantics(mergeDescendants = true) { heading() }
                 )
             }
             ExportLocationSelector(
@@ -426,7 +430,9 @@ private fun SettingSectionHeader(
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(vertical = 4.dp)
+        modifier = Modifier
+            .padding(vertical = 4.dp)
+            .semantics(mergeDescendants = true) { heading() }
     ) {
         CompositionLocalProvider(
             LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant
