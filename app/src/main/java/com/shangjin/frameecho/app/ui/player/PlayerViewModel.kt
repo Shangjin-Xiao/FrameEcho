@@ -123,7 +123,9 @@ class PlayerViewModel : ViewModel() {
         }
         if (preferencesStore == null) {
             preferencesStore = PlayerPreferencesStore(context.applicationContext)
-            applyPersistedQuickSettings()
+            viewModelScope.launch {
+                applyPersistedQuickSettings()
+            }
         }
     }
 
@@ -220,14 +222,18 @@ class PlayerViewModel : ViewModel() {
                 exportConfig = state.exportConfig.copy(muteAudio = muted)
             )
         }
-        persistQuickSettingsIfEnabled()
+        viewModelScope.launch {
+            persistQuickSettingsIfEnabled()
+        }
     }
 
     fun setRememberQuickSettings(enabled: Boolean) {
         _uiState.update { it.copy(rememberQuickSettings = enabled) }
-        preferencesStore?.setRememberQuickSettings(enabled)
-        if (enabled) {
-            persistQuickSettingsIfEnabled()
+        viewModelScope.launch {
+            preferencesStore?.setRememberQuickSettings(enabled)
+            if (enabled) {
+                persistQuickSettingsIfEnabled()
+            }
         }
     }
 
@@ -588,7 +594,9 @@ class PlayerViewModel : ViewModel() {
         _uiState.update { state ->
             state.copy(exportConfig = config.copy(muteAudio = state.isMuted))
         }
-        persistQuickSettingsIfEnabled()
+        viewModelScope.launch {
+            persistQuickSettingsIfEnabled()
+        }
     }
 
     fun toggleExportSettings() {
@@ -653,7 +661,7 @@ class PlayerViewModel : ViewModel() {
             isBitmapInUseByExport()
     }
 
-    private fun applyPersistedQuickSettings() {
+    private suspend fun applyPersistedQuickSettings() {
         val persisted = preferencesStore?.load() ?: return
         _uiState.update { state ->
             if (!persisted.rememberQuickSettings) {
@@ -676,7 +684,7 @@ class PlayerViewModel : ViewModel() {
         }
     }
 
-    private fun persistQuickSettingsIfEnabled() {
+    private suspend fun persistQuickSettingsIfEnabled() {
         val state = _uiState.value
         if (!state.rememberQuickSettings) return
         preferencesStore?.saveQuickSettings(
