@@ -73,4 +73,44 @@ class FrameExporterTest {
                 xmpString.contains("Item:Semantic=\"MotionPhoto\" Item:Length=\"1000\" Item:Padding=\"0\""))
         }
     }
+
+    @Test
+    fun `sanitizeFileName handles normal and malicious names correctly`() {
+        val context = mockk<Context>()
+        val exporter = FrameExporter(context)
+
+        // Normal cases
+        org.junit.Assert.assertEquals("my_video", exporter.sanitizeFileName("my_video"))
+        org.junit.Assert.assertEquals("my_video_123", exporter.sanitizeFileName("my_video_123"))
+
+        // Spaces and trimming
+        org.junit.Assert.assertEquals("video name", exporter.sanitizeFileName("  video name  "))
+        org.junit.Assert.assertEquals("video", exporter.sanitizeFileName("...___video___..."))
+
+        // Control characters
+        org.junit.Assert.assertEquals("vi_deo", exporter.sanitizeFileName("vi\u0000deo"))
+        org.junit.Assert.assertEquals("vi_deo", exporter.sanitizeFileName("vi\u000Cdeo"))
+        org.junit.Assert.assertEquals("vi_deo", exporter.sanitizeFileName("vi\u001Fdeo"))
+        org.junit.Assert.assertEquals("vi_deo", exporter.sanitizeFileName("vi\u007Fdeo"))
+
+        // Path traversal
+        org.junit.Assert.assertEquals("video", exporter.sanitizeFileName("../../../video"))
+        org.junit.Assert.assertEquals("my___video", exporter.sanitizeFileName("my_..._video"))
+
+        // Illegal characters
+        org.junit.Assert.assertEquals("my_video", exporter.sanitizeFileName("my/video"))
+        org.junit.Assert.assertEquals("my_video", exporter.sanitizeFileName("my\\video"))
+        org.junit.Assert.assertEquals("my_video", exporter.sanitizeFileName("my:video"))
+        org.junit.Assert.assertEquals("my_video", exporter.sanitizeFileName("my*video"))
+        org.junit.Assert.assertEquals("my_video", exporter.sanitizeFileName("my?video"))
+        org.junit.Assert.assertEquals("my_video", exporter.sanitizeFileName("my\"video"))
+        org.junit.Assert.assertEquals("my_video", exporter.sanitizeFileName("my<video"))
+        org.junit.Assert.assertEquals("my_video", exporter.sanitizeFileName("my>video"))
+        org.junit.Assert.assertEquals("my_video", exporter.sanitizeFileName("my|video"))
+
+        // Empty or completely sanitized input defaults to FrameEcho
+        org.junit.Assert.assertEquals("FrameEcho", exporter.sanitizeFileName("..."))
+        org.junit.Assert.assertEquals("FrameEcho", exporter.sanitizeFileName("   "))
+        org.junit.Assert.assertEquals("FrameEcho", exporter.sanitizeFileName("\u0000"))
+    }
 }
