@@ -48,17 +48,17 @@ internal class PlayerPreferencesStore(private val dataStore: DataStore<Preferenc
         }.first()
     }
 
-    fun setRememberQuickSettings(enabled: Boolean) = runBlocking {
+    suspend fun setRememberQuickSettings(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[KEY_REMEMBER_QUICK_SETTINGS] = enabled
         }
     }
 
-    fun saveQuickSettings(
+    suspend fun saveQuickSettings(
         isMuted: Boolean,
         motionPhoto: Boolean,
         preserveMetadata: Boolean
-    ) = runBlocking {
+    ) {
         dataStore.edit { prefs ->
             prefs[KEY_IS_MUTED] = isMuted
             prefs[KEY_MOTION_PHOTO] = motionPhoto

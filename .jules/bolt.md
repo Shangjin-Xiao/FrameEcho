@@ -13,3 +13,7 @@
 ## 2026-04-30 - Compose modifier .graphicsLayer optimization
 **Learning:** Calling `Modifier.graphicsLayer(...)` by passing state variables directly as arguments triggers a full recomposition of the composable every time the state changes.
 **Action:** Use the lambda version `Modifier.graphicsLayer { ... }` which defers reading of state variables to the drawing phase. This prevents full recompositions during high-frequency gesture events like zoom or pan, improving CPU usage and UI framerate.
+
+## $(date +%Y-%m-%d) - Jetpack DataStore I/O Thread Blocking
+**Learning:** Performing DataStore `edit` operations inside a `runBlocking` block on the main thread is a critical performance anti-pattern. Because DataStore writes hit the disk, this blocks the UI thread, causing jank and potentially Application Not Responding (ANR) errors.
+**Action:** Always define DataStore read (`first()`) and write (`edit {}`) functions as `suspend` functions and launch them in a background coroutine scope (e.g., `viewModelScope.launch`) to ensure the main thread is never blocked by disk I/O.
