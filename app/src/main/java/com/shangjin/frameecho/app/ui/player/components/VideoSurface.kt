@@ -88,6 +88,14 @@ fun VideoSurface(
     var tapFeedbackIsPlaying by remember { mutableStateOf<Boolean?>(null) }
     var lastTapTimeMs by remember { mutableLongStateOf(0L) }
 
+    // Memoize colors to avoid allocations during recomposition
+    val colorScheme = MaterialTheme.colorScheme
+    val scrimColor32 = remember(colorScheme.scrim) { colorScheme.scrim.copy(alpha = 0.32f) }
+    val scrimColor18 = remember(colorScheme.scrim) { colorScheme.scrim.copy(alpha = 0.18f) }
+    val inverseSurfaceColor70 = remember(colorScheme.inverseSurface) { colorScheme.inverseSurface.copy(alpha = 0.7f) }
+    val inverseSurfaceColor60 = remember(colorScheme.inverseSurface) { colorScheme.inverseSurface.copy(alpha = 0.6f) }
+    val whiteColor60 = remember { Color.White.copy(alpha = 0.6f) }
+
     LaunchedEffect(tapFeedbackIsPlaying) {
         if (tapFeedbackIsPlaying != null) {
             delay(600L)
@@ -204,7 +212,7 @@ fun VideoSurface(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)),
+                    .background(scrimColor32),
                 contentAlignment = Alignment.Center
             ) {
                 ElevatedCard(shape = RoundedCornerShape(28.dp)) {
@@ -235,19 +243,19 @@ fun VideoSurface(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.18f)),
+                    .background(scrimColor18),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(40.dp),
-                        color = MaterialTheme.colorScheme.primary,
+                        color = colorScheme.primary,
                         strokeWidth = 3.dp
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.7f)
+                        color = inverseSurfaceColor70
                     ) {
                         Text(
                             text = stringResource(R.string.video_loading),
@@ -269,7 +277,7 @@ fun VideoSurface(
         ) {
             Surface(
                 shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.6f),
+                color = inverseSurfaceColor60,
                 modifier = Modifier.size(72.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -294,7 +302,7 @@ fun VideoSurface(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.White.copy(alpha = 0.6f))
+                    .background(whiteColor60)
             )
         }
 
@@ -309,18 +317,18 @@ fun VideoSurface(
             ) {
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.7f)
+                    color = inverseSurfaceColor70
                 ) {
                     Text(
                         text = "\u00d7${"%.1f".format(videoScale)}",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.inverseOnSurface,
+                        color = colorScheme.inverseOnSurface,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.7f),
+                    color = inverseSurfaceColor70,
                     onClick = {
                         videoScale = 1f
                         videoOffsetX = 0f

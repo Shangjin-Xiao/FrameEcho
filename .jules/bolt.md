@@ -13,3 +13,7 @@
 ## 2026-04-30 - Compose modifier .graphicsLayer optimization
 **Learning:** Calling `Modifier.graphicsLayer(...)` by passing state variables directly as arguments triggers a full recomposition of the composable every time the state changes.
 **Action:** Use the lambda version `Modifier.graphicsLayer { ... }` which defers reading of state variables to the drawing phase. This prevents full recompositions during high-frequency gesture events like zoom or pan, improving CPU usage and UI framerate.
+
+## $(date +%Y-%m-%d) - Jetpack Compose Color Allocation Optimization
+**Learning:** In Jetpack Compose components that recompose frequently (such as a `VideoSurface` responding to gesture events), continuously calling inline `.copy(alpha = ...)` on `MaterialTheme.colorScheme` colors inside the Composable function body creates unnecessary, repeated color object allocations.
+**Action:** Always extract static color derivations to the top of the Composable using `remember(colorScheme.baseColor) { colorScheme.baseColor.copy(...) }`. This memoizes the allocated color object, improving performance and reducing memory pressure during UI recomposition, while still allowing the color to update correctly if the base theme color changes.
