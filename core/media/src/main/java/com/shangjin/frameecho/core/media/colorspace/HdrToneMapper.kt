@@ -20,6 +20,18 @@ import com.shangjin.frameecho.core.model.HdrToneMapStrategy
  */
 object HdrToneMapper {
 
+    private val srgbColorSpace by lazy { AndroidColorSpace.get(AndroidColorSpace.Named.SRGB) }
+    private val dciP3ColorSpace by lazy { AndroidColorSpace.get(AndroidColorSpace.Named.DCI_P3) }
+    private val displayP3ColorSpace by lazy { AndroidColorSpace.get(AndroidColorSpace.Named.DISPLAY_P3) }
+    private val bt2020ColorSpace by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            AndroidColorSpace.get(AndroidColorSpace.Named.BT2020)
+        } else {
+            // Fallback: use Display P3 as closest available
+            AndroidColorSpace.get(AndroidColorSpace.Named.DISPLAY_P3)
+        }
+    }
+
     /**
      * Process a bitmap for export, applying tone mapping if necessary.
      *
@@ -52,7 +64,7 @@ object HdrToneMapper {
     }
 
     private fun toneMapToSdr(bitmap: Bitmap, colorSpaceInfo: ColorSpaceInfo): Bitmap {
-        val targetColorSpace = AndroidColorSpace.get(AndroidColorSpace.Named.SRGB)
+        val targetColorSpace = srgbColorSpace
 
         // Create output bitmap in sRGB color space.
         // Always use ARGB_8888: this function produces SDR output and
@@ -85,17 +97,10 @@ object HdrToneMapper {
      */
     fun getAndroidColorSpace(gamut: ColorGamut): AndroidColorSpace {
         return when (gamut) {
-            ColorGamut.BT709 -> AndroidColorSpace.get(AndroidColorSpace.Named.SRGB)
-            ColorGamut.BT2020 -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    AndroidColorSpace.get(AndroidColorSpace.Named.BT2020)
-                } else {
-                    // Fallback: use Display P3 as closest available
-                    AndroidColorSpace.get(AndroidColorSpace.Named.DISPLAY_P3)
-                }
-            }
-            ColorGamut.DCI_P3 -> AndroidColorSpace.get(AndroidColorSpace.Named.DCI_P3)
-            ColorGamut.DISPLAY_P3 -> AndroidColorSpace.get(AndroidColorSpace.Named.DISPLAY_P3)
+            ColorGamut.BT709 -> srgbColorSpace
+            ColorGamut.BT2020 -> bt2020ColorSpace
+            ColorGamut.DCI_P3 -> dciP3ColorSpace
+            ColorGamut.DISPLAY_P3 -> displayP3ColorSpace
         }
     }
 }
