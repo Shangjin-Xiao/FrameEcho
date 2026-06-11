@@ -7,6 +7,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
@@ -35,7 +36,7 @@ class PlayerPreferencesStoreTest {
     }
 
     @Test
-    fun `load returns expected default values when not set`() {
+    fun `load returns expected default values when not set`() = runTest(testDispatcher) {
         val settings = store.load()
 
         assertEquals(true, settings.rememberQuickSettings)
@@ -45,7 +46,7 @@ class PlayerPreferencesStoreTest {
     }
 
     @Test
-    fun `setRememberQuickSettings persists value`() {
+    fun `setRememberQuickSettings persists value`() = runTest(testDispatcher) {
         store.setRememberQuickSettings(false)
 
         val settings = store.load()
@@ -53,7 +54,7 @@ class PlayerPreferencesStoreTest {
     }
 
     @Test
-    fun `saveQuickSettings persists all values`() {
+    fun `saveQuickSettings persists all values`() = runTest(testDispatcher) {
         store.saveQuickSettings(isMuted = true, motionPhoto = true, preserveMetadata = false)
 
         val settings = store.load()
@@ -63,7 +64,7 @@ class PlayerPreferencesStoreTest {
     }
 
     @Test
-    fun `load reflects latest saved values`() {
+    fun `load reflects latest saved values`() = runTest(testDispatcher) {
         // Save non-default values
         store.setRememberQuickSettings(false)
         store.saveQuickSettings(isMuted = true, motionPhoto = true, preserveMetadata = false)
@@ -76,7 +77,7 @@ class PlayerPreferencesStoreTest {
     }
 
     @Test
-    fun `saveQuickSettings does not affect rememberQuickSettings`() {
+    fun `saveQuickSettings does not affect rememberQuickSettings`() = runTest(testDispatcher) {
         store.setRememberQuickSettings(false)
         store.saveQuickSettings(isMuted = true, motionPhoto = true, preserveMetadata = false)
 

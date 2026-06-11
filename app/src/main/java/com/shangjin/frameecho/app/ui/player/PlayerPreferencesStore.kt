@@ -8,7 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+
 
 internal data class PersistedPlayerSettings(
     val rememberQuickSettings: Boolean,
@@ -37,8 +37,8 @@ internal class PlayerPreferencesStore(private val dataStore: DataStore<Preferenc
     /** Convenience constructor for production use. */
     constructor(context: Context) : this(context.playerPrefsDataStore)
 
-    fun load(): PersistedPlayerSettings = runBlocking {
-        dataStore.data.map { prefs ->
+    suspend fun load(): PersistedPlayerSettings {
+        return dataStore.data.map { prefs ->
             PersistedPlayerSettings(
                 rememberQuickSettings = prefs[KEY_REMEMBER_QUICK_SETTINGS] ?: DEFAULT_REMEMBER_QUICK_SETTINGS,
                 isMuted = prefs[KEY_IS_MUTED] ?: false,
@@ -48,17 +48,17 @@ internal class PlayerPreferencesStore(private val dataStore: DataStore<Preferenc
         }.first()
     }
 
-    fun setRememberQuickSettings(enabled: Boolean) = runBlocking {
+    suspend fun setRememberQuickSettings(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[KEY_REMEMBER_QUICK_SETTINGS] = enabled
         }
     }
 
-    fun saveQuickSettings(
+    suspend fun saveQuickSettings(
         isMuted: Boolean,
         motionPhoto: Boolean,
         preserveMetadata: Boolean
-    ) = runBlocking {
+    ) {
         dataStore.edit { prefs ->
             prefs[KEY_IS_MUTED] = isMuted
             prefs[KEY_MOTION_PHOTO] = motionPhoto
