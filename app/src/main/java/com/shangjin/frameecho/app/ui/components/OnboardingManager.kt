@@ -8,7 +8,6 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
 
 /** Singleton DataStore instance for onboarding state. */
 private val Context.onboardingDataStore: DataStore<Preferences>
@@ -26,41 +25,37 @@ class OnboardingManager(context: Context) {
     private val dataStore = context.onboardingDataStore
 
     /** Set of step keys that the user has already seen. */
-    private val seenStepKeys: Set<String>
-        get() = runBlocking {
-            dataStore.data.map { prefs ->
-                prefs[KEY_SEEN_STEPS] ?: emptySet()
-            }.first()
-        }
+    private suspend fun getSeenStepKeys(): Set<String> =
+        dataStore.data.map { prefs ->
+            prefs[KEY_SEEN_STEPS] ?: emptySet()
+        }.first()
 
     /**
      * Legacy check: whether the user completed the old (pre-versioned) onboarding.
      * Used for migration so existing users don't see old steps again.
      */
-    private val hasLegacyCompleted: Boolean
-        get() = runBlocking {
-            dataStore.data.map { prefs ->
-                // The old key was a boolean "onboarding_completed"
-                prefs[LEGACY_KEY_COMPLETED] ?: false
-            }.first()
-        }
+    private suspend fun hasLegacyCompleted(): Boolean =
+        dataStore.data.map { prefs ->
+            // The old key was a boolean "onboarding_completed"
+            prefs[LEGACY_KEY_COMPLETED] ?: false
+        }.first()
 
     /**
      * Returns the list of step keys that the user has NOT yet seen.
      * If the user completed the legacy onboarding, all legacy steps are
      * considered seen; only genuinely new steps are returned.
      */
-    fun getUnseenStepKeys(allStepKeys: List<String>, legacyStepKeys: Set<String>): List<String> {
-        val seen = seenStepKeys
+    suspend fun getUnseenStepKeys(allStepKeys: List<String>, legacyStepKeys: Set<String>): List<String> {
+        val seen = getSeenStepKeys()
         // If user completed legacy onboarding, treat all legacy steps as seen
-        val effectivelySeen = if (hasLegacyCompleted) seen + legacyStepKeys else seen
+        val effectivelySeen = if (hasLegacyCompleted()) seen + legacyStepKeys else seen
         return allStepKeys.filter { it !in effectivelySeen }
     }
 
     /**
      * Mark a set of step keys as seen.
      */
-    fun markStepsSeen(keys: Set<String>) = runBlocking {
+    suspend fun markStepsSeen(keys: Set<String>) {
         dataStore.edit { prefs ->
             val current = prefs[KEY_SEEN_STEPS] ?: emptySet()
             prefs[KEY_SEEN_STEPS] = current + keys
@@ -70,14 +65,14 @@ class OnboardingManager(context: Context) {
     /**
      * Convenience: mark all steps as seen (equivalent to completing onboarding).
      */
-    fun markAllSeen(allStepKeys: List<String>) {
+    suspend fun markAllSeen(allStepKeys: List<String>) {
         markStepsSeen(allStepKeys.toSet())
     }
 
     /**
      * Legacy compat: mark old boolean as completed too.
      */
-    fun markOnboardingCompleted() = runBlocking {
+    suspend fun markOnboardingCompleted() {
         dataStore.edit { prefs ->
             @Suppress("DEPRECATION")
             prefs[LEGACY_KEY_COMPLETED] = true
@@ -87,7 +82,7 @@ class OnboardingManager(context: Context) {
     /**
      * Reset all onboarding state (for "Show guide again" in About screen).
      */
-    fun resetOnboarding() = runBlocking {
+    suspend fun resetOnboarding() {
         dataStore.edit { prefs ->
             prefs[KEY_SEEN_STEPS] = emptySet()
             @Suppress("DEPRECATION")

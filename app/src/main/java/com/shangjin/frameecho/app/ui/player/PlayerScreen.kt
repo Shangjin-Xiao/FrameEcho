@@ -70,6 +70,8 @@ import com.shangjin.frameecho.app.ui.player.components.PlayerTopBar
 import com.shangjin.frameecho.app.ui.player.components.VideoSurface
 import com.shangjin.frameecho.core.model.ExportResult
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 /**
  * Main player screen with M3 design — video playback and frame capture controls.
@@ -91,6 +93,7 @@ fun PlayerScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val scope = rememberCoroutineScope()
 
     // Onboarding state — version-based, only shows unseen steps
     val onboardingManager = remember { OnboardingManager(context) }
@@ -541,13 +544,17 @@ fun PlayerScreen(
                 onSkip = {
                     showOnboarding = false
                     // Mark all steps (both seen and unseen) as seen
-                    onboardingManager.markAllSeen(allOnboardingSteps.map { it.key })
-                    onboardingManager.markOnboardingCompleted()
+                    scope.launch {
+                        onboardingManager.markAllSeen(allOnboardingSteps.map { it.key })
+                        onboardingManager.markOnboardingCompleted()
+                    }
                 },
                 onFinish = {
                     showOnboarding = false
-                    onboardingManager.markAllSeen(allOnboardingSteps.map { it.key })
-                    onboardingManager.markOnboardingCompleted()
+                    scope.launch {
+                        onboardingManager.markAllSeen(allOnboardingSteps.map { it.key })
+                        onboardingManager.markOnboardingCompleted()
+                    }
                 }
             )
         }

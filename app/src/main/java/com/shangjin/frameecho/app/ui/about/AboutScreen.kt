@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Card
@@ -53,6 +54,15 @@ import com.shangjin.frameecho.R
 import com.shangjin.frameecho.app.ui.components.OnboardingManager
 import com.shangjin.frameecho.app.ui.components.TooltipWrapper
 import kotlinx.coroutines.launch
+
+private val ModifierFillMaxWidth = Modifier.fillMaxWidth()
+private val ModifierHeight12 = Modifier.height(12.dp)
+private val ModifierHeight16 = Modifier.height(16.dp)
+private val ModifierHeight20 = Modifier.height(20.dp)
+private val ModifierSize72 = Modifier.size(72.dp)
+private val ModifierSize24 = Modifier.size(24.dp)
+private val ModifierPaddingHorizontal16 = Modifier.padding(horizontal = 16.dp)
+private val ModifierPaddingVertical4 = Modifier.padding(vertical = 4.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,18 +111,16 @@ fun AboutScreen(
         ) {
             // ── Hero ──────────────────────────────────────────────────
             item {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = ModifierHeight16)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = ModifierFillMaxWidth,
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.ic_launcher_about),
                         contentDescription = stringResource(R.string.app_name),
-                        modifier = Modifier
-                            .size(72.dp)
-                            .clip(RoundedCornerShape(16.dp))
+                        modifier = ModifierSize72.clip(RoundedCornerShape(16.dp))
                     )
                     Column {
                         Text(
@@ -131,7 +139,7 @@ fun AboutScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = ModifierHeight12)
             }
 
             // ── Description ───────────────────────────────────────────
@@ -141,13 +149,13 @@ fun AboutScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = ModifierHeight20)
             }
 
             // ── Check for Updates ─────────────────────────────────────
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = ModifierFillMaxWidth,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                     )
@@ -167,7 +175,7 @@ fun AboutScreen(
                         leadingContent = {
                             if (isCheckingUpdate) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
+                                    modifier = ModifierSize24,
                                     strokeWidth = 2.dp
                                 )
                             } else {
@@ -204,18 +212,18 @@ fun AboutScreen(
                         }
                     )
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = ModifierHeight12)
             }
 
             // ── Links ─────────────────────────────────────────────────
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = ModifierFillMaxWidth,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                     )
                 ) {
-                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                    Column(modifier = ModifierPaddingVertical4) {
                         ListItem(
                             headlineContent = { Text(stringResource(R.string.developer)) },
                             supportingContent = {
@@ -237,7 +245,7 @@ fun AboutScreen(
                             }
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        HorizontalDivider(modifier = ModifierPaddingHorizontal16)
 
                         ListItem(
                             headlineContent = { Text(stringResource(R.string.project_homepage)) },
@@ -260,7 +268,7 @@ fun AboutScreen(
                             }
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        HorizontalDivider(modifier = ModifierPaddingHorizontal16)
 
                         ListItem(
                             headlineContent = { Text(stringResource(R.string.official_website)) },
@@ -283,7 +291,7 @@ fun AboutScreen(
                             }
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        HorizontalDivider(modifier = ModifierPaddingHorizontal16)
 
                         ListItem(
                             headlineContent = { Text(stringResource(R.string.feedback)) },
@@ -307,13 +315,13 @@ fun AboutScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = ModifierHeight12)
             }
 
             // ── Show Guide Again ──────────────────────────────────────
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = ModifierFillMaxWidth,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                     )
@@ -328,30 +336,32 @@ fun AboutScreen(
                             )
                         },
                         modifier = Modifier.clickable(role = Role.Button) {
-                            onboardingManager.resetOnboarding()
+                            scope.launch {
+                                onboardingManager.resetOnboarding()
+                            }
                             onNavigateBack()
                         }
                     )
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = ModifierHeight12)
             }
 
             // ── License ───────────────────────────────────────────────
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = ModifierFillMaxWidth,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                     )
                 ) {
                     ListItem(
                         headlineContent = { Text(stringResource(R.string.license)) },
-                        supportingContent = {
-                            Text(
-                                text = stringResource(R.string.mit_license),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                textDecoration = TextDecoration.Underline
+                        supportingContent = { Text("Apache License 2.0") },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         },
                         trailingContent = {
@@ -366,7 +376,7 @@ fun AboutScreen(
                         }
                     )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = ModifierHeight16)
             }
         }
 

@@ -220,14 +220,18 @@ class PlayerViewModel : ViewModel() {
                 exportConfig = state.exportConfig.copy(muteAudio = muted)
             )
         }
-        persistQuickSettingsIfEnabled()
+        viewModelScope.launch {
+            persistQuickSettingsIfEnabled()
+        }
     }
 
     fun setRememberQuickSettings(enabled: Boolean) {
         _uiState.update { it.copy(rememberQuickSettings = enabled) }
-        preferencesStore?.setRememberQuickSettings(enabled)
-        if (enabled) {
-            persistQuickSettingsIfEnabled()
+        viewModelScope.launch {
+            preferencesStore?.setRememberQuickSettings(enabled)
+            if (enabled) {
+                persistQuickSettingsIfEnabled()
+            }
         }
     }
 
@@ -588,7 +592,9 @@ class PlayerViewModel : ViewModel() {
         _uiState.update { state ->
             state.copy(exportConfig = config.copy(muteAudio = state.isMuted))
         }
-        persistQuickSettingsIfEnabled()
+        viewModelScope.launch {
+            persistQuickSettingsIfEnabled()
+        }
     }
 
     fun toggleExportSettings() {
@@ -654,29 +660,31 @@ class PlayerViewModel : ViewModel() {
     }
 
     private fun applyPersistedQuickSettings() {
-        val persisted = preferencesStore?.load() ?: return
-        _uiState.update { state ->
-            if (!persisted.rememberQuickSettings) {
-                state.copy(
-                    isMuted = false,
-                    rememberQuickSettings = false,
-                    exportConfig = state.exportConfig.copy(muteAudio = false)
-                )
-            } else {
-                state.copy(
-                    isMuted = persisted.isMuted,
-                    rememberQuickSettings = true,
-                    exportConfig = state.exportConfig.copy(
-                        muteAudio = persisted.isMuted,
-                        motionPhoto = persisted.motionPhoto,
-                        preserveMetadata = persisted.preserveMetadata
+        viewModelScope.launch {
+            val persisted = preferencesStore?.load() ?: return@launch
+            _uiState.update { state ->
+                if (!persisted.rememberQuickSettings) {
+                    state.copy(
+                        isMuted = false,
+                        rememberQuickSettings = false,
+                        exportConfig = state.exportConfig.copy(muteAudio = false)
                     )
-                )
+                } else {
+                    state.copy(
+                        isMuted = persisted.isMuted,
+                        rememberQuickSettings = true,
+                        exportConfig = state.exportConfig.copy(
+                            muteAudio = persisted.isMuted,
+                            motionPhoto = persisted.motionPhoto,
+                            preserveMetadata = persisted.preserveMetadata
+                        )
+                    )
+                }
             }
         }
     }
 
-    private fun persistQuickSettingsIfEnabled() {
+    private suspend fun persistQuickSettingsIfEnabled() {
         val state = _uiState.value
         if (!state.rememberQuickSettings) return
         preferencesStore?.saveQuickSettings(
