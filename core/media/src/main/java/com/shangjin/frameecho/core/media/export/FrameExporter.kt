@@ -290,7 +290,8 @@ class FrameExporter(private val context: Context) {
                 beforeDurationUs = beforeDurationUs,
                 afterDurationUs = afterDurationUs,
                 muteAudio = config.muteAudio,
-                videoDurationUs = frame.metadata.durationMs * 1000L
+                videoDurationUs = frame.metadata.durationMs * 1000L,
+                rotation = frame.metadata.rotation
             )
             val videoClipFile = clipResult.file
 
@@ -407,7 +408,8 @@ class FrameExporter(private val context: Context) {
         beforeDurationUs: Long,
         afterDurationUs: Long,
         muteAudio: Boolean = false,
-        videoDurationUs: Long = -1L
+        videoDurationUs: Long = -1L,
+        rotation: Int = 0
     ): VideoClipResult {
         // Defense-in-depth: Clamp durations to prevent unbounded extraction
         val maxDurationUs = (ExportConfig.MAX_MOTION_DURATION_S * 1_000_000).toLong()
@@ -436,7 +438,8 @@ class FrameExporter(private val context: Context) {
                 startUs = startUs,
                 endUs = safeEndUs,
                 muteAudio = muteAudio,
-                seekMode = MediaExtractor.SEEK_TO_PREVIOUS_SYNC
+                seekMode = MediaExtractor.SEEK_TO_PREVIOUS_SYNC,
+                rotation = rotation
             )
         } catch (e: Exception) {
             LogUtils.w(context, "FrameExporter", "PREVIOUS_SYNC extraction failed, will retry", e)
@@ -453,7 +456,8 @@ class FrameExporter(private val context: Context) {
             startUs = startUs,
             endUs = safeEndUs,
             muteAudio = muteAudio,
-            seekMode = MediaExtractor.SEEK_TO_CLOSEST_SYNC
+            seekMode = MediaExtractor.SEEK_TO_CLOSEST_SYNC,
+            rotation = rotation
         )
     }
 
@@ -528,7 +532,8 @@ class FrameExporter(private val context: Context) {
         startUs: Long,
         endUs: Long,
         muteAudio: Boolean,
-        seekMode: Int
+        seekMode: Int,
+        rotation: Int = 0
     ): VideoClipResult {
         var tempFile = java.io.File.createTempFile("motion_clip_", ".mp4", context.cacheDir)
         var actualStartUs = startUs
@@ -596,6 +601,10 @@ class FrameExporter(private val context: Context) {
             }
             var muxerStarted = false
             try {
+                if (rotation in arrayOf(0, 90, 180, 270)) {
+                    muxer.setOrientationHint(rotation)
+                }
+
                 val muxerAudioTrack = if (audioFormat != null) {
                     try {
                         muxer.addTrack(audioFormat)
