@@ -4,7 +4,7 @@
   "private": true,
   "description": "Static website build pipeline for FrameEcho",
   "scripts": {
-    "build": "tailwindcss -i ./docs/tailwind-input.css -o ./docs/style.css --minify && node -e \"require('fs').copyFileSync('node_modules/alpinejs/dist/cdn.min.js', 'docs/alpine.js')\""
+    "build": "node build.js"
   },
   "dependencies": {
     "@tailwindcss/cli": "^4.3.1",
