@@ -58,6 +58,4 @@ Thumbs.db
 .kotlin/
 
 # Static Web Build Artifacts
-docs/style.css
-docs/alpine.js
 node_modules/
