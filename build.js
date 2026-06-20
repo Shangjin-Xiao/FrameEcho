@@ -3,6 +3,13 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 try {
+  const nodeModulesExist = fs.existsSync(path.resolve(__dirname, 'node_modules'));
+  
+  if (!nodeModulesExist) {
+    console.log('node_modules not found. Skipping compilation since style.css and alpine.js are already pre-compiled in Git!');
+    process.exit(0);
+  }
+
   console.log('Compiling Tailwind CSS...');
   const tailwindBin = path.resolve(__dirname, 'node_modules', '.bin', 'tailwindcss');
   
