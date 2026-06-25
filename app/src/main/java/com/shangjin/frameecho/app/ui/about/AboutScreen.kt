@@ -392,8 +392,10 @@ fun AboutScreen(
                     showUpdateDialog = false
                 },
                 onIgnorePermanently = {
-                    updatePreferences.ignoreVersionPermanently(latestRelease!!.tagName)
-                    showUpdateDialog = false
+                    scope.launch {
+                        updatePreferences.ignoreVersionPermanently(latestRelease!!.tagName)
+                        showUpdateDialog = false
+                    }
                 }
             )
         }
