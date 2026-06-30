@@ -8,7 +8,6 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
 
 /** Singleton DataStore instance for update preferences. */
 private val Context.updateDataStore: DataStore<Preferences>
@@ -27,17 +26,15 @@ class UpdatePreferences(context: Context) {
     /**
      * Returns the set of permanently ignored version tags.
      */
-    val permanentlyIgnoredVersions: Set<String>
-        get() = runBlocking {
-            dataStore.data.map { prefs ->
-                prefs[KEY_IGNORED_VERSIONS] ?: emptySet()
-            }.first()
-        }
+    suspend fun getPermanentlyIgnoredVersions(): Set<String> =
+        dataStore.data.map { prefs ->
+            prefs[KEY_IGNORED_VERSIONS] ?: emptySet()
+        }.first()
 
     /**
      * Adds a version tag to the permanently ignored set.
      */
-    fun ignoreVersionPermanently(versionTag: String) = runBlocking {
+    suspend fun ignoreVersionPermanently(versionTag: String) {
         dataStore.edit { prefs ->
             val current = prefs[KEY_IGNORED_VERSIONS] ?: emptySet()
             prefs[KEY_IGNORED_VERSIONS] = current + versionTag
@@ -47,8 +44,8 @@ class UpdatePreferences(context: Context) {
     /**
      * Checks whether a version tag has been permanently ignored.
      */
-    fun isVersionPermanentlyIgnored(versionTag: String): Boolean =
-        versionTag in permanentlyIgnoredVersions
+    suspend fun isVersionPermanentlyIgnored(versionTag: String): Boolean =
+        versionTag in getPermanentlyIgnoredVersions()
 
     private companion object {
         val KEY_IGNORED_VERSIONS = stringSetPreferencesKey("ignored_versions")
