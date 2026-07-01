@@ -13,6 +13,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -117,12 +119,11 @@ fun OnboardingOverlay(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) {
-                // Tapping the overlay advances to next step
-                if (isLastStep) onFinish() else onNextStep()
+            .pointerInput(Unit) {
+                detectTapGestures {
+                    // Tapping the overlay advances to next step
+                    if (isLastStep) onFinish() else onNextStep()
+                }
             }
     ) {
         // Skip button — top-right
@@ -218,10 +219,9 @@ private fun TooltipBubble(
                     elevation = 8.dp,
                     shape = RoundedCornerShape(20.dp)
                 )
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) { /* consume click — don't pass through to overlay */ },
+                .pointerInput(Unit) {
+                    detectTapGestures { /* consume click — don't pass through to overlay */ }
+                },
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 4.dp
