@@ -7,9 +7,9 @@
 # FrameEcho
 
 **定格你所爱的每一帧**
-Android 高性能视频抽帧应用
+Android 视频抽帧应用
 
-从任意视频中精确截取完美画面，支持 HDR、动态照片与完整 EXIF 保留。通过快捷按钮和底部设置面板可调整格式、质量、导出目录、文件名、静音、HDR 色调映射等。
+从任意视频中精确截取画面，支持 HDR、动态照片与完整 EXIF 保留。通过快捷按钮和底部设置面板可调整格式、质量、导出目录、文件名、静音、HDR 色调映射等。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-26%20(Android%208.0)-green.svg)](https://developer.android.com/about/versions/oreo)
@@ -25,7 +25,7 @@ Android 高性能视频抽帧应用
 
 ## ✨ 功能特性
 
-- **微秒级精准抽帧** — 始终使用 `MediaMetadataRetriever.OPTION_CLOSEST` 精确定位帧，绝不回退至关键帧搜索
+- **帧级精准定位** — 始终使用 `MediaMetadataRetriever.OPTION_CLOSEST` 精确定位帧，不回退至关键帧搜索
 - **静态图 & 动态照片导出** — 支持 JPEG、PNG、WebP、HEIF、AVIF；动态照片遵循 [Google MicroVideo 规范](https://developer.android.com/media/camera/motion-photo-specification)（XMP + 附加 MP4）
 - **音频静音选项** — 导出动态照片时可选择不包含音频
 - **HDR & 杜比视界感知** — 通过 `MediaExtractor` 检测 HDR10、HDR10+、HLG 和杜比视界；为 SDR 格式进行色调映射，为 HEIF/AVIF 保留 HDR 数据
@@ -35,7 +35,7 @@ Android 高性能视频抽帧应用
 - **无损元数据保存** — 从源视频读取完整 EXIF（拍摄日期、GPS、设备信息、ISO、曝光、焦距），通过 `androidx.exifinterface` 写入导出图片
 - **品质优先默认值** — 默认 100% 质量、原始分辨率；用户可自行调整
 - **质量与分辨率控制** — 100% 默认，可设置最大像素限制；输入值有边界检查
-- **4K 视频 OOM 安全** — 显式 `recycle()` + 缩略图缓存，所有重操作运行在 `Dispatchers.IO`
+- **4K 视频低内存占用** — 显式 `recycle()` + 缩略图缓存，优化大内存消耗操作以防止 OOM，所有重操作运行在 `Dispatchers.IO`
 - **懒加载缩略图时间线** — 基于 `LazyRow` 的时间线条，按需加载 120px 缩略图，带实时进度指示器
 - **Material 3 界面** — 动态取色（Android 12+）、自定义播放控件（±5 秒快进/后退、实时拖动预览）、`ModalBottomSheet` 导出设置
 - **Scoped Storage & SAF** — 严格使用 `MediaStore` API，支持保存到共享相册、DCIM、Movies 或自定义路径
@@ -127,9 +127,9 @@ FrameEcho/
 
 **Freeze Every Frame You Love**
 
-High-performance video frame capture for Android
+Video frame capture for Android
 
-Extract perfect screenshots from any video with HDR awareness, motion photo export, and full EXIF preservation. Quick‑access toggles and a settings sheet let you choose format, quality, export folder, filename template, mute audio and HDR tone‑mapping.
+Extract precise frames from any video with HDR awareness, motion photo export, and full EXIF preservation. Quick‑access toggles and a settings sheet let you choose format, quality, export folder, filename template, mute audio and HDR tone‑mapping.
 
 [Website](https://frameecho.shangjinyun.cn)　·　[Releases](https://github.com/Shangjin-Xiao/FrameEcho/releases)
 
@@ -137,7 +137,7 @@ Extract perfect screenshots from any video with HDR awareness, motion photo expo
 
 ## ✨ Features
 
-- **Microsecond-Precise Frame Capture** — Always uses `MediaMetadataRetriever.OPTION_CLOSEST`; never falls back to keyframe seeking
+- **Frame-Accurate Seeking & Capture** — Always uses `MediaMetadataRetriever.OPTION_CLOSEST`; never falls back to keyframe seeking
 - **Static & Motion Photo Export** — JPEG, PNG, WebP, HEIF, AVIF; motion photo follows [Google MicroVideo spec](https://developer.android.com/media/camera/motion-photo-specification)
 - **Mute Audio Option** — omit audio when exporting motion photos
 - **HDR & Dolby Vision Aware** — Detects HDR10, HDR10+, HLG, Dolby Vision; tone-maps to sRGB for SDR, preserves HDR for HEIF/AVIF
@@ -146,7 +146,7 @@ Extract perfect screenshots from any video with HDR awareness, motion photo expo
 - **Custom File Names & Export Locations** — presets, manual input with length validation, root folders or SAF-picked custom directory
 - **Lossless Metadata Preservation** — full EXIF from source video written to exported image
 - **Quality & Resolution Controls** — 100% default, adjustable quality and optional max resolution with bounds checks
-- **OOM‑Safe with 4K Sources** — explicit `recycle()`, thumbnail caching, all heavy work on `Dispatchers.IO`
+- **Memory-Optimized for 4K Videos** — explicit `recycle()`, thumbnail caching, heavy work runs on `Dispatchers.IO` to prevent memory issues
 - **Lazy Thumbnail Timeline** — `LazyRow`‑based strip with on-demand 120px thumbnails and live position indicator
 - **Material 3 UI** — Dynamic Color (Android 12+), custom playback controls, `ModalBottomSheet` export settings
 - **Scoped Storage & SAF** — strict `MediaStore` API; gallery refreshes immediately after export
