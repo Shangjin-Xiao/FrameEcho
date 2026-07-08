@@ -27,9 +27,13 @@ class UpdatePreferences(context: Context) {
      * Returns the set of permanently ignored version tags.
      */
     suspend fun getPermanentlyIgnoredVersions(): Set<String> =
-        dataStore.data.map { prefs ->
-            prefs[KEY_IGNORED_VERSIONS] ?: emptySet()
-        }.first()
+        try {
+            dataStore.data.map { prefs ->
+                prefs[KEY_IGNORED_VERSIONS] ?: emptySet()
+            }.first()
+        } catch (e: java.io.IOException) {
+            emptySet()
+        }
 
     /**
      * Adds a version tag to the permanently ignored set.

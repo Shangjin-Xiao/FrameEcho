@@ -83,6 +83,7 @@ fun AboutScreen(
 
     // Snackbar messages (read here to stay in @Composable context)
     val msgAlreadyLatest = stringResource(R.string.update_already_latest)
+    val msgIgnoredVersionTemplate = stringResource(R.string.update_ignored_version)
     val msgCheckFailed = stringResource(R.string.update_check_failed)
 
     Scaffold(
@@ -205,7 +206,9 @@ fun AboutScreen(
                                         latestRelease = release
                                         showUpdateDialog = true
                                     } else {
-                                        snackbarHostState.showSnackbar(msgAlreadyLatest)
+                                        snackbarHostState.showSnackbar(
+                                            msgIgnoredVersionTemplate.format(release.versionName)
+                                        )
                                     }
                                 } else if (release != null) {
                                     snackbarHostState.showSnackbar(msgAlreadyLatest)
@@ -396,9 +399,9 @@ fun AboutScreen(
                     showUpdateDialog = false
                 },
                 onIgnorePermanently = {
+                    showUpdateDialog = false
                     scope.launch {
                         updatePreferences.ignoreVersionPermanently(latestRelease!!.tagName)
-                        showUpdateDialog = false
                     }
                 }
             )
