@@ -430,7 +430,7 @@ private fun SettingSectionHeader(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .padding(vertical = 4.dp)
-            .semantics { heading() }
+            .semantics(mergeDescendants = true) { heading() }
     ) {
         CompositionLocalProvider(
             LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant

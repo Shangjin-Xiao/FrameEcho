@@ -13,6 +13,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,12 +52,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import com.shangjin.frameecho.app.ui.components.TooltipWrapper
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -113,16 +116,19 @@ fun OnboardingOverlay(
     val totalSteps = steps.size
     val isLastStep = currentStep == totalSteps - 1
 
+    val currentIsLastStep by rememberUpdatedState(isLastStep)
+    val currentOnFinish by rememberUpdatedState(onFinish)
+    val currentOnNextStep by rememberUpdatedState(onNextStep)
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) {
-                // Tapping the overlay advances to next step
-                if (isLastStep) onFinish() else onNextStep()
+            .pointerInput(Unit) {
+                detectTapGestures {
+                    // Tapping the overlay advances to next step
+                    if (currentIsLastStep) currentOnFinish() else currentOnNextStep()
+                }
             }
     ) {
         // Skip button — top-right
@@ -218,10 +224,9 @@ private fun TooltipBubble(
                     elevation = 8.dp,
                     shape = RoundedCornerShape(20.dp)
                 )
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) { /* consume click — don't pass through to overlay */ },
+                .pointerInput(Unit) {
+                    detectTapGestures { /* consume click — don't pass through to overlay */ }
+                },
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 4.dp
