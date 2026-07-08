@@ -201,8 +201,12 @@ fun AboutScreen(
                                         release.versionName
                                     )
                                 ) {
-                                    latestRelease = release
-                                    showUpdateDialog = true
+                                    if (!updatePreferences.isVersionPermanentlyIgnored(release.tagName)) {
+                                        latestRelease = release
+                                        showUpdateDialog = true
+                                    } else {
+                                        snackbarHostState.showSnackbar(msgAlreadyLatest)
+                                    }
                                 } else if (release != null) {
                                     snackbarHostState.showSnackbar(msgAlreadyLatest)
                                 } else {
