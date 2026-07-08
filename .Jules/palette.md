@@ -10,3 +10,6 @@
 ## 2026-05-06 - Semantic Headings in Settings Sheets
 **Learning:** Visual section headers in complex forms or bottom sheets (like Export Settings) are often just styled `Row` or `Text` components. Without explicit semantic tagging, screen readers treat them as normal text, preventing users from quickly jumping between logical sections using heading navigation.
 **Action:** Always append `Modifier.semantics { heading() }` to the container or text component of any visual section header to enable native screen reader heading navigation.
+## 2026-06-25 - Pointer Input Stale Closure Bug
+**Learning:** When using `Modifier.pointerInput(Unit)` in Jetpack Compose to detect gestures (like tap) as an alternative to `Modifier.clickable` (which adds unwanted `Role.Button` semantics to overlays), the coroutine capturing the trailing lambda does not restart on state changes. This causes stale closure bugs if raw external state like `isLastStep` or callbacks are captured directly.
+**Action:** Always wrap changing states and callbacks with `rememberUpdatedState` before using them inside a `pointerInput(Unit)` block to ensure the gesture detector references the latest values.
