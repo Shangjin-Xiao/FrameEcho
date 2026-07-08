@@ -137,5 +137,6 @@
     <string name="update_ignore_this_time">今はしない</string>
     <string name="update_ignore_permanently">このバージョンを無視</string>
     <string name="update_already_latest">最新バージョンを使用中です</string>
+    <string name="update_ignored_version">新しいバージョン %1$s は永久に無視されています</string>
     <string name="update_check_failed">アップデートの確認に失敗しました。ネットワーク接続を確認してください。</string>
 </resources>

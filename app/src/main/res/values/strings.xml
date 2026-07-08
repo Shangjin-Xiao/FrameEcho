@@ -137,5 +137,6 @@
     <string name="update_ignore_this_time">Not Now</string>
     <string name="update_ignore_permanently">Ignore This Version</string>
     <string name="update_already_latest">You are already on the latest version</string>
+    <string name="update_ignored_version">New update version %1$s is permanently ignored</string>
     <string name="update_check_failed">Failed to check for updates. Please check your network.</string>
 </resources>
