@@ -37,6 +37,7 @@
     <string name="prev_frame">前のフレーム</string>
     <string name="custom_file_name">カスタムファイル名</string>
     <string name="custom_file_name_hint">ファイル名（拡張子なし）</string>
+    <string name="clear_text">テキストをクリア</string>
     <string name="default_export_location">デフォルトのエクスポート先</string>
     <string name="location_pictures">Pictures/FrameEcho</string>
     <string name="location_dcim">DCIM/FrameEcho</string>
