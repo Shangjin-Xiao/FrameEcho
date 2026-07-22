@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.HighQuality
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.outlined.MotionPhotosOn
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,6 +27,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
@@ -52,6 +54,7 @@ import com.shangjin.frameecho.core.model.ExportConfig
 import com.shangjin.frameecho.core.model.ExportDirectory
 import com.shangjin.frameecho.core.model.ExportFormat
 import com.shangjin.frameecho.core.model.HdrToneMapStrategy
+import com.shangjin.frameecho.app.ui.components.TooltipWrapper
 
 /**
  * M3 Modal Bottom Sheet for export settings.
@@ -170,6 +173,18 @@ fun ExportSettingsSheet(
                 singleLine = true,
                 label = { Text(stringResource(R.string.custom_file_name_hint)) },
                 placeholder = { Text(stringResource(R.string.default_name_example)) },
+                trailingIcon = {
+                    if (!config.customFileName.isNullOrEmpty()) {
+                        TooltipWrapper(label = stringResource(R.string.clear_text)) {
+                            IconButton(onClick = { onConfigChange(config.copy(customFileName = "")) }) {
+                                Icon(
+                                    Icons.Default.Clear,
+                                    contentDescription = stringResource(R.string.clear_text)
+                                )
+                            }
+                        }
+                    }
+                },
                 supportingText = {
                     Text(
                         text = stringResource(R.string.char_count_format, config.customFileName?.length ?: 0, 80),

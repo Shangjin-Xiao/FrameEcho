@@ -37,6 +37,7 @@
     <string name="prev_frame">上一帧</string>
     <string name="custom_file_name">自定义文件名</string>
     <string name="custom_file_name_hint">文件名（不含扩展名）</string>
+    <string name="clear_text">清除文本</string>
     <string name="default_export_location">默认导出位置</string>
     <string name="location_pictures">图片/FrameEcho</string>
     <string name="location_dcim">DCIM/FrameEcho</string>

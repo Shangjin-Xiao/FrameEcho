@@ -37,6 +37,7 @@
     <string name="prev_frame">Previous Frame</string>
     <string name="custom_file_name">Custom File Name</string>
     <string name="custom_file_name_hint">File name (without extension)</string>
+    <string name="clear_text">Clear text</string>
     <string name="default_export_location">Default Export Location</string>
     <string name="location_pictures">Pictures/FrameEcho</string>
     <string name="location_dcim">DCIM/FrameEcho</string>
