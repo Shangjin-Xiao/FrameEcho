@@ -1,0 +1,131 @@
+app/src/main/java/com/shangjin/frameecho/app/ui/player/PlayerScreen.kt
+  s_90cb7fbc0ecb8a::t_8643ecc467e339 357,362
+  s_90cb7fbc0ecb8a::t_8cfbb15f22fe50 530
+app/build.gradle.kts
+  s_90cb7fbc0ecb8a::t_d55a99f97c2fb4 11,17
+  s_6df0097bdf319f::t_75a1cc586ea984 43,46-51
+.github/workflows/ci.yml
+  s_90cb7fbc0ecb8a::t_2ebe8b3f58e242 62
+  s_90cb7fbc0ecb8a::t_089c3f992c40c8 5-6
+.gitignore
+  s_90cb7fbc0ecb8a::t_99d4d8a2a54e03 62
+app/src/main/java/com/shangjin/frameecho/app/ui/player/PlayerViewModel.kt
+  s_90cb7fbc0ecb8a::t_ea48ef48e07e20 31
+  s_90cb7fbc0ecb8a::t_ccd582e1ed9555 415-422
+  s_90cb7fbc0ecb8a::t_d4b049c65c3408 14-15,125,213-215,515,526-546,550,552-554,556-558,572-577
+README.md
+  s_90cb7fbc0ecb8a::t_e41c7f578e5117 131,179
+  s_90cb7fbc0ecb8a::t_9c0542a9a6a472 12,93
+  s_90cb7fbc0ecb8a::t_1a18dc512f08a3 29,31,140,142
+  s_90cb7fbc0ecb8a::t_e4ebcabc7a733c 18
+app/src/main/res/values/strings.xml
+  s_90cb7fbc0ecb8a::t_5c5b5d74bf8856 106
+  s_90cb7fbc0ecb8a::t_bfd8189c467a18 77
+core/media/src/main/java/com/shangjin/frameecho/core/media/colorspace/HdrToneMapper.kt
+  s_90cb7fbc0ecb8a::t_0400cd1da585db 23-25,32
+app/src/main/res/values-ja/strings.xml
+  s_90cb7fbc0ecb8a::t_bfd8189c467a18 77
+  s_90cb7fbc0ecb8a::t_5c5b5d74bf8856 106
+core/media/src/main/java/com/shangjin/frameecho/core/media/export/FrameExporter.kt
+  s_90cb7fbc0ecb8a::t_5d53528d122f1f 450
+  s_90cb7fbc0ecb8a::t_cfbc1a3ff42c76 866-871
+  s_90cb7fbc0ecb8a::t_ca74a4bc136be6 904-909
+  s_90cb7fbc0ecb8a::t_c1d182086962c4 41
+  s_90cb7fbc0ecb8a::t_40d883ed622f11 100,105,108,110,114,117
+  s_90cb7fbc0ecb8a::t_e77552a47f9046 78
+  s_90cb7fbc0ecb8a::t_c95e5e30e1e35a 86
+  s_90cb7fbc0ecb8a::t_de4177704fb6ed 96,101,103,118
+  s_90cb7fbc0ecb8a::t_2ea7f7d6e00f02 174
+  s_90cb7fbc0ecb8a::t_2209eb2d81d4d6 238,243,246,249
+  s_90cb7fbc0ecb8a::t_84078c3de60de3 162
+  s_90cb7fbc0ecb8a::t_19231ec1ededf9 323
+  s_90cb7fbc0ecb8a::t_44c2c2c04a8217 122,124,258,260,362-363
+  s_4bfad3a6dca910::t_36b9ff6e2f7486 29,31-32,120,123,190,193,252,259,552,554-556,595-597,954-955,961,964,975,982,985,1029,1077-1089
+.claude/skills/quality-gate/SKILL.md
+  s_90cb7fbc0ecb8a::t_668e18296dec79 1-11,13-15,17-47
+  s_90cb7fbc0ecb8a::t_0cade3fc7c6e41 12,16
+core/media/src/main/java/com/shangjin/frameecho/core/media/extraction/FrameExtractor.kt
+  s_90cb7fbc0ecb8a::t_addd2528efaab7 215-219
+app/src/main/java/com/shangjin/frameecho/app/ui/export/ExportSettingsSheet.kt
+  s_90cb7fbc0ecb8a::t_ee94f1db174299 68
+app/src/main/res/values-zh-rCN/strings.xml
+  s_90cb7fbc0ecb8a::t_bfd8189c467a18 77
+  s_90cb7fbc0ecb8a::t_5c5b5d74bf8856 106
+fastlane/metadata/android/en-US/full_description.txt
+  s_90cb7fbc0ecb8a::t_1a18dc512f08a3 15
+core/model/src/main/java/com/shangjin/frameecho/core/model/ExportResult.kt
+  s_90cb7fbc0ecb8a::t_dd3e3fd1763d77 19
+docs/MVP_HANDOFF.md
+  s_90cb7fbc0ecb8a::t_dd858a79c30d29 60
+  s_90cb7fbc0ecb8a::t_7418705fcdcdf7 45-47
+  s_90cb7fbc0ecb8a::t_8c2ede57cc53dd 1-19,21-23,27,30-32,36,41,44,48-49,64,68,71,76
+  s_90cb7fbc0ecb8a::t_7d59261190709b 20
+  s_90cb7fbc0ecb8a::t_f430b722872e47 24-26
+  s_90cb7fbc0ecb8a::t_c7d5f2a1f98c1f 28-29
+  s_90cb7fbc0ecb8a::t_f6dfe654ecabb6 33-35
+  s_90cb7fbc0ecb8a::t_4916650ba19b06 37-40
+  s_90cb7fbc0ecb8a::t_9930c4e6ee125d 42-43
+  s_90cb7fbc0ecb8a::t_56df364c695adf 50-52,57-59
+  s_90cb7fbc0ecb8a::t_f6f3fb7ed39495 61-63
+  s_90cb7fbc0ecb8a::t_cfad7c877f69a8 65-67
+  s_90cb7fbc0ecb8a::t_44756cb7868580 69-70
+  s_90cb7fbc0ecb8a::t_893060f7ac7db5 72-75
+  s_90cb7fbc0ecb8a::t_d858a18e69d531 77-79
+  s_90cb7fbc0ecb8a::t_ea3b998329c972 53-56,80
+.github/workflows/release.yml
+  s_90cb7fbc0ecb8a::t_9cf204b59d14e0 44
+  s_90cb7fbc0ecb8a::t_21fd2d6e750f46 55
+  s_6df0097bdf319f::t_526b32eddc43a0 17,50-54,60-70
+fastlane/metadata/android/zh-CN/full_description.txt
+  s_90cb7fbc0ecb8a::t_1a18dc512f08a3 15
+.jules/palette.md
+  s_6df0097bdf319f::t_29d93418a2e2d9 1-12,16-19
+app/proguard-rules.pro
+  s_6df0097bdf319f::t_00b80338839def 55
+app/src/test/java/com/shangjin/frameecho/app/ui/player/PlayerPreferencesStoreTest.kt
+  s_6df0097bdf319f::t_cfbfd60cba36c4 57-67,73-77
+core/media/src/test/java/com/shangjin/frameecho/core/media/export/FrameExporterTest.kt
+  s_b129eaa3941be4::t_2a2586e7b85d30 76-87
+app/src/main/java/com/shangjin/frameecho/app/ui/player/PlayerPreferencesStore.kt
+  s_90cb7fbc0ecb8a::t_d91ba0f55eb4c4 8-9,15-23,52-57,71-76,82-86,95-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ccbd156635432dc82826371f7ac3fdd1f1191c6a",
+  "prompts": {},
+  "sessions": {
+    "s_4bfad3a6dca910": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cc365afe-b8d4-4c7e-8320-bbba67fdd1d2",
+        "model": "claude-fable-5"
+      },
+      "human_author": "上晋 <84136399+Shangjin-Xiao@users.noreply.github.com>"
+    },
+    "s_6df0097bdf319f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "94ffd46d-8d12-43a7-96c7-68fe1875870a",
+        "model": "claude-fable-5"
+      },
+      "human_author": "上晋 <84136399+Shangjin-Xiao@users.noreply.github.com>"
+    },
+    "s_90cb7fbc0ecb8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dfee0f0b-81f9-4efd-9488-04962d56ec5d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "上晋 <84136399+Shangjin-Xiao@users.noreply.github.com>"
+    },
+    "s_b129eaa3941be4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "316ee69a-8159-44a8-a608-cc3739eaf22e",
+        "model": "claude-fable-5"
+      },
+      "human_author": "上晋 <84136399+Shangjin-Xiao@users.noreply.github.com>"
+    }
+  }
+}
