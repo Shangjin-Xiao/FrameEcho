@@ -21,8 +21,6 @@ data class ExportConfig(
     val motionDurationAfterS: Float = 1.5f,
     /** Whether to mute audio in the exported motion photo */
     val muteAudio: Boolean = false,
-    /** HDR tone-mapping strategy for SDR export */
-    val hdrToneMap: HdrToneMapStrategy = HdrToneMapStrategy.AUTO,
     /** Optional output resolution override. Null = original resolution. */
     val maxResolution: Int? = null,
     /** Optional custom base filename (without extension). Null/blank = default naming. */
@@ -56,18 +54,4 @@ enum class ExportDirectory(val relativePath: String) {
     PICTURES("Pictures"),
     DCIM("DCIM"),
     MOVIES("Movies")
-}
-
-/**
- * Strategy for tone-mapping HDR content when exporting to SDR formats.
- */
-enum class HdrToneMapStrategy {
-    /** Automatically choose based on source and target format */
-    AUTO,
-    /** Force tone-map to SDR */
-    FORCE_SDR,
-    /** Preserve HDR data if the target format supports it */
-    PRESERVE_HDR,
-    /** Let the system/GPU handle tone-mapping */
-    SYSTEM
 }

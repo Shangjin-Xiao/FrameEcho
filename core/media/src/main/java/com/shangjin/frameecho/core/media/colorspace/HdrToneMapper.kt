@@ -4,13 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.ColorSpace as AndroidColorSpace
 import android.graphics.Paint
-import android.os.Build
 import androidx.core.graphics.createBitmap
-import com.shangjin.frameecho.core.model.ColorGamut
 import com.shangjin.frameecho.core.model.ColorSpaceInfo
-import com.shangjin.frameecho.core.model.ColorSpaceType
-import com.shangjin.frameecho.core.model.ExportFormat
-import com.shangjin.frameecho.core.model.HdrToneMapStrategy
 
 /**
  * Handles HDR-to-SDR tone mapping and color space conversions.
@@ -21,44 +16,23 @@ import com.shangjin.frameecho.core.model.HdrToneMapStrategy
 object HdrToneMapper {
 
     private val srgbColorSpace by lazy { AndroidColorSpace.get(AndroidColorSpace.Named.SRGB) }
-    private val dciP3ColorSpace by lazy { AndroidColorSpace.get(AndroidColorSpace.Named.DCI_P3) }
-    private val displayP3ColorSpace by lazy { AndroidColorSpace.get(AndroidColorSpace.Named.DISPLAY_P3) }
-    private val bt2020ColorSpace by lazy {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            AndroidColorSpace.get(AndroidColorSpace.Named.BT2020)
-        } else {
-            // Fallback: use Display P3 as closest available
-            AndroidColorSpace.get(AndroidColorSpace.Named.DISPLAY_P3)
-        }
-    }
 
     /**
      * Process a bitmap for export, applying tone mapping if necessary.
      *
+     * All supported export formats (JPEG/PNG/WebP) are SDR, so HDR sources
+     * are always tone-mapped; SDR sources pass through untouched.
+     *
      * @param bitmap Source bitmap (may be HDR)
      * @param colorSpaceInfo Source color space information
-     * @param targetFormat Target export format
-     * @param strategy Tone mapping strategy
      * @return Processed bitmap ready for export
      */
     fun process(
         bitmap: Bitmap,
-        colorSpaceInfo: ColorSpaceInfo,
-        targetFormat: ExportFormat,
-        strategy: HdrToneMapStrategy
+        colorSpaceInfo: ColorSpaceInfo
     ): Bitmap {
         // If source is SDR, no processing needed
         if (!colorSpaceInfo.isHdr) return bitmap
-
-        val shouldToneMap = when (strategy) {
-            HdrToneMapStrategy.AUTO -> !targetFormat.supportsHdr
-            HdrToneMapStrategy.FORCE_SDR -> true
-            // Preserve HDR only when the target actually supports it.
-            HdrToneMapStrategy.PRESERVE_HDR -> !targetFormat.supportsHdr
-            HdrToneMapStrategy.SYSTEM -> !targetFormat.supportsHdr
-        }
-
-        if (!shouldToneMap) return bitmap
 
         return toneMapToSdr(bitmap, colorSpaceInfo)
     }
@@ -90,17 +64,5 @@ object HdrToneMapper {
         canvas.drawBitmap(bitmap, 0f, 0f, paint)
 
         return output
-    }
-
-    /**
-     * Get the appropriate Android ColorSpace for the given color gamut.
-     */
-    fun getAndroidColorSpace(gamut: ColorGamut): AndroidColorSpace {
-        return when (gamut) {
-            ColorGamut.BT709 -> srgbColorSpace
-            ColorGamut.BT2020 -> bt2020ColorSpace
-            ColorGamut.DCI_P3 -> dciP3ColorSpace
-            ColorGamut.DISPLAY_P3 -> displayP3ColorSpace
-        }
     }
 }

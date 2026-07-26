@@ -16,8 +16,6 @@ import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 import androidx.documentfile.provider.DocumentFile
 import androidx.core.graphics.scale
-import androidx.heifwriter.AvifWriter
-import androidx.heifwriter.HeifWriter
 import com.shangjin.frameecho.core.media.colorspace.HdrToneMapper
 import com.shangjin.frameecho.core.media.metadata.MetadataWriter
 import com.shangjin.frameecho.core.media.utils.LogUtils
@@ -28,7 +26,10 @@ import com.shangjin.frameecho.core.model.ExportDirectory
 import com.shangjin.frameecho.core.model.ExportFormat
 import com.shangjin.frameecho.core.model.ExportResult
 import com.shangjin.frameecho.core.model.VideoMetadata
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
@@ -37,7 +38,7 @@ import java.nio.ByteBuffer
  * Exports captured frames as images with full metadata and color space handling.
  *
  * Supports:
- * - Static image export (JPEG, PNG, WebP, HEIF, AVIF)
+ * - Static image export (JPEG, PNG, WebP)
  * - Motion photo export (Google Motion Photo format)
  * - HDR tone mapping for SDR formats
  * - Full EXIF metadata preservation
@@ -48,85 +49,6 @@ class FrameExporter(private val context: Context) {
     companion object {
         private const val XMP_NAMESPACE_URI = "http://ns.adobe.com/xap/1.0/\u0000"
         private const val DEFAULT_CUSTOM_FILENAME = "FrameEcho"
-    }
-
-    /**
-     * Resolve the effective export config by probing the same encoder stack used for export.
-     *
-     * HEIF/AVIF support is device-, codec-, and size-dependent. Mirroring HeifWriter/
-     * AvifWriter initialization avoids false "unsupported" results when MIME-based checks
-     * disagree with the actual encoder selection logic in androidx.heifwriter.
-     */
-    private fun resolveEffectiveConfig(config: ExportConfig, width: Int, height: Int): ExportConfig {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-            return when (config.format) {
-                ExportFormat.HEIF, ExportFormat.AVIF -> config.copy(format = ExportFormat.JPEG)
-                else -> config
-            }
-        }
-
-        val isSupported = when (config.format) {
-            ExportFormat.HEIF, ExportFormat.AVIF -> canInitializeNextGenWriter(
-                format = config.format,
-                width = width,
-                height = height,
-                quality = config.quality
-            )
-            else -> true
-        }
-
-        return if (isSupported) config else config.copy(format = ExportFormat.JPEG)
-    }
-
-    @RequiresApi(Build.VERSION_CODES.P)
-    @SuppressLint("RestrictedApi")
-    private fun canInitializeNextGenWriter(
-        format: ExportFormat,
-        width: Int,
-        height: Int,
-        quality: Int
-    ): Boolean {
-        val suffix = when (format) {
-            ExportFormat.HEIF -> ".heic"
-            ExportFormat.AVIF -> ".avif"
-            else -> return true
-        }
-        val tempFile = java.io.File.createTempFile("codec_probe_", suffix, context.cacheDir)
-        return try {
-            when (format) {
-                ExportFormat.HEIF -> {
-                    val writer = HeifWriter.Builder(
-                        tempFile.absolutePath,
-                        width,
-                        height,
-                        HeifWriter.INPUT_MODE_BITMAP
-                    )
-                        .setQuality(quality)
-                        .setMaxImages(1)
-                        .build()
-                    writer.close()
-                }
-                ExportFormat.AVIF -> {
-                    val writer = AvifWriter.Builder(
-                        tempFile.absolutePath,
-                        width,
-                        height,
-                        AvifWriter.INPUT_MODE_BITMAP
-                    )
-                        .setQuality(quality)
-                        .setMaxImages(1)
-                        .build()
-                    writer.close()
-                }
-                else -> Unit
-            }
-            true
-        } catch (e: Exception) {
-            LogUtils.w(context, "FrameExporter", "${format.name} writer probe failed, falling back to JPEG", e)
-            false
-        } finally {
-            tempFile.delete()
-        }
     }
 
     /**
@@ -153,6 +75,7 @@ class FrameExporter(private val context: Context) {
         var softBitmap: Bitmap? = null
         var processedBitmap: Bitmap? = null
         var finalBitmap: Bitmap? = null
+        var outputUri: Uri? = null
         try {
             // Ensure we have a software bitmap (HARDWARE bitmaps can't be compressed)
             softBitmap = ensureSoftwareBitmap(bitmap)
@@ -160,9 +83,7 @@ class FrameExporter(private val context: Context) {
             // Apply HDR tone mapping if needed
             processedBitmap = HdrToneMapper.process(
                 bitmap = softBitmap,
-                colorSpaceInfo = frame.colorSpace,
-                targetFormat = config.format,
-                strategy = config.hdrToneMap
+                colorSpaceInfo = frame.colorSpace
             )
 
             // Scale if needed
@@ -171,42 +92,36 @@ class FrameExporter(private val context: Context) {
             val resultWidth = finalBitmap.width
             val resultHeight = finalBitmap.height
 
-            // HEIF encoding is supported on API 28+ via HeifWriter (requires HEVC encoder).
-            // AVIF encoding is supported on API 28+ via AvifWriter (requires AV1 encoder).
-            // On API < 28 or when no hardware encoder is available, fall back to JPEG.
-            val requestedFormat = config.format
-            val effectiveConfig = resolveEffectiveConfig(
-                config = config,
-                width = resultWidth,
-                height = resultHeight
-            )
-
             // Generate output file
-            val fileName = generateFileName(frame, effectiveConfig)
+            val fileName = generateFileName(frame, config)
 
             // Save to MediaStore or custom directory (scoped storage compatible)
             val dateTakenMs = frame.metadata.dateTime?.let { DateTimeUtils.parseToMillis(it) }
-            val outputUri = if (customExportTreeUri != null) {
-                saveToCustomDirectory(finalBitmap, fileName, effectiveConfig, customExportTreeUri)
+            val savedUri = if (customExportTreeUri != null) {
+                saveToCustomDirectory(finalBitmap, fileName, config, customExportTreeUri)
             } else {
-                saveToMediaStore(finalBitmap, fileName, effectiveConfig, dateTakenMs)
+                saveToMediaStore(finalBitmap, fileName, config, dateTakenMs)
             }
+            outputUri = savedUri
 
             // Write metadata
+            var metadataPreserved = false
             if (config.preserveMetadata) {
-                writeMetadataToUri(outputUri, frame.metadata)
+                metadataPreserved = writeMetadataToUri(savedUri, frame.metadata)
             }
 
             ExportResult.Success(
-                outputPath = outputUri.toString(),
+                outputPath = savedUri.toString(),
                 width = resultWidth,
                 height = resultHeight,
-                fileSizeBytes = getFileSize(outputUri),
-                format = effectiveConfig.format,
+                fileSizeBytes = getFileSize(savedUri),
+                format = config.format,
                 isMotionPhoto = false,
-                metadataPreserved = config.preserveMetadata,
-                requestedFormat = if (requestedFormat != effectiveConfig.format) requestedFormat else null
+                metadataPreserved = metadataPreserved
             )
+        } catch (e: CancellationException) {
+            outputUri?.let { cleanupFailedOutput(it) }
+            throw e
         } catch (e: OutOfMemoryError) {
             ExportResult.Error("Image too large to process. Try reducing resolution or using JPEG format.", e)
         } catch (e: SecurityException) {
@@ -244,6 +159,7 @@ class FrameExporter(private val context: Context) {
         var softBitmap: Bitmap? = null
         var processedBitmap: Bitmap? = null
         var finalBitmap: Bitmap? = null
+        var outputUri: Uri? = null
         try {
             val requestedFormat = config.format
             val effectiveConfig = if (config.format != ExportFormat.JPEG) {
@@ -255,9 +171,7 @@ class FrameExporter(private val context: Context) {
 
             processedBitmap = HdrToneMapper.process(
                 bitmap = softBitmap,
-                colorSpaceInfo = frame.colorSpace,
-                targetFormat = effectiveConfig.format,
-                strategy = config.hdrToneMap
+                colorSpaceInfo = frame.colorSpace
             )
 
             finalBitmap = scaleBitmap(processedBitmap, config.maxResolution)
@@ -273,10 +187,10 @@ class FrameExporter(private val context: Context) {
             // Step 1: Write EXIF metadata to JPEG bytes FIRST (before XMP injection).
             // ExifInterface.saveAttributes() rewrites the entire JPEG — doing this on
             // a plain JPEG avoids any risk of corrupting the XMP we inject later.
-            val exifJpegBytes = if (config.preserveMetadata) {
+            val (exifJpegBytes, metadataPreserved) = if (config.preserveMetadata) {
                 writeExifToJpegBytes(jpegBytes, frame.metadata)
             } else {
-                jpegBytes
+                Pair(jpegBytes, false)
             }
 
             val beforeDurationUs = (config.motionDurationBeforeS * 1_000_000).toLong()
@@ -321,25 +235,29 @@ class FrameExporter(private val context: Context) {
 
                 // Step 4: Write combined JPEG+video to storage
                 val dateTakenMs = frame.metadata.dateTime?.let { DateTimeUtils.parseToMillis(it) }
-                val outputUri = if (customExportTreeUri != null) {
+                val savedUri = if (customExportTreeUri != null) {
                     saveMotionPhotoToCustomDirectory(xmpJpegBytes, videoClipFile, fileName, customExportTreeUri)
                 } else {
                     saveMotionPhotoToMediaStore(xmpJpegBytes, videoClipFile, fileName, effectiveConfig, dateTakenMs)
                 }
+                outputUri = savedUri
 
                 ExportResult.Success(
-                    outputPath = outputUri.toString(),
+                    outputPath = savedUri.toString(),
                     width = resultWidth,
                     height = resultHeight,
-                    fileSizeBytes = getFileSize(outputUri),
+                    fileSizeBytes = getFileSize(savedUri),
                     format = effectiveConfig.format,
                     isMotionPhoto = true,
-                    metadataPreserved = config.preserveMetadata,
+                    metadataPreserved = metadataPreserved,
                     requestedFormat = if (requestedFormat != effectiveConfig.format) requestedFormat else null
                 )
             } finally {
                 videoClipFile.delete()
             }
+        } catch (e: CancellationException) {
+            outputUri?.let { cleanupFailedOutput(it) }
+            throw e
         } catch (e: OutOfMemoryError) {
             ExportResult.Error("Image too large to process. Try reducing resolution or using JPEG format.", e)
         } catch (e: SecurityException) {
@@ -402,7 +320,7 @@ class FrameExporter(private val context: Context) {
      * to ensure the resulting MP4 is playable. Skipping the keyframe and starting at
      * a P/B-frame produces an unplayable file.
      */
-    private fun extractVideoClip(
+    private suspend fun extractVideoClip(
         videoUri: Uri,
         centerTimestampUs: Long,
         beforeDurationUs: Long,
@@ -441,6 +359,8 @@ class FrameExporter(private val context: Context) {
                 seekMode = MediaExtractor.SEEK_TO_PREVIOUS_SYNC,
                 rotation = rotation
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             LogUtils.w(context, "FrameExporter", "PREVIOUS_SYNC extraction failed, will retry", e)
             null
@@ -527,7 +447,7 @@ class FrameExporter(private val context: Context) {
         return clean
     }
 
-    private fun extractVideoClipOnce(
+    private suspend fun extractVideoClipOnce(
         videoUri: Uri,
         startUs: Long,
         endUs: Long,
@@ -629,7 +549,11 @@ class FrameExporter(private val context: Context) {
                 var buffer = ByteBuffer.allocateDirect(maxInputSize)
                 val bufferInfo = MediaCodec.BufferInfo()
 
+                var sampleCount = 0
                 while (true) {
+                    if (++sampleCount % 10 == 0) {
+                        currentCoroutineContext().ensureActive()
+                    }
                     val trackIndex = extractor.sampleTrackIndex
                     if (trackIndex < 0) break
 
@@ -668,6 +592,9 @@ class FrameExporter(private val context: Context) {
                     extractor.seekTo(actualStartUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
 
                     while (true) {
+                        if (++sampleCount % 10 == 0) {
+                            currentCoroutineContext().ensureActive()
+                        }
                         val trackIndex = extractor.sampleTrackIndex
                         if (trackIndex < 0) break
 
@@ -936,16 +863,12 @@ class FrameExporter(private val context: Context) {
         ) ?: throw java.io.IOException("Failed to create MediaStore entry — storage may be full or unavailable")
 
         try {
-            if ((config.format == ExportFormat.HEIF || config.format == ExportFormat.AVIF) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                encodeNextGenFormatToUri(bitmap, uri, config.format, config.quality)
-            } else {
-                val outputStream = context.contentResolver.openOutputStream(uri)
-                    ?: throw java.io.IOException("Failed to open output stream for MediaStore entry")
-                outputStream.use {
-                    val compressFormat = config.format.toCompressFormat(config.quality)
-                    if (!bitmap.compress(compressFormat, config.quality, it)) {
-                        throw java.io.IOException("Failed to compress bitmap (format: ${config.format}, config: ${bitmap.config})")
-                    }
+            val outputStream = context.contentResolver.openOutputStream(uri)
+                ?: throw java.io.IOException("Failed to open output stream for MediaStore entry")
+            outputStream.use {
+                val compressFormat = config.format.toCompressFormat(config.quality)
+                if (!bitmap.compress(compressFormat, config.quality, it)) {
+                    throw java.io.IOException("Failed to compress bitmap (format: ${config.format}, config: ${bitmap.config})")
                 }
             }
 
@@ -978,16 +901,12 @@ class FrameExporter(private val context: Context) {
             ?: throw java.io.IOException("Failed to create file in custom directory")
         val uri = docFile.uri
         try {
-            if ((config.format == ExportFormat.HEIF || config.format == ExportFormat.AVIF) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                encodeNextGenFormatToUri(bitmap, uri, config.format, config.quality)
-            } else {
-                val outputStream = context.contentResolver.openOutputStream(uri)
-                    ?: throw java.io.IOException("Failed to open output stream for custom directory")
-                outputStream.use {
-                    val compressFormat = config.format.toCompressFormat(config.quality)
-                    if (!bitmap.compress(compressFormat, config.quality, it)) {
-                        throw java.io.IOException("Failed to compress bitmap (format: ${config.format}, config: ${bitmap.config})")
-                    }
+            val outputStream = context.contentResolver.openOutputStream(uri)
+                ?: throw java.io.IOException("Failed to open output stream for custom directory")
+            outputStream.use {
+                val compressFormat = config.format.toCompressFormat(config.quality)
+                if (!bitmap.compress(compressFormat, config.quality, it)) {
+                    throw java.io.IOException("Failed to compress bitmap (format: ${config.format}, config: ${bitmap.config})")
                 }
             }
             return uri
@@ -1030,74 +949,19 @@ class FrameExporter(private val context: Context) {
     }
 
     /**
-     * Encode a bitmap as HEIF or AVIF and write the result to the given URI.
-     *
-     * Uses HeifWriter (HEVC) for HEIF and AvifWriter (AV1) for AVIF.
-     * Both writers only support writing to a file path, so we encode to a temp file
-     * and then copy the bytes to the target URI via ContentResolver.
-     */
-    @RequiresApi(Build.VERSION_CODES.P)
-    @SuppressLint("RestrictedApi")
-    private fun encodeNextGenFormatToUri(bitmap: Bitmap, uri: Uri, format: ExportFormat, quality: Int) {
-        val suffix = if (format == ExportFormat.AVIF) ".avif" else ".heif"
-        val tempFile = java.io.File.createTempFile("ngimg_", suffix, context.cacheDir)
-        try {
-            when (format) {
-                ExportFormat.HEIF -> {
-                    val writer = HeifWriter.Builder(
-                        tempFile.absolutePath,
-                        bitmap.width,
-                        bitmap.height,
-                        HeifWriter.INPUT_MODE_BITMAP
-                    )
-                        .setQuality(quality)
-                        .setMaxImages(1)
-                        .build()
-                    writer.start()
-                    writer.addBitmap(bitmap)
-                    writer.stop(0)
-                    writer.close()
-                }
-                ExportFormat.AVIF -> {
-                    val writer = AvifWriter.Builder(
-                        tempFile.absolutePath,
-                        bitmap.width,
-                        bitmap.height,
-                        AvifWriter.INPUT_MODE_BITMAP
-                    )
-                        .setQuality(quality)
-                        .setMaxImages(1)
-                        .build()
-                    writer.start()
-                    writer.addBitmap(bitmap)
-                    writer.stop(0)
-                    writer.close()
-                }
-                else -> throw IllegalArgumentException("Unsupported format for next-gen encoder: $format")
-            }
-
-            val outputStream = context.contentResolver.openOutputStream(uri)
-                ?: throw java.io.IOException("Failed to open output stream for $format export")
-            outputStream.use { os ->
-                java.io.FileInputStream(tempFile).use { it.copyTo(os) }
-            }
-        } finally {
-            tempFile.delete()
-        }
-    }
-
-    /**
      * Write metadata to an image stored via MediaStore.
      */
-    private fun writeMetadataToUri(uri: Uri, metadata: VideoMetadata) {
-        try {
+    private fun writeMetadataToUri(uri: Uri, metadata: VideoMetadata): Boolean {
+        return try {
             context.contentResolver.openFileDescriptor(uri, "rw")?.use { pfd ->
                 val exif = androidx.exifinterface.media.ExifInterface(pfd.fileDescriptor)
                 MetadataWriter.writeExifData(exif, metadata)
                 exif.saveAttributes()
             }
+            true
         } catch (e: Exception) {
             LogUtils.w(context, "FrameExporter", "Failed to write metadata to URI", e)
+            false
         }
     }
 
@@ -1108,17 +972,17 @@ class FrameExporter(private val context: Context) {
      * the JPEG structure. If called on the final combined file (JPEG + appended MP4), the
      * appended video data would be stripped, breaking the motion photo.
      */
-    private fun writeExifToJpegBytes(jpegBytes: ByteArray, metadata: VideoMetadata): ByteArray {
+    private fun writeExifToJpegBytes(jpegBytes: ByteArray, metadata: VideoMetadata): Pair<ByteArray, Boolean> {
         val tempFile = java.io.File.createTempFile("exif_", ".jpg", context.cacheDir)
         try {
             tempFile.writeBytes(jpegBytes)
             val exif = androidx.exifinterface.media.ExifInterface(tempFile.absolutePath)
             MetadataWriter.writeExifData(exif, metadata)
             exif.saveAttributes()
-            return tempFile.readBytes()
+            return Pair(tempFile.readBytes(), true)
         } catch (e: Exception) {
             LogUtils.w(context, "FrameExporter", "Failed to write EXIF to JPEG bytes", e)
-            return jpegBytes // Return original bytes on failure
+            return Pair(jpegBytes, false) // Return original bytes on failure
         } finally {
             tempFile.delete()
         }
@@ -1162,7 +1026,7 @@ class FrameExporter(private val context: Context) {
         return "${prefix}_${timestamp}_${timeStr}.${extension}"
     }
 
-    private fun sanitizeFileName(fileName: String): String {
+    internal fun sanitizeFileName(fileName: String): String {
         return fileName
             .replace(Regex("[\\x00-\\x1F\\x7F]"), "_") // Strip control characters including null bytes
             .replace(Regex("[\\\\/:*?\"<>|]"), "_")
@@ -1210,15 +1074,23 @@ class FrameExporter(private val context: Context) {
         }
         return java.io.File(targetDir, fileName)
     }
+
+    private fun cleanupFailedOutput(uri: Uri) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                context.contentResolver.delete(uri, null)
+            } else {
+                val docFile = DocumentFile.fromSingleUri(context, uri)
+                docFile?.delete() ?: context.contentResolver.delete(uri, null, null)
+            }
+        } catch (e: Exception) {
+            LogUtils.w(context, "FrameExporter", "Failed to cleanup output file on cancellation", e)
+        }
+    }
 }
 
 /**
  * Convert ExportFormat to Android's Bitmap.CompressFormat.
- *
- * HEIF/AVIF encoding is handled separately via HeifWriter/AvifWriter in
- * [FrameExporter.encodeNextGenFormatToUri] on API 28+. This function is only
- * called for formats that use Bitmap.compress. HEIF and AVIF fall back to
- * JPEG here for safety (callers must not reach this path on API 28+).
  */
 internal fun ExportFormat.toCompressFormat(
     quality: Int,
@@ -1228,9 +1100,6 @@ internal fun ExportFormat.toCompressFormat(
         ExportFormat.JPEG -> Bitmap.CompressFormat.JPEG
         ExportFormat.PNG -> Bitmap.CompressFormat.PNG
         ExportFormat.WEBP -> getWebpCompressFormat(quality, sdkInt)
-        ExportFormat.HEIF, ExportFormat.AVIF -> {
-            Bitmap.CompressFormat.JPEG
-        }
     }
 }
 

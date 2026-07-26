@@ -354,10 +354,12 @@ fun PlayerScreen(
     // Show errors
     val captureErrorMsg = stringResource(R.string.error_capture_failed)
     val exportErrorMsgGeneric = stringResource(R.string.error_export_failed)
+    val permissionErrorMsg = stringResource(R.string.error_permission_denied)
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
             val message = when (error) {
                 is PlayerError.CaptureFailed -> captureErrorMsg
+                is PlayerError.PermissionDenied -> permissionErrorMsg
                 is PlayerError.ExportFailed -> error.detail ?: exportErrorMsgGeneric
             }
             snackbarHostState.showSnackbar(
@@ -525,8 +527,7 @@ fun PlayerScreen(
                     onDismiss = { viewModel.toggleExportSettings() },
                     customExportTreeUri = uiState.customExportTreeUri,
                     onPickCustomFolder = { folderPickerLauncher.launch(null) },
-                    onClearCustomFolder = { viewModel.setCustomExportTreeUri(null) },
-                    isHdrContent = uiState.capturedFrame?.colorSpace?.isHdr == true
+                    onClearCustomFolder = { viewModel.setCustomExportTreeUri(null) }
                 )
             }
         }

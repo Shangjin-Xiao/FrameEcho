@@ -54,13 +54,27 @@ class PlayerPreferencesStoreTest {
     }
 
     @Test
-    fun `saveQuickSettings persists all values`() = testScope.runTest {
-        store.saveQuickSettings(isMuted = true, motionPhoto = true, preserveMetadata = false)
+    fun `saveQuickSettings persists all values including format and custom uri`() = testScope.runTest {
+        store.saveQuickSettings(
+            isMuted = true,
+            motionPhoto = true,
+            preserveMetadata = false,
+            format = "PNG",
+            quality = 90,
+            customFileName = "CustomName",
+            exportDirectory = "DCIM_FRAMEECHO",
+            customExportTreeUri = "content://com.android.externalstorage.documents/tree/primary%3APictures"
+        )
 
         val settings = store.load()
         assertEquals(true, settings.isMuted)
         assertEquals(true, settings.motionPhoto)
         assertEquals(false, settings.preserveMetadata)
+        assertEquals("PNG", settings.format)
+        assertEquals(90, settings.quality)
+        assertEquals("CustomName", settings.customFileName)
+        assertEquals("DCIM_FRAMEECHO", settings.exportDirectory)
+        assertEquals("content://com.android.externalstorage.documents/tree/primary%3APictures", settings.customExportTreeUri)
     }
 
     @Test

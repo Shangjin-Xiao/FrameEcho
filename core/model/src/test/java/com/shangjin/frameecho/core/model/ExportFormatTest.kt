@@ -25,18 +25,6 @@ class ExportFormatTest {
     }
 
     @Test
-    fun `HEIF supports HDR`() {
-        assertTrue(ExportFormat.HEIF.supportsHdr)
-        assertFalse(ExportFormat.HEIF.supportsAlpha)
-    }
-
-    @Test
-    fun `AVIF supports both alpha and HDR`() {
-        assertTrue(ExportFormat.AVIF.supportsAlpha)
-        assertTrue(ExportFormat.AVIF.supportsHdr)
-    }
-
-    @Test
     fun `WebP supports alpha but not HDR`() {
         assertTrue(ExportFormat.WEBP.supportsAlpha)
         assertFalse(ExportFormat.WEBP.supportsHdr)
@@ -46,18 +34,6 @@ class ExportFormatTest {
     fun `PNG has correct extension and mimeType`() {
         assertEquals("png", ExportFormat.PNG.extension)
         assertEquals("image/png", ExportFormat.PNG.mimeType)
-    }
-
-    @Test
-    fun `HEIF has correct extension and mimeType`() {
-        assertEquals("heic", ExportFormat.HEIF.extension)
-        assertEquals("image/heif", ExportFormat.HEIF.mimeType)
-    }
-
-    @Test
-    fun `AVIF has correct extension and mimeType`() {
-        assertEquals("avif", ExportFormat.AVIF.extension)
-        assertEquals("image/avif", ExportFormat.AVIF.mimeType)
     }
 
     @Test

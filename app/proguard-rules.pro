@@ -36,9 +36,6 @@
 # Keep Kotlin Metadata (needed for Kotlin reflection)
 -keep class kotlin.Metadata { *; }
 
-# Keep Coil (Image Loading) — dontwarn only; Coil ships its own consumer rules
--dontwarn coil.**
-
 # Keep ViewModels — keep class name and constructors so the ViewModel factory can instantiate them
 -keepclassmembers class * extends androidx.lifecycle.ViewModel {
     <init>();
@@ -55,16 +52,8 @@
 -dontwarn androidx.compose.**
 
 # --- SECURITY: Strip verbose logging in release builds ---
-# Remove Log.v and Log.d calls entirely (they compile to no-ops)
+# Remove Log.v and Log.d calls (they compile to no-ops)
 -assumenosideeffects class android.util.Log {
     public static int v(...);
     public static int d(...);
-}
-# Remove Log.i/w/e to prevent information leakage in production.
-# If you need crash-level logging, comment out Log.e below and use a
-# crash-reporting SDK (e.g. Firebase Crashlytics) instead.
--assumenosideeffects class android.util.Log {
-    public static int i(...);
-    public static int w(...);
-    public static int e(...);
 }

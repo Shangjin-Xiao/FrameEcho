@@ -30,7 +30,6 @@ dependencies {
     implementation(libs.androidx.media3.common)
     implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.documentfile)
-    implementation(libs.androidx.heifwriter)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
 

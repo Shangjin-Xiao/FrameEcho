@@ -19,16 +19,6 @@ class ExportFormatExtTest {
     }
 
     @Test
-    fun `HEIF maps to Bitmap CompressFormat JPEG fallback`() {
-        assertEquals(Bitmap.CompressFormat.JPEG, ExportFormat.HEIF.toCompressFormat(80))
-    }
-
-    @Test
-    fun `AVIF maps to Bitmap CompressFormat JPEG fallback`() {
-        assertEquals(Bitmap.CompressFormat.JPEG, ExportFormat.AVIF.toCompressFormat(80))
-    }
-
-    @Test
     fun `WEBP maps to WEBP on older Android versions`() {
         // SDK < R (30), e.g., 29 (Q)
         @Suppress("DEPRECATION")

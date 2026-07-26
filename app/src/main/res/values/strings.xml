@@ -11,7 +11,6 @@
     <string name="preserve_metadata">Preserve Metadata</string>
     <string name="remember_quick_settings">Remember Player Toggles</string>
     <string name="remember_quick_settings_hint">Keep mute, motion photo, and metadata toggles for the next video/session</string>
-    <string name="hdr_handling">HDR Handling</string>
     <string name="no_video_selected">No video selected</string>
     <string name="select_video_hint">Browse video frames and capture high-quality screenshots</string>
     <string name="captured_info">Captured: %1$d × %2$d</string>
@@ -20,10 +19,6 @@
     <string name="export_format_fallback_message">Exported as %2$s (%1$s is not supported on this device)</string>
     <string name="mute">Mute</string>
     <string name="unmute">Unmute</string>
-    <string name="hdr_auto">Auto</string>
-    <string name="hdr_sdr">SDR</string>
-    <string name="hdr_hdr">HDR</string>
-    <string name="hdr_system">System</string>
     <string name="play">Play</string>
     <string name="pause">Pause</string>
     <string name="motion_photo_on">Motion Photo On</string>
@@ -61,7 +56,6 @@
     <string name="official_website">Official Website</string>
     <string name="feedback">Feedback &amp; Issues</string>
     <string name="license">License</string>
-    <string name="mit_license">MIT License</string>
     <string name="app_version">Version</string>
     <string name="location_custom">Custom Folder…</string>
     <string name="custom_folder_active">Using custom folder</string>
@@ -70,22 +64,17 @@
     <string name="format_desc_jpeg">Universal compatibility, small file size</string>
     <string name="format_desc_png">Lossless quality, supports transparency</string>
     <string name="format_desc_webp">Modern format, good compression with transparency</string>
-    <string name="format_desc_heif">High efficiency, HDR support (requires HEVC encoder)</string>
-    <string name="format_desc_avif">Best compression, HDR + transparency (requires AV1 encoder)</string>
 
     <!-- Quality hints -->
     <string name="quality_not_applicable_png">PNG is always lossless — quality setting does not apply</string>
     <string name="quality_hint">Higher values produce better quality but larger files</string>
 
     <!-- HDR strategy descriptions -->
-    <string name="hdr_desc_auto">Automatically choose based on source and output format</string>
-    <string name="hdr_desc_sdr">Convert HDR to SDR for maximum compatibility</string>
-    <string name="hdr_desc_hdr">Preserve HDR data if the output format supports it</string>
-    <string name="hdr_desc_system">Use the system\'s default tone-mapping</string>
 
     <!-- UX: user-friendly error messages -->
     <string name="error_capture_failed">Unable to capture frame. Try a different position in the video.</string>
     <string name="error_export_failed">Export failed. Please try again.</string>
+    <string name="error_permission_denied">Video access permission was revoked. Please re-select the video.</string>
 
     <!-- UX: snackbar actions -->
     <string name="snackbar_action_view">View</string>
@@ -114,7 +103,7 @@
     <string name="onboarding_metadata_desc">Keep the original video\'s EXIF metadata (date, location, camera info) in the exported image.</string>
 
     <string name="onboarding_format_title">Export Format</string>
-    <string name="onboarding_format_desc">Tap to cycle through formats: JPEG, PNG, WEBP, HEIF, AVIF. Each has different quality and compatibility trade-offs.</string>
+    <string name="onboarding_format_desc">Tap to cycle through formats: JPEG, PNG, WEBP. Each has different quality and compatibility trade-offs.</string>
 
     <string name="onboarding_slider_title">Seek &amp; Fine Scrubbing</string>
     <string name="onboarding_slider_desc">Drag the slider to seek. Swipe UP while dragging to enter fine scrubbing mode for frame-precise control.</string>

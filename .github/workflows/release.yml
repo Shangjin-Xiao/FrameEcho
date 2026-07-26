@@ -14,7 +14,7 @@ jobs:
     name: Build Signed Release APK
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - name: Checkout code
@@ -41,16 +41,30 @@ jobs:
         run: |
           ./gradlew assembleRelease --no-daemon --stacktrace \
             -PVERSION_NAME="${{ inputs.version }}" \
+            -PVERSION_CODE="${{ github.run_number }}" \
             -PRELEASE_STORE_FILE=$RUNNER_TEMP/frameecho-release.jks \
             -PRELEASE_STORE_PASSWORD="${{ secrets.RELEASE_STORE_PASSWORD }}" \
             -PRELEASE_KEY_ALIAS="frameecho" \
             -PRELEASE_KEY_PASSWORD="${{ secrets.RELEASE_KEY_PASSWORD }}"
 
-      - name: Upload Release APK
-        uses: actions/upload-artifact@v7
+      - name: Clean up keystore
+        if: always()
+        run: rm -f $RUNNER_TEMP/frameecho-release.jks
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
         with:
           name: frameecho-release-apk-v${{ inputs.version }}
           path: app/build/outputs/apk/release/app-release.apk
-          archive: false
           if-no-files-found: error
           retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: FrameEcho v${{ inputs.version }}
+          files: app/build/outputs/apk/release/app-release.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

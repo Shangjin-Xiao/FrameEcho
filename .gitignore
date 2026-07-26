@@ -59,3 +59,4 @@ Thumbs.db
 
 # Static Web Build Artifacts
 node_modules/
+.claude/settings.local.json

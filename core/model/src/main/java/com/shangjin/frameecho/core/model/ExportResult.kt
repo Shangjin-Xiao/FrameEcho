@@ -16,7 +16,7 @@ sealed class ExportResult {
         /**
          * The format originally requested by the user.
          * Non-null only when the actual [format] differs from what the user selected
-         * (e.g. HEIF/AVIF requested but JPEG produced because the device lacks native encoding).
+         * (e.g. PNG/WEBP requested but JPEG produced because motion photos require JPEG).
          */
         val requestedFormat: ExportFormat? = null
     ) : ExportResult() {

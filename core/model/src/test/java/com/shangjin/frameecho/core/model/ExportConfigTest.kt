@@ -79,12 +79,6 @@ class ExportConfigTest {
     }
 
     @Test
-    fun `HDR tone map auto is default`() {
-        val config = ExportConfig()
-        assertEquals(HdrToneMapStrategy.AUTO, config.hdrToneMap)
-    }
-
-    @Test
     fun `default custom file name is null`() {
         val config = ExportConfig()
         assertEquals(null, config.customFileName)

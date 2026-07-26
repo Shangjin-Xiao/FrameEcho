@@ -11,7 +11,6 @@
     <string name="preserve_metadata">保留元数据</string>
     <string name="remember_quick_settings">记住播放器开关</string>
     <string name="remember_quick_settings_hint">记住静音、动态照片和元数据开关，下一次选视频仍生效</string>
-    <string name="hdr_handling">HDR 处理</string>
     <string name="no_video_selected">尚未选择视频</string>
     <string name="select_video_hint">逐帧浏览视频并截取高质量画面</string>
     <string name="captured_info">已截取: %1$d × %2$d</string>
@@ -20,10 +19,6 @@
     <string name="export_format_fallback_message">已导出为 %2$s（此设备不支持 %1$s）</string>
     <string name="mute">静音</string>
     <string name="unmute">取消静音</string>
-    <string name="hdr_auto">自动</string>
-    <string name="hdr_sdr">SDR</string>
-    <string name="hdr_hdr">HDR</string>
-    <string name="hdr_system">系统</string>
     <string name="play">播放</string>
     <string name="pause">暂停</string>
     <string name="motion_photo_on">动态照片 开</string>
@@ -61,7 +56,6 @@
     <string name="official_website">官方网站</string>
     <string name="feedback">反馈与建议</string>
     <string name="license">许可证</string>
-    <string name="mit_license">MIT License</string>
     <string name="app_version">版本</string>
     <string name="location_custom">自定义文件夹…</string>
     <string name="custom_folder_active">正在使用自定义文件夹</string>
@@ -70,22 +64,17 @@
     <string name="format_desc_jpeg">通用兼容，文件体积小</string>
     <string name="format_desc_png">无损画质，支持透明通道</string>
     <string name="format_desc_webp">现代格式，兼顾压缩率与透明通道</string>
-    <string name="format_desc_heif">高效编码，支持 HDR（需要 HEVC 编码器）</string>
-    <string name="format_desc_avif">最佳压缩，支持 HDR + 透明通道（需要 AV1 编码器）</string>
 
     <!-- Quality hints -->
     <string name="quality_not_applicable_png">PNG 始终为无损格式，质量设置不适用</string>
     <string name="quality_hint">数值越高画质越好，但文件越大</string>
 
     <!-- HDR strategy descriptions -->
-    <string name="hdr_desc_auto">根据源视频和输出格式自动选择最佳策略</string>
-    <string name="hdr_desc_sdr">将 HDR 转换为 SDR，确保最大兼容性</string>
-    <string name="hdr_desc_hdr">若输出格式支持，则保留 HDR 数据</string>
-    <string name="hdr_desc_system">使用系统默认色调映射</string>
 
     <!-- UX: user-friendly error messages -->
     <string name="error_capture_failed">无法截取帧，请尝试视频的其他位置</string>
     <string name="error_export_failed">导出失败，请重试</string>
+    <string name="error_permission_denied">视频访问权限已失效，请重新选择视频</string>
 
     <!-- UX: snackbar actions -->
     <string name="snackbar_action_view">查看</string>
@@ -114,7 +103,7 @@
     <string name="onboarding_metadata_desc">将原始视频的 EXIF 元数据（日期、位置、相机信息等）写入导出的图片。</string>
 
     <string name="onboarding_format_title">导出格式</string>
-    <string name="onboarding_format_desc">点击可在 JPEG、PNG、WEBP、HEIF、AVIF 之间循环切换。每种格式在画质与兼容性上各有优劣。</string>
+    <string name="onboarding_format_desc">点击可在 JPEG、PNG、WEBP 之间循环切换。每种格式在画质与兼容性上各有优劣。</string>
 
     <string name="onboarding_slider_title">拖动与精细调节</string>
     <string name="onboarding_slider_desc">拖动进度条可快速定位。拖动时向上滑动可进入精细调节模式，实现逐帧精准控制。</string>

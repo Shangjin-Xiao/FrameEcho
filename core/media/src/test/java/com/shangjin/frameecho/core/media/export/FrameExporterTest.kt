@@ -73,4 +73,16 @@ class FrameExporterTest {
                 xmpString.contains("Item:Semantic=\"MotionPhoto\" Item:Length=\"1000\" Item:Padding=\"0\""))
         }
     }
+
+    @Test
+    fun `sanitizeFileName should prevent path traversal and remove illegal characters`() {
+        val context = mockk<Context>()
+        val exporter = FrameExporter(context)
+
+        org.junit.Assert.assertEquals("etc_passwd", exporter.sanitizeFileName("../../etc/passwd"))
+        org.junit.Assert.assertEquals("photo_2026_07.jpg", exporter.sanitizeFileName("photo/2026:07.jpg"))
+        org.junit.Assert.assertEquals("test", exporter.sanitizeFileName("\u0000test\u0007"))
+        org.junit.Assert.assertEquals("FrameEcho", exporter.sanitizeFileName("..."))
+        org.junit.Assert.assertEquals("my_image", exporter.sanitizeFileName("my_image"))
+    }
 }

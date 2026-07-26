@@ -127,49 +127,6 @@ class FrameExtractor(
     }
 
     /**
-     * Extract multiple frames for motion photo (frames around the target timestamp).
-     *
-     * Caller is responsible for calling [releaseBitmap] when done.
-     *
-     * @param videoUri URI of the source video
-     * @param centerTimestampUs Center timestamp in microseconds
-     * @param beforeDurationUs Duration before center in microseconds
-     * @param afterDurationUs Duration after center in microseconds
-     * @param frameIntervalUs Interval between frames in microseconds (default: 33333 = ~30fps)
-     * @return List of (timestamp, bitmap) pairs
-     */
-    suspend fun extractFrameRange(
-        videoUri: Uri,
-        centerTimestampUs: Long,
-        beforeDurationUs: Long,
-        afterDurationUs: Long,
-        frameIntervalUs: Long = 33_333L // ~30fps
-    ): List<Pair<Long, Bitmap>> {
-        require(frameIntervalUs > 0) { "frameIntervalUs must be positive, was $frameIntervalUs" }
-        return withContext(Dispatchers.IO) {
-        val frames = mutableListOf<Pair<Long, Bitmap>>()
-        useRetriever(
-            videoUri,
-            Unit,
-            "Failed to extract frame range"
-        ) { retriever ->
-            val startUs = maxOf(0L, centerTimestampUs - beforeDurationUs)
-            val endUs = centerTimestampUs + afterDurationUs
-
-            var currentUs = startUs
-            while (currentUs <= endUs) {
-                val bitmap = extractFrameInternal(retriever, currentUs)
-                if (bitmap != null) {
-                    frames.add(Pair(currentUs, bitmap))
-                }
-                currentUs += frameIntervalUs
-            }
-        }
-        frames
-    }
-    }
-
-    /**
      * Extract a downscaled thumbnail frame for timeline preview.
      * Uses OPTION_CLOSEST_SYNC since precision is not critical for thumbnails.
      *
@@ -255,6 +212,11 @@ class FrameExtractor(
         try {
             retriever.setDataSource(context, videoUri)
             block(retriever)
+        } catch (e: SecurityException) {
+            // Propagate permission failures so the UI can show a specific
+            // message instead of a generic "capture failed".
+            LogUtils.e(context, "FrameExtractor", "$errorMessage (permission denied)", e)
+            throw e
         } catch (e: Exception) {
             LogUtils.e(context, "FrameExtractor", errorMessage, e)
             defaultValue

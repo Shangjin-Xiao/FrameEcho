@@ -51,7 +51,6 @@ import com.shangjin.frameecho.R
 import com.shangjin.frameecho.core.model.ExportConfig
 import com.shangjin.frameecho.core.model.ExportDirectory
 import com.shangjin.frameecho.core.model.ExportFormat
-import com.shangjin.frameecho.core.model.HdrToneMapStrategy
 
 /**
  * M3 Modal Bottom Sheet for export settings.
@@ -66,8 +65,7 @@ fun ExportSettingsSheet(
     onDismiss: () -> Unit,
     customExportTreeUri: Uri? = null,
     onPickCustomFolder: (() -> Unit)? = null,
-    onClearCustomFolder: (() -> Unit)? = null,
-    isHdrContent: Boolean = false
+    onClearCustomFolder: (() -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
 
@@ -109,8 +107,6 @@ fun ExportSettingsSheet(
                     ExportFormat.JPEG -> stringResource(R.string.format_desc_jpeg)
                     ExportFormat.PNG -> stringResource(R.string.format_desc_png)
                     ExportFormat.WEBP -> stringResource(R.string.format_desc_webp)
-                    ExportFormat.HEIF -> stringResource(R.string.format_desc_heif)
-                    ExportFormat.AVIF -> stringResource(R.string.format_desc_avif)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -342,31 +338,6 @@ fun ExportSettingsSheet(
                     )
                 )
             }
-
-            // ── HDR handling (only for HDR content) ──
-            if (isHdrContent) {
-                SectionDivider()
-                SettingSectionHeader(
-                    icon = { Icon(Icons.Outlined.HighQuality, contentDescription = null) },
-                    title = stringResource(R.string.hdr_handling)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                HdrStrategySelector(
-                    selected = config.hdrToneMap,
-                    onSelect = { onConfigChange(config.copy(hdrToneMap = it)) }
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = when (config.hdrToneMap) {
-                        HdrToneMapStrategy.AUTO -> stringResource(R.string.hdr_desc_auto)
-                        HdrToneMapStrategy.FORCE_SDR -> stringResource(R.string.hdr_desc_sdr)
-                        HdrToneMapStrategy.PRESERVE_HDR -> stringResource(R.string.hdr_desc_hdr)
-                        HdrToneMapStrategy.SYSTEM -> stringResource(R.string.hdr_desc_system)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
     }
 }
@@ -480,34 +451,3 @@ private fun FormatSelector(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun HdrStrategySelector(
-    selected: HdrToneMapStrategy,
-    onSelect: (HdrToneMapStrategy) -> Unit
-) {
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        HdrToneMapStrategy.entries.forEach { strategy ->
-            val isSelected = strategy == selected
-            val label = when (strategy) {
-                HdrToneMapStrategy.AUTO -> stringResource(R.string.hdr_auto)
-                HdrToneMapStrategy.FORCE_SDR -> stringResource(R.string.hdr_sdr)
-                HdrToneMapStrategy.PRESERVE_HDR -> stringResource(R.string.hdr_hdr)
-                HdrToneMapStrategy.SYSTEM -> stringResource(R.string.hdr_system)
-            }
-            FilterChip(
-                selected = isSelected,
-                onClick = { onSelect(strategy) },
-                label = { Text(label) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
-            )
-        }
-    }
-}

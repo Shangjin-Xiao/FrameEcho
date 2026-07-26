@@ -11,6 +11,8 @@ import com.shangjin.frameecho.core.media.export.FrameExporter
 import com.shangjin.frameecho.core.media.utils.LogUtils
 import com.shangjin.frameecho.core.model.CapturedFrame
 import com.shangjin.frameecho.core.model.ExportConfig
+import com.shangjin.frameecho.core.model.ExportDirectory
+import com.shangjin.frameecho.core.model.ExportFormat
 import com.shangjin.frameecho.core.model.ExportResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -26,6 +28,7 @@ import kotlinx.coroutines.launch
  */
 sealed class PlayerError {
     data object CaptureFailed : PlayerError()
+    data object PermissionDenied : PlayerError()
     data class ExportFailed(val detail: String? = null) : PlayerError()
 }
 
@@ -68,8 +71,6 @@ data class PlayerUiState(
                 .coerceIn(1_000L, 30_000L)
         }
 
-    val seekIntervalLabel: String
-        get() = "${seekIntervalMs / 1000}s"
 }
 
 /**
@@ -92,9 +93,7 @@ class PlayerViewModel : ViewModel() {
     /** Thumbnail cache: index → Bitmap. Kept outside UiState to avoid serialization issues. */
     private val _thumbnailCache = mutableStateMapOf<Int, Bitmap>()
     private var batchThumbnailJob: Job? = null
-    private var captureJob: Job? = null
     private var captureAndSaveJob: Job? = null
-    private var exportJob: Job? = null
     private var activeBitmapExportRefCount: Int = 0
 
     companion object {
@@ -123,7 +122,7 @@ class PlayerViewModel : ViewModel() {
         }
         if (preferencesStore == null) {
             preferencesStore = PlayerPreferencesStore(context.applicationContext)
-            applyPersistedQuickSettings()
+            applyPersistedQuickSettings(context.applicationContext)
         }
     }
 
@@ -211,6 +210,9 @@ class PlayerViewModel : ViewModel() {
 
     fun setCustomExportTreeUri(uri: Uri?) {
         _uiState.update { it.copy(customExportTreeUri = uri) }
+        viewModelScope.launch {
+            persistQuickSettingsIfEnabled()
+        }
     }
 
     fun setMuted(muted: Boolean) {
@@ -335,63 +337,12 @@ class PlayerViewModel : ViewModel() {
     // ── Frame capture ───────────────────────────────────────────────────
 
     /**
-     * Capture the current frame from the video.
-     */
-    fun captureFrame() {
-        if (_uiState.value.isCapturing || _uiState.value.isExporting) return
-        val uri = _uiState.value.videoUri ?: return
-        val extractor = frameExtractor ?: return
-
-        captureJob = viewModelScope.launch {
-            _uiState.update { it.copy(isCapturing = true, error = null) }
-
-            try {
-                val timestampUs = _uiState.value.currentPositionMs * 1000L
-                val result = extractor.extractFrameWithInfo(uri, timestampUs)
-
-                if (result != null) {
-                    val (bitmap, frame) = result
-                    // Capture old reference BEFORE updating state,
-                    // then recycle AFTER so no observer reads a recycled bitmap.
-                    val oldBitmap = _uiState.value.capturedBitmap
-                    _uiState.update {
-                        it.copy(
-                            capturedBitmap = bitmap,
-                            capturedFrame = frame,
-                            isCapturing = false
-                        )
-                    }
-                    oldBitmap?.let { extractor.releaseBitmap(it) }
-                } else {
-                    _uiState.update {
-                        it.copy(
-                            isCapturing = false,
-                            error = PlayerError.CaptureFailed
-                        )
-                    }
-                }
-            } catch (e: CancellationException) {
-                _uiState.update { it.copy(isCapturing = false) }
-                throw e
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isCapturing = false,
-                        error = PlayerError.CaptureFailed
-                    )
-                }
-            }
-        }
-    }
-
-    /**
      * One-tap capture and save: captures the current frame and immediately exports it.
      *
      * @param motionPhoto whether to export as a motion photo or static image
      */
     fun captureAndSave(motionPhoto: Boolean) {
         if (captureAndSaveJob?.isActive == true ||
-            exportJob?.isActive == true ||
             _uiState.value.isCapturing ||
             _uiState.value.isExporting
         ) return
@@ -461,6 +412,14 @@ class PlayerViewModel : ViewModel() {
                 // User cancelled or scope cancelled — reset state, don't show error
                 _uiState.update { it.copy(isCapturing = false, isExporting = false) }
                 throw e
+            } catch (e: SecurityException) {
+                _uiState.update {
+                    it.copy(
+                        isCapturing = false,
+                        isExporting = false,
+                        error = PlayerError.PermissionDenied
+                    )
+                }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -489,105 +448,6 @@ class PlayerViewModel : ViewModel() {
 
     // ── Export ───────────────────────────────────────────────────────────
 
-    /**
-     * Export the captured frame as a static image.
-     */
-    fun exportStatic() {
-        if (
-            _uiState.value.isCapturing ||
-            _uiState.value.isExporting ||
-            exportJob?.isActive == true ||
-            captureAndSaveJob?.isActive == true
-        ) return
-        val bitmap = _uiState.value.capturedBitmap ?: return
-        val frame = _uiState.value.capturedFrame ?: return
-        val exporter = frameExporter ?: return
-
-        exportJob = viewModelScope.launch {
-            _uiState.update { it.copy(isExporting = true, error = null) }
-
-            try {
-                val result = try {
-                    beginBitmapExportUsage()
-                    exporter.exportStaticFrame(
-                        bitmap = bitmap,
-                        frame = frame,
-                        config = _uiState.value.exportConfig,
-                        customExportTreeUri = _uiState.value.customExportTreeUri
-                    )
-                } finally {
-                    endBitmapExportUsage()
-                }
-                _uiState.update {
-                    it.copy(isExporting = false, exportResult = result)
-                }
-            } catch (e: CancellationException) {
-                _uiState.update { it.copy(isExporting = false) }
-                throw e
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isExporting = false,
-                        error = PlayerError.ExportFailed(e.message)
-                    )
-                }
-            } finally {
-                exportJob = null
-            }
-        }
-    }
-
-    /**
-     * Export the captured frame as a motion photo.
-     */
-    fun exportMotionPhoto() {
-        if (
-            _uiState.value.isCapturing ||
-            _uiState.value.isExporting ||
-            exportJob?.isActive == true ||
-            captureAndSaveJob?.isActive == true
-        ) return
-        val uri = _uiState.value.videoUri ?: return
-        val bitmap = _uiState.value.capturedBitmap ?: return
-        val frame = _uiState.value.capturedFrame ?: return
-        val exporter = frameExporter ?: return
-
-        exportJob = viewModelScope.launch {
-            _uiState.update { it.copy(isExporting = true, error = null) }
-
-            try {
-                val motionConfig = _uiState.value.exportConfig.copy(motionPhoto = true)
-                val result = try {
-                    beginBitmapExportUsage()
-                    exporter.exportMotionPhoto(
-                        videoUri = uri,
-                        bitmap = bitmap,
-                        frame = frame,
-                        config = motionConfig,
-                        customExportTreeUri = _uiState.value.customExportTreeUri
-                    )
-                } finally {
-                    endBitmapExportUsage()
-                }
-                _uiState.update {
-                    it.copy(isExporting = false, exportResult = result)
-                }
-            } catch (e: CancellationException) {
-                _uiState.update { it.copy(isExporting = false) }
-                throw e
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isExporting = false,
-                        error = PlayerError.ExportFailed(e.message)
-                    )
-                }
-            } finally {
-                exportJob = null
-            }
-        }
-    }
-
     fun updateExportConfig(config: ExportConfig) {
         _uiState.update { state ->
             state.copy(exportConfig = config.copy(muteAudio = state.isMuted))
@@ -613,12 +473,8 @@ class PlayerViewModel : ViewModel() {
      * Cancel the ongoing capture-and-save operation.
      */
     fun cancelExport() {
-        captureJob?.cancel()
-        captureJob = null
         captureAndSaveJob?.cancel()
         captureAndSaveJob = null
-        exportJob?.cancel()
-        exportJob = null
     }
 
     override fun onCleared() {
@@ -627,9 +483,7 @@ class PlayerViewModel : ViewModel() {
         // reference to capturedBitmap on Dispatchers.IO (e.g. inside
         // Bitmap.compress).  Recycling the bitmap while the IO work is
         // in-flight would cause a use-after-recycle crash.
-        captureJob?.cancel()
         captureAndSaveJob?.cancel()
-        exportJob?.cancel()
         // Do NOT recycle capturedBitmap here: the cancelled export coroutine
         // may still be executing non-cancellable blocking IO that references
         // the bitmap.  The Bitmap finalizer will recycle it once the last
@@ -655,11 +509,10 @@ class PlayerViewModel : ViewModel() {
     private fun isAnyExportRunning(): Boolean {
         return _uiState.value.isExporting ||
             captureAndSaveJob?.isActive == true ||
-            exportJob?.isActive == true ||
             isBitmapInUseByExport()
     }
 
-    private fun applyPersistedQuickSettings() {
+    private fun applyPersistedQuickSettings(context: Context) {
         viewModelScope.launch {
             val persisted = preferencesStore?.load() ?: return@launch
             _uiState.update { state ->
@@ -670,13 +523,39 @@ class PlayerViewModel : ViewModel() {
                         exportConfig = state.exportConfig.copy(muteAudio = false)
                     )
                 } else {
+                    val savedFormat = persisted.format?.let { name ->
+                        runCatching { ExportFormat.valueOf(name) }.getOrNull()
+                    } ?: state.exportConfig.format
+
+                    val savedDirectory = persisted.exportDirectory?.let { name ->
+                        runCatching { ExportDirectory.valueOf(name) }.getOrNull()
+                    } ?: state.exportConfig.exportDirectory
+
+                    val savedTreeUriStr = persisted.customExportTreeUri
+                    val validatedUri = if (!savedTreeUriStr.isNullOrEmpty()) {
+                        val parsed = Uri.parse(savedTreeUriStr)
+                        val hasPermission = try {
+                            context.contentResolver.persistedUriPermissions.any { perm ->
+                                perm.uri == parsed && perm.isWritePermission
+                            }
+                        } catch (e: Exception) {
+                            false
+                        }
+                        if (hasPermission) parsed else null
+                    } else null
+
                     state.copy(
                         isMuted = persisted.isMuted,
                         rememberQuickSettings = true,
+                        customExportTreeUri = validatedUri,
                         exportConfig = state.exportConfig.copy(
-                            muteAudio = persisted.isMuted,
+                            format = savedFormat,
+                            quality = persisted.quality,
+                            preserveMetadata = persisted.preserveMetadata,
                             motionPhoto = persisted.motionPhoto,
-                            preserveMetadata = persisted.preserveMetadata
+                            customFileName = persisted.customFileName,
+                            exportDirectory = savedDirectory,
+                            muteAudio = persisted.isMuted
                         )
                     )
                 }
@@ -690,7 +569,12 @@ class PlayerViewModel : ViewModel() {
         preferencesStore?.saveQuickSettings(
             isMuted = state.isMuted,
             motionPhoto = state.exportConfig.motionPhoto,
-            preserveMetadata = state.exportConfig.preserveMetadata
+            preserveMetadata = state.exportConfig.preserveMetadata,
+            format = state.exportConfig.format.name,
+            quality = state.exportConfig.quality,
+            customFileName = state.exportConfig.customFileName,
+            exportDirectory = state.exportConfig.exportDirectory.name,
+            customExportTreeUri = state.customExportTreeUri?.toString()
         )
     }
 }

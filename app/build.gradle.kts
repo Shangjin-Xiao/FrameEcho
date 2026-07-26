@@ -8,12 +8,13 @@ android {
     namespace = "com.shangjin.frameecho"
     compileSdk = 36
     val resolvedVersionName = providers.gradleProperty("VERSION_NAME").orElse("1.0.0").get()
+    val resolvedVersionCode = providers.gradleProperty("VERSION_CODE").orElse("1").get().toInt()
 
     defaultConfig {
         applicationId = "com.shangjin.frameecho"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        versionCode = resolvedVersionCode
         versionName = resolvedVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -39,8 +40,15 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
+            } else {
+                gradle.taskGraph.whenReady {
+                    if (hasTask(":app:assembleRelease") || hasTask(":app:bundleRelease")) {
+                        throw GradleException("Release signing config is missing. Please provide RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, and RELEASE_KEY_PASSWORD properties.")
+                    }
+                }
             }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -106,9 +114,4 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

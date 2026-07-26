@@ -9,13 +9,13 @@
 **定格你所爱的每一帧**
 Android 视频抽帧应用
 
-从任意视频中精确截取画面，支持 HDR、动态照片与完整 EXIF 保留。通过快捷按钮和底部设置面板可调整格式、质量、导出目录、文件名、静音、HDR 色调映射等。
+从任意视频中精确截取画面，支持 HDR、动态照片与完整 EXIF 保留。通过快捷按钮和底部设置面板可调整格式、质量、导出目录、文件名、静音等。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-26%20(Android%208.0)-green.svg)](https://developer.android.com/about/versions/oreo)
 [![Target SDK](https://img.shields.io/badge/Target%20SDK-35-brightgreen.svg)](https://developer.android.com/about/versions/15)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-purple.svg)](https://kotlinlang.org/)
-[![Build](https://img.shields.io/github/actions/workflow/status/Shangjin-Xiao/FrameEcho/android-ci.yml?label=CI)](https://github.com/Shangjin-Xiao/FrameEcho/actions)
+[![Build](https://img.shields.io/github/actions/workflow/status/Shangjin-Xiao/FrameEcho/ci.yml?label=CI)](https://github.com/Shangjin-Xiao/FrameEcho/actions)
 
 [English ↓](#-frameecho-1)　·　[官网](https://frameecho.shangjinyun.cn)　·　[下载](https://github.com/Shangjin-Xiao/FrameEcho/releases)
 
@@ -26,10 +26,9 @@ Android 视频抽帧应用
 ## ✨ 功能特性
 
 - **帧级精准定位** — 始终使用 `MediaMetadataRetriever.OPTION_CLOSEST` 精确定位帧，不回退至关键帧搜索
-- **静态图 & 动态照片导出** — 支持 JPEG、PNG、WebP、HEIF、AVIF；动态照片遵循 [Google MicroVideo 规范](https://developer.android.com/media/camera/motion-photo-specification)（XMP + 附加 MP4）
+- **静态图 & 动态照片导出** — 支持 JPEG、PNG、WebP；动态照片遵循 [Google MicroVideo 规范](https://developer.android.com/media/camera/motion-photo-specification)（XMP + 附加 MP4）
 - **音频静音选项** — 导出动态照片时可选择不包含音频
-- **HDR & 杜比视界感知** — 通过 `MediaExtractor` 检测 HDR10、HDR10+、HLG 和杜比视界；为 SDR 格式进行色调映射，为 HEIF/AVIF 保留 HDR 数据
-- **可配置 HDR 色调映射策略** — 自动 / 强制 SDR / 保留 HDR / 使用系统设置
+- **HDR & 杜比视界感知** — 通过 `MediaExtractor` 检测 HDR10、HDR10+、HLG 和杜比视界；为 SDR 导出进行色调映射，避免 HDR 视频截帧偏色
 - **快速切换控制栏** — 底栏一键切换静音、动图模式、元数据保留，并可单击格式按钮循环格式
 - **自定义命名 & 导出目录** — 支持预设名称、手动输入、自定义文件夹（可通过 SAF 选择），带有效长度检查
 - **无损元数据保存** — 从源视频读取完整 EXIF（拍摄日期、GPS、设备信息、ISO、曝光、焦距），通过 `androidx.exifinterface` 写入导出图片
@@ -91,7 +90,7 @@ FrameEcho/
 | 帧提取 | `MediaMetadataRetriever`（`OPTION_CLOSEST`） |
 | 缩略图时间线 | `getScaledFrameAtTime` + `LazyRow` |
 | 色彩空间检测 | `MediaExtractor` → `MediaFormat` color-transfer / color-standard |
-| 色调映射 | `HdrToneMapper` + 可配置策略（AUTO/SDR/HDR/SYSTEM） |
+| 色调映射 | `HdrToneMapper`（HDR 源自动映射为 sRGB） |
 | 元数据 | `ExifInterface`（AndroidX）+ `MediaMetadataRetriever` |
 | 动态照片 | `MediaMuxer` 剪辑提取 + XMP 注入（Google MicroVideo 规范） |
 | 导出 | `MediaStore`（Scoped Storage），`Bitmap.compress`，可选择自定义目录（SAF） |
@@ -129,7 +128,7 @@ FrameEcho/
 
 Video frame capture for Android
 
-Extract precise frames from any video with HDR awareness, motion photo export, and full EXIF preservation. Quick‑access toggles and a settings sheet let you choose format, quality, export folder, filename template, mute audio and HDR tone‑mapping.
+Extract precise frames from any video with HDR awareness, motion photo export, and full EXIF preservation. Quick‑access toggles and a settings sheet let you choose format, quality, export folder, filename template and audio muting.
 
 [Website](https://frameecho.shangjinyun.cn)　·　[Releases](https://github.com/Shangjin-Xiao/FrameEcho/releases)
 
@@ -138,10 +137,9 @@ Extract precise frames from any video with HDR awareness, motion photo export, a
 ## ✨ Features
 
 - **Frame-Accurate Seeking & Capture** — Always uses `MediaMetadataRetriever.OPTION_CLOSEST`; never falls back to keyframe seeking
-- **Static & Motion Photo Export** — JPEG, PNG, WebP, HEIF, AVIF; motion photo follows [Google MicroVideo spec](https://developer.android.com/media/camera/motion-photo-specification)
+- **Static & Motion Photo Export** — JPEG, PNG, WebP; motion photo follows [Google MicroVideo spec](https://developer.android.com/media/camera/motion-photo-specification)
 - **Mute Audio Option** — omit audio when exporting motion photos
-- **HDR & Dolby Vision Aware** — Detects HDR10, HDR10+, HLG, Dolby Vision; tone-maps to sRGB for SDR, preserves HDR for HEIF/AVIF
-- **Configurable HDR Tone‑Mapping** — automatic / force SDR / preserve HDR / follow system setting
+- **HDR & Dolby Vision Aware** — Detects HDR10, HDR10+, HLG, Dolby Vision; tone-maps HDR frames to sRGB so exports look correct
 - **Quick‑Access Controls** — bottom toolbar lets you toggle mute, motion‑photo mode, metadata preservation and tap to cycle formats
 - **Custom File Names & Export Locations** — presets, manual input with length validation, root folders or SAF-picked custom directory
 - **Lossless Metadata Preservation** — full EXIF from source video written to exported image
@@ -178,7 +176,7 @@ Extract precise frames from any video with HDR awareness, motion photo export, a
 | Frame Extraction | `MediaMetadataRetriever` (`OPTION_CLOSEST` always) |
 | Thumbnail Timeline | `getScaledFrameAtTime` + `LazyRow` |
 | Color Space | `MediaExtractor` → `MediaFormat` color-transfer / color-standard |
-| Tone Mapping | `HdrToneMapper` + strategy enum |
+| Tone Mapping | `HdrToneMapper` (HDR sources are tone-mapped to sRGB) |
 | Metadata | `ExifInterface` (AndroidX) + `MediaMetadataRetriever` |
 | Motion Photo | `MediaMuxer` clip extraction + XMP injection (Google MicroVideo spec) |
 | Export | `MediaStore` (scoped storage), `Bitmap.compress`, optional custom folder (SAF) |

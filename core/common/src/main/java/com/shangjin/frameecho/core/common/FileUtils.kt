@@ -1,73 +1,9 @@
 package com.shangjin.frameecho.core.common
 
-import android.content.Context
-import android.net.Uri
-import android.provider.OpenableColumns
-
 /**
  * Common file utilities.
  */
 object FileUtils {
-
-    /**
-     * Get the display name of a file from its URI.
-     */
-    fun getFileName(context: Context, uri: Uri): String? {
-        return try {
-            when (uri.scheme) {
-                "content" -> {
-                    context.contentResolver.query(
-                        uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null
-                    )?.use { cursor ->
-                        if (cursor.moveToFirst()) {
-                            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                            if (nameIndex >= 0) cursor.getString(nameIndex) else null
-                        } else null
-                    }
-                }
-                "file" -> uri.lastPathSegment
-                else -> uri.lastPathSegment
-            }
-        } catch (_: SecurityException) {
-            null
-        }
-    }
-
-    /**
-     * Get file size from a URI.
-     */
-    fun getFileSize(context: Context, uri: Uri): Long {
-        return try {
-            when (uri.scheme) {
-                "content" -> {
-                    context.contentResolver.query(
-                        uri, arrayOf(OpenableColumns.SIZE), null, null, null
-                    )?.use { cursor ->
-                        if (cursor.moveToFirst()) {
-                            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                            if (sizeIndex >= 0) cursor.getLong(sizeIndex) else 0L
-                        } else 0L
-                    } ?: 0L
-                }
-                "file" -> uri.path?.let { java.io.File(it).length() } ?: 0L
-                else -> 0L
-            }
-        } catch (_: SecurityException) {
-            0L
-        }
-    }
-
-    /**
-     * Check if a URI points to a video file based on MIME type.
-     */
-    fun isVideoUri(context: Context, uri: Uri): Boolean {
-        return try {
-            val mimeType = context.contentResolver.getType(uri) ?: return false
-            mimeType.startsWith("video/")
-        } catch (_: SecurityException) {
-            false
-        }
-    }
 
     /**
      * Format file size to human-readable string.

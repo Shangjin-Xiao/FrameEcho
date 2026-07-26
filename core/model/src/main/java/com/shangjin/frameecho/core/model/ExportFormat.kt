@@ -26,17 +26,5 @@ enum class ExportFormat(
         mimeType = "image/webp",
         supportsAlpha = true,
         supportsHdr = false
-    ),
-    HEIF(
-        extension = "heic",
-        mimeType = "image/heif",
-        supportsAlpha = false,
-        supportsHdr = true
-    ),
-    AVIF(
-        extension = "avif",
-        mimeType = "image/avif",
-        supportsAlpha = true,
-        supportsHdr = true
     )
 }
