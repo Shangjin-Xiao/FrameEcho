@@ -1,6 +1,6 @@
 首个正式发布版本。主要功能：
 - 精准抽帧
-- 多格式导出：支持 JPEG、PNG、WebP、HEIF、AVIF
+- 高画质 JPEG 图像导出
 - 动态照片：遵循 Google MicroVideo 规范
 - HDR 支持：自动检测 HDR10、HDR10+、HLG、杜比视界
 - 无损 EXIF 保留

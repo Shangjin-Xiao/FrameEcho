@@ -5,7 +5,7 @@
 ## 一、本次已完成的修改(供了解背景)
 
 1. **移除 HEIF/AVIF 导出**(设备兼容性差、始终无法稳定工作):
-   - `ExportFormat` 只保留 JPEG / PNG / WEBP;
+   - `ExportFormat` 统一使用 JPEG 格式；
    - `FrameExporter` 删除了 HeifWriter/AvifWriter 探测和编码路径;
    - 删除 `androidx.heifwriter` 依赖、manifest 中的 `tools:overrideLibrary`、相关字符串(3 个语言)、README/fastlane 描述、相关测试。
 2. **移除 HDR 色调映射策略设置**:HEIF/AVIF 移除后剩余格式全部是 SDR,四种策略(AUTO/FORCE_SDR/PRESERVE_HDR/SYSTEM)行为完全一致,该设置成为摆设。现在 HDR 源一律 tone-map 到 sRGB,`HdrToneMapStrategy` 枚举、`ExportConfig.hdrToneMap`、设置面板中的选择器和 8×3 条字符串均已删除。

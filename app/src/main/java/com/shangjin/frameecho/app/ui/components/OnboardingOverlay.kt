@@ -392,15 +392,7 @@ fun rememberAllOnboardingSteps(): List<OnboardingStep> {
                 bubblePosition = BubblePosition.TOP,
                 verticalBias = 0.4f
             ),
-            // Step 5: Format quick-cycle
-            OnboardingStep(
-                key = "format",
-                titleResId = R.string.onboarding_format_title,
-                descriptionResId = R.string.onboarding_format_desc,
-                icon = Icons.Default.Settings,
-                bubblePosition = BubblePosition.TOP,
-                verticalBias = 0.4f
-            ),
+
             // Step 6: Seek slider & fine scrubbing
             OnboardingStep(
                 key = "slider",

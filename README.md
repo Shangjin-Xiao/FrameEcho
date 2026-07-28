@@ -26,10 +26,10 @@ Android 视频抽帧应用
 ## ✨ 功能特性
 
 - **帧级精准定位** — 始终使用 `MediaMetadataRetriever.OPTION_CLOSEST` 精确定位帧，不回退至关键帧搜索
-- **静态图 & 动态照片导出** — 支持 JPEG、PNG、WebP；动态照片遵循 [Google MicroVideo 规范](https://developer.android.com/media/camera/motion-photo-specification)（XMP + 附加 MP4）
+- **静态图 & 动态照片导出** — 标准高画质 JPEG 导出；动态照片遵循 [Google MicroVideo 规范](https://developer.android.com/media/camera/motion-photo-specification)（XMP + 附加 MP4）
 - **音频静音选项** — 导出动态照片时可选择不包含音频
 - **HDR & 杜比视界感知** — 通过 `MediaExtractor` 检测 HDR10、HDR10+、HLG 和杜比视界；为 SDR 导出进行色调映射，避免 HDR 视频截帧偏色
-- **快速切换控制栏** — 底栏一键切换静音、动图模式、元数据保留，并可单击格式按钮循环格式
+- **快速切换控制栏** — 底栏一键切换静音、动图模式、元数据保留
 - **自定义命名 & 导出目录** — 支持预设名称、手动输入、自定义文件夹（可通过 SAF 选择），带有效长度检查
 - **无损元数据保存** — 从源视频读取完整 EXIF（拍摄日期、GPS、设备信息、ISO、曝光、焦距），通过 `androidx.exifinterface` 写入导出图片
 - **品质优先默认值** — 默认 100% 质量、原始分辨率；用户可自行调整
