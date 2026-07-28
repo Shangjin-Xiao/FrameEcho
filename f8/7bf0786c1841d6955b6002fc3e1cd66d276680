@@ -1,0 +1,42 @@
+app/src/main/java/com/shangjin/frameecho/app/ui/player/PlayerScreen.kt
+  s_24c5db3fe390d7::t_1b647f59f96627 308,315-316,320-321
+app/src/main/res/values-zh-rCN/strings.xml
+  s_24c5db3fe390d7::t_eb84e0d51b9980 20
+core/media/src/test/java/com/shangjin/frameecho/core/media/export/FrameExporterTest.kt
+  s_24c5db3fe390d7::t_f8c8a097b1cff8 10-11
+  s_24c5db3fe390d7::t_16ffc72631fd05 79-107
+app/src/main/res/values-ja/strings.xml
+  s_24c5db3fe390d7::t_d74e6619630069 20
+core/model/src/main/java/com/shangjin/frameecho/core/model/ExportResult.kt
+  s_24c5db3fe390d7::t_1dbf66b87b7eec 21-27
+app/src/main/res/values/strings.xml
+  s_24c5db3fe390d7::t_90dfb9940180e9 20
+core/media/src/main/java/com/shangjin/frameecho/core/media/export/FrameExporter.kt
+  s_24c5db3fe390d7::t_136b547a46e59f 596-603,609-610
+  s_24c5db3fe390d7::t_a6ecf7a71f9fb5 1661-1676
+  s_24c5db3fe390d7::t_90a59450e4d58a 744-1173
+  s_24c5db3fe390d7::t_d6e8848a2004fe 321,326-330,332-349
+  s_24c5db3fe390d7::t_29aff217faa691 7,9
+  s_24c5db3fe390d7::t_72d263267335c0 497
+  s_24c5db3fe390d7::t_54671fedf92f1c 331
+  s_24c5db3fe390d7::t_6a782fb450acdb 531-561
+  s_24c5db3fe390d7::t_77d379f7ce0da0 264-265
+  s_24c5db3fe390d7::t_af36a99769ed0e 54-62
+  s_24c5db3fe390d7::t_4f7f819c52c529 663-670,672-681,683-706,708-710,712-715,717-720
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "f87bf0786c1841d6955b6002fc3e1cd66d276680",
+  "prompts": {},
+  "sessions": {
+    "s_24c5db3fe390d7": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_05924023dffemPqShuG2xR0Db1",
+        "model": "kimi-k3"
+      },
+      "human_author": "上晋 <84136399+Shangjin-Xiao@users.noreply.github.com>"
+    }
+  }
+}
