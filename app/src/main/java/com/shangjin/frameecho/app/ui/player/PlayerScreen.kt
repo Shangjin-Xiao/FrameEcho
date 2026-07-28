@@ -394,7 +394,6 @@ fun PlayerScreen(
                         isMuted = uiState.isMuted,
                         motionPhotoEnabled = uiState.exportConfig.motionPhoto,
                         preserveMetadata = uiState.exportConfig.preserveMetadata,
-                        formatExtension = uiState.exportConfig.format.extension,
                         isCapturing = uiState.isCapturing,
                         isExporting = uiState.isExporting,
                         onToggleMute = { viewModel.setMuted(!uiState.isMuted) },
@@ -412,7 +411,6 @@ fun PlayerScreen(
                                 )
                             )
                         },
-                        onCycleFormat = { viewModel.cycleFormat() },
                         onCapture = {
                             if (uiState.isCapturing || uiState.isExporting) return@PlayerBottomBar
                             val requiresLegacyWritePermission =

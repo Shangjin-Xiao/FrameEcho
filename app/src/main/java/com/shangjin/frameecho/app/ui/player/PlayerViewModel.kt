@@ -434,17 +434,7 @@ class PlayerViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Cycle through available export formats.
-     */
-    fun cycleFormat() {
-        val formats = com.shangjin.frameecho.core.model.ExportFormat.entries
-        val currentIndex = formats.indexOf(_uiState.value.exportConfig.format)
-        val nextIndex = (currentIndex + 1) % formats.size
-        _uiState.update {
-            it.copy(exportConfig = it.exportConfig.copy(format = formats[nextIndex]))
-        }
-    }
+
 
     // ── Export ───────────────────────────────────────────────────────────
 

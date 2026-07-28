@@ -14,17 +14,5 @@ enum class ExportFormat(
         mimeType = "image/jpeg",
         supportsAlpha = false,
         supportsHdr = false
-    ),
-    PNG(
-        extension = "png",
-        mimeType = "image/png",
-        supportsAlpha = true,
-        supportsHdr = false
-    ),
-    WEBP(
-        extension = "webp",
-        mimeType = "image/webp",
-        supportsAlpha = true,
-        supportsHdr = false
     )
 }

@@ -173,12 +173,7 @@ class FrameExporter(private val context: Context) {
         var finalBitmap: Bitmap? = null
         var outputUri: Uri? = null
         try {
-            val requestedFormat = config.format
-            val effectiveConfig = if (config.format != ExportFormat.JPEG) {
-                config.copy(format = ExportFormat.JPEG)
-            } else {
-                config
-            }
+            val effectiveConfig = config
             softBitmap = ensureSoftwareBitmap(bitmap)
 
             processedBitmap = HdrToneMapper.process(
@@ -262,7 +257,7 @@ class FrameExporter(private val context: Context) {
                     format = effectiveConfig.format,
                     isMotionPhoto = true,
                     metadataPreserved = metadataPreserved,
-                    requestedFormat = if (requestedFormat != effectiveConfig.format) requestedFormat else null,
+                    requestedFormat = null,
                     audioDropped = !config.muteAudio && clipResult.hasAudioTrack && !clipResult.audioIncluded
                 )
             } finally {
@@ -1644,34 +1639,11 @@ class FrameExporter(private val context: Context) {
     }
 }
 
-/**
- * Convert ExportFormat to Android's Bitmap.CompressFormat.
- */
 internal fun ExportFormat.toCompressFormat(
     quality: Int,
     sdkInt: Int = Build.VERSION.SDK_INT
 ): Bitmap.CompressFormat {
-    return when (this) {
-        ExportFormat.JPEG -> Bitmap.CompressFormat.JPEG
-        ExportFormat.PNG -> Bitmap.CompressFormat.PNG
-        ExportFormat.WEBP -> getWebpCompressFormat(quality, sdkInt)
-    }
-}
-
-@SuppressLint("NewApi")
-private fun getWebpCompressFormat(quality: Int, sdkInt: Int): Bitmap.CompressFormat {
-    return if (sdkInt >= Build.VERSION_CODES.R) {
-        getWebpCompressFormatApi30(quality)
-    } else {
-        @Suppress("DEPRECATION")
-        Bitmap.CompressFormat.WEBP
-    }
-}
-
-@RequiresApi(Build.VERSION_CODES.R)
-private fun getWebpCompressFormatApi30(quality: Int): Bitmap.CompressFormat {
-    return if (quality >= 100) Bitmap.CompressFormat.WEBP_LOSSLESS
-    else Bitmap.CompressFormat.WEBP_LOSSY
+    return Bitmap.CompressFormat.JPEG
 }
 
 /**

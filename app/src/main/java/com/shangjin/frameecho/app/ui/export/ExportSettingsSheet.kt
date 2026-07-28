@@ -91,29 +91,6 @@ fun ExportSettingsSheet(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── Format section ──
-            SettingSectionHeader(
-                icon = { Icon(Icons.Outlined.Image, contentDescription = null) },
-                title = stringResource(R.string.format)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            FormatSelector(
-                selected = config.format,
-                onSelect = { onConfigChange(config.copy(format = it)) }
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = when (config.format) {
-                    ExportFormat.JPEG -> stringResource(R.string.format_desc_jpeg)
-                    ExportFormat.PNG -> stringResource(R.string.format_desc_png)
-                    ExportFormat.WEBP -> stringResource(R.string.format_desc_webp)
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            SectionDivider()
-
             // ── File name section ──
             SettingSectionHeader(
                 icon = { Icon(Icons.Outlined.Restore, contentDescription = null) },
@@ -207,36 +184,24 @@ fun ExportSettingsSheet(
             // ── Quality section ──
             SettingSectionHeader(
                 icon = { Icon(Icons.Outlined.HighQuality, contentDescription = null) },
-                title = if (config.format == ExportFormat.PNG)
-                    stringResource(R.string.quality)
-                else
-                    "${stringResource(R.string.quality)}: ${config.quality}%"
+                title = "${stringResource(R.string.quality)}: ${config.quality}%"
             )
-            if (config.format == ExportFormat.PNG) {
-                Text(
-                    text = stringResource(R.string.quality_not_applicable_png),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
+            Slider(
+                value = config.quality.toFloat(),
+                onValueChange = { onConfigChange(config.copy(quality = it.roundToInt().coerceIn(1, 100))) },
+                valueRange = 1f..100f,
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
-            } else {
-                Slider(
-                    value = config.quality.toFloat(),
-                    onValueChange = { onConfigChange(config.copy(quality = it.roundToInt().coerceIn(1, 100))) },
-                    valueRange = 1f..100f,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = SliderDefaults.colors(
-                        thumbColor = MaterialTheme.colorScheme.primary,
-                        activeTrackColor = MaterialTheme.colorScheme.primary,
-                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                )
-                Text(
-                    text = stringResource(R.string.quality_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            )
+            Text(
+                text = stringResource(R.string.quality_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             // ── Motion photo duration (only when enabled) ──
             if (config.motionPhoto) {
@@ -425,29 +390,5 @@ private fun SectionDivider() {
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun FormatSelector(
-    selected: ExportFormat,
-    onSelect: (ExportFormat) -> Unit
-) {
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        ExportFormat.entries.forEach { format ->
-            val isSelected = format == selected
-            FilterChip(
-                selected = isSelected,
-                onClick = { onSelect(format) },
-                label = { Text(format.extension.uppercase()) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            )
-        }
-    }
 }
 
