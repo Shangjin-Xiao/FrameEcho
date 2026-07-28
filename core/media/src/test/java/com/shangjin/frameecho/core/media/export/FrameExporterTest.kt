@@ -7,6 +7,8 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -72,6 +74,35 @@ class FrameExporterTest {
             assertTrue("MotionPhoto item must have Padding=\"0\"",
                 xmpString.contains("Item:Semantic=\"MotionPhoto\" Item:Length=\"1000\" Item:Padding=\"0\""))
         }
+    }
+
+    @Test
+    fun `isMuxerCompatibleAudioMime accepts only AAC and AMR for MP4 muxing`() {
+        // Directly embeddable by MediaMuxer
+        assertTrue(isMuxerCompatibleAudioMime("audio/mp4a-latm"))
+        assertTrue(isMuxerCompatibleAudioMime("audio/3gpp"))
+        assertTrue(isMuxerCompatibleAudioMime("audio/amr-wb"))
+
+        // Must be transcoded to AAC first — LPCM is what Sony XAVC cameras
+        // (ZV-1 etc.) record, the rest appear in various camera/phone videos.
+        assertFalse(isMuxerCompatibleAudioMime("audio/raw"))
+        assertFalse(isMuxerCompatibleAudioMime("audio/ac3"))
+        assertFalse(isMuxerCompatibleAudioMime("audio/eac3"))
+        assertFalse(isMuxerCompatibleAudioMime("audio/mpeg"))
+        assertFalse(isMuxerCompatibleAudioMime("audio/opus"))
+        assertFalse(isMuxerCompatibleAudioMime("audio/flac"))
+        assertFalse(isMuxerCompatibleAudioMime(null))
+    }
+
+    @Test
+    fun `pcmFramesToUs converts per-channel frame counts to microseconds`() {
+        assertEquals(1_000_000L, pcmFramesToUs(48_000L, 48_000))
+        assertEquals(500_000L, pcmFramesToUs(24_000L, 48_000))
+        assertEquals(21_333L, pcmFramesToUs(1024L, 48_000)) // one AAC frame at 48 kHz
+        assertEquals(0L, pcmFramesToUs(0L, 48_000))
+        // Invalid sample rate must not divide by zero
+        assertEquals(0L, pcmFramesToUs(100L, 0))
+        assertEquals(0L, pcmFramesToUs(100L, -1))
     }
 
     @Test

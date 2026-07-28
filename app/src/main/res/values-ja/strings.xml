@@ -17,6 +17,8 @@
     <string name="hdr_info">HDR: %1$s</string>
     <string name="export_success_message">正常にエクスポートされました！</string>
     <string name="export_format_fallback_message">%2$sとしてエクスポートされました（%1$sはこのデバイスでサポートされていません）</string>
+    <string name="export_audio_dropped_message">音声なしでエクスポートされました</string>
+    <string name="export_fallback_audio_dropped_message">%2$sとしてエクスポートされました（%1$sはこのデバイスでサポートされていません）。音声は含まれていません</string>
     <string name="mute">ミュート</string>
     <string name="unmute">ミュート解除</string>
     <string name="play">再生</string>
