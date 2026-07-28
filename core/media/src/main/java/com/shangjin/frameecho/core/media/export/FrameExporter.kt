@@ -60,6 +60,7 @@ class FrameExporter(private val context: Context) {
         private const val MAX_CODEC_IDLE_ROUNDS = 600
         private const val AUDIO_COPY_CHUNK_BYTES = 64 * 1024
         private const val PCM_READ_BUFFER_BYTES = 256 * 1024
+        private const val MAX_PCM_BUFFER_BYTES = 15 * 1024 * 1024
     }
 
     /**
@@ -262,7 +263,7 @@ class FrameExporter(private val context: Context) {
                     isMotionPhoto = true,
                     metadataPreserved = metadataPreserved,
                     requestedFormat = if (requestedFormat != effectiveConfig.format) requestedFormat else null,
-                    audioDropped = !config.muteAudio && !clipResult.audioIncluded
+                    audioDropped = !config.muteAudio && clipResult.hasAudioTrack && !clipResult.audioIncluded
                 )
             } finally {
                 videoClipFile.delete()
@@ -324,7 +325,8 @@ class FrameExporter(private val context: Context) {
         val file: java.io.File,
         val actualStartUs: Long,
         val videoSamplesWritten: Int,
-        val audioIncluded: Boolean
+        val audioIncluded: Boolean,
+        val hasAudioTrack: Boolean = false
     )
 
     /** One encoded AAC packet ready for [MediaMuxer.writeSampleData]. */
@@ -495,6 +497,7 @@ class FrameExporter(private val context: Context) {
         var actualStartUs = startUs
         var videoSamplesWritten = 0
         var audioSamplesWritten = 0
+        var audioTrackIndex = -1
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(context, videoUri, null)
@@ -502,7 +505,6 @@ class FrameExporter(private val context: Context) {
             // Select only the video track for extraction to avoid multi-track
             // interleaving issues that cause seek/timestamp problems on some devices.
             var videoTrackIndex = -1
-            var audioTrackIndex = -1
             var videoFormat: MediaFormat? = null
             var audioFormat: MediaFormat? = null
             var maxInputSize = 1024 * 1024
@@ -745,7 +747,8 @@ class FrameExporter(private val context: Context) {
             file = tempFile,
             actualStartUs = actualStartUs,
             videoSamplesWritten = videoSamplesWritten,
-            audioIncluded = audioSamplesWritten > 0
+            audioIncluded = audioSamplesWritten > 0,
+            hasAudioTrack = audioTrackIndex >= 0
         )
     }
 
@@ -804,15 +807,16 @@ class FrameExporter(private val context: Context) {
             return null
         }
         // Only 16-bit PCM can feed the AAC encoder directly.
+        // Requires KEY_PCM_ENCODING to be explicitly present and ENCODING_PCM_16BIT.
+        // If KEY_PCM_ENCODING is missing or non-16BIT, fall back to MediaCodec decoding.
         if (audioFormat.containsKey(MediaFormat.KEY_PCM_ENCODING) &&
-            audioFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) != AudioFormat.ENCODING_PCM_16BIT
+            audioFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) == AudioFormat.ENCODING_PCM_16BIT
         ) {
-            LogUtils.w(context, "FrameExporter", "Non-16-bit PCM track, skipping audio")
-            return null
+            extractor.seekTo(clipStartUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+            return readPcmFromExtractor(extractor, clipStartUs, endUs, sampleRate, channelCount)
         }
 
-        extractor.seekTo(clipStartUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-        return readPcmFromExtractor(extractor, clipStartUs, endUs, sampleRate, channelCount)
+        return decodeCompressedToPcm(extractor, audioFormat, clipStartUs, endUs)
     }
 
     /**
@@ -863,6 +867,11 @@ class FrameExporter(private val context: Context) {
                 val n = minOf(chunk.size, buffer.remaining())
                 buffer.get(chunk, 0, n)
                 pcmStream.write(chunk, 0, n)
+                if (pcmStream.size() > MAX_PCM_BUFFER_BYTES) {
+                    LogUtils.w(context, "FrameExporter",
+                        "PCM buffer size exceeded limit (${pcmStream.size()} > $MAX_PCM_BUFFER_BYTES), aborting read")
+                    return PcmAudio(ByteArray(0), sampleRate, channelCount, basePtsUs)
+                }
             }
             extractor.advance()
         }
@@ -965,12 +974,24 @@ class FrameExporter(private val context: Context) {
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         progressed = true
                         val newFormat = decoder.outputFormat
+                        val encoding = runCatching {
+                            newFormat.getInteger(MediaFormat.KEY_PCM_ENCODING)
+                        }.getOrNull()
+                        if (encoding != null && encoding != AudioFormat.ENCODING_PCM_16BIT) {
+                            LogUtils.w(context, "FrameExporter",
+                                "Decoder produced non-16-bit PCM ($encoding), skipping audio")
+                            return null
+                        }
                         sampleRate = runCatching {
                             newFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
                         }.getOrNull() ?: sampleRate
                         channelCount = runCatching {
                             newFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
                         }.getOrNull() ?: channelCount
+                    }
+                    @Suppress("DEPRECATION")
+                    MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED -> {
+                        progressed = true
                     }
                     MediaCodec.INFO_TRY_AGAIN_LATER -> {}
                     else -> {
@@ -991,6 +1012,11 @@ class FrameExporter(private val context: Context) {
                                     val n = minOf(chunk.size, outputBuffer.remaining())
                                     outputBuffer.get(chunk, 0, n)
                                     pcmStream.write(chunk, 0, n)
+                                    if (pcmStream.size() > MAX_PCM_BUFFER_BYTES) {
+                                        LogUtils.w(context, "FrameExporter",
+                                            "Decoded PCM buffer size exceeded limit (${pcmStream.size()} > $MAX_PCM_BUFFER_BYTES), skipping audio")
+                                        return null
+                                    }
                                 }
                             }
                         }
@@ -1116,6 +1142,10 @@ class FrameExporter(private val context: Context) {
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         progressed = true
                         outputFormat = encoder.outputFormat
+                    }
+                    @Suppress("DEPRECATION")
+                    MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED -> {
+                        progressed = true
                     }
                     MediaCodec.INFO_TRY_AGAIN_LATER -> {}
                     else -> {

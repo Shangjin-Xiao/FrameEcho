@@ -306,6 +306,7 @@ fun PlayerScreen(
     val exportSuccessMsg = stringResource(R.string.export_success_message)
     val exportFallbackMsg = stringResource(R.string.export_format_fallback_message)
     val exportAudioDroppedMsg = stringResource(R.string.export_audio_dropped_message)
+    val exportFallbackAudioDroppedMsg = stringResource(R.string.export_fallback_audio_dropped_message)
     val viewActionLabel = stringResource(R.string.snackbar_action_view)
 
     // Show export result
@@ -313,11 +314,15 @@ fun PlayerScreen(
         when (val result = uiState.exportResult) {
             is ExportResult.Success -> {
                 val message = when {
-                    result.formatFallbackOccurred -> exportFallbackMsg.format(
+                    result.formatFallbackOccurred && result.audioDropped -> exportFallbackAudioDroppedMsg.format(
                         result.requestedFormat!!.name,
                         result.format.name
                     )
                     result.audioDropped -> exportAudioDroppedMsg
+                    result.formatFallbackOccurred -> exportFallbackMsg.format(
+                        result.requestedFormat!!.name,
+                        result.format.name
+                    )
                     else -> exportSuccessMsg
                 }
                 val snackbarResult = snackbarHostState.showSnackbar(

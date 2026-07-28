@@ -17,7 +17,8 @@
     <string name="hdr_info">HDR: %1$s</string>
     <string name="export_success_message">Exported successfully!</string>
     <string name="export_format_fallback_message">Exported as %2$s (%1$s is not supported on this device)</string>
-    <string name="export_audio_dropped_message">Exported without sound — the source audio format is not supported</string>
+    <string name="export_audio_dropped_message">Exported without sound</string>
+    <string name="export_fallback_audio_dropped_message">Exported as %2$s (%1$s is not supported on this device) without sound</string>
     <string name="mute">Mute</string>
     <string name="unmute">Unmute</string>
     <string name="play">Play</string>
