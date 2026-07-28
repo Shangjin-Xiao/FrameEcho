@@ -8,6 +8,11 @@ on:
         required: true
         default: '1.0.0'
         type: string
+      publish_release:
+        description: 'Automatically publish GitHub Release'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build:
@@ -60,6 +65,7 @@ jobs:
           retention-days: 30
 
       - name: Create GitHub Release
+        if: ${{ inputs.publish_release }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.version }}
