@@ -57,10 +57,11 @@ jobs:
         run: rm -f $RUNNER_TEMP/frameecho-release.jks
 
       - name: Upload Release APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frameecho-release-apk-v${{ inputs.version }}
           path: app/build/outputs/apk/release/app-release.apk
+          archive: false
           if-no-files-found: error
           retention-days: 30
 
