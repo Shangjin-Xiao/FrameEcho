@@ -175,7 +175,7 @@
             </h1>
             
             <p class="text-xl text-gray-600 mb-10 max-w-2xl mx-auto md:mx-0 leading-relaxed font-normal">
-                我们往往在事后才发现视频里藏着完美的笑容与风景。FrameEcho 帮助你极其简单地从视频中提取出那无损的一帧，并原样保存下来。
+                我们常常在事后发现视频里藏着想保留的瞬间。FrameEcho 让你从视频中提取任意一帧，并将画面和元数据原样保存下来。
             </p>
             
             <div class="flex flex-col sm:flex-row items-center gap-4 justify-center md:justify-start">
@@ -205,7 +205,7 @@
             <div class="absolute -right-2 top-12 bg-white px-5 py-3 rounded-2xl flex items-center gap-3 shadow-xl shadow-gray-200/50">
                 <span class="text-xl">✨</span>
                 <div>
-                    <p class="text-sm text-gray-900 font-bold">完美画质</p>
+                    <p class="text-sm text-gray-900 font-bold">高质量导出</p>
                 </div>
             </div>
             <div class="absolute -left-6 bottom-16 bg-white px-5 py-3 rounded-2xl flex items-center gap-3 shadow-xl shadow-gray-200/50">
@@ -232,7 +232,7 @@
                         <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
                     </div>
                     <h3 class="text-xl font-bold mb-3 text-gray-900">精准到每一帧</h3>
-                    <p class="text-gray-600 leading-relaxed font-normal">进度条终于不再难拉了。极其顺滑的按需缩略图加载，让你精准定位到自己最爱的那一帧。</p>
+                    <p class="text-gray-600 leading-relaxed font-normal">时间线按需加载缩略图，拖动播放器可实时预览画面，方便定位到目标帧后再导出。</p>
                 </div>
 
                 <!-- 亮点 2 -->
@@ -249,8 +249,8 @@
                     <div class="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 mb-6">
                         <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
                     </div>
-                    <h3 class="text-xl font-bold mb-3 text-gray-900">完美的无损画质</h3>
-                    <p class="text-gray-600 leading-relaxed font-normal">原样保留 HDR/杜比视界，完整保留拍摄时间、地点的元数据。让每一张抽出来的图片都富有故事。</p>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900">画质与元数据保留</h3>
+                    <p class="text-gray-600 leading-relaxed font-normal">支持 HDR/杜比视界色调映射，从源视频读取完整 EXIF（拍摄时间、GPS、设备信息等）并写入导出图片。</p>
                 </div>
             </div>
         </div>
@@ -272,7 +272,7 @@
                 <div class="flex-1 text-center md:text-left">
                     <h3 class="text-xl font-bold mb-3 text-gray-900">探索技术实现</h3>
                     <p class="text-gray-600 mb-5 text-sm leading-relaxed">
-                        基于 Jetpack Compose 打造。了解如何实现微秒级精准截帧、微视频规范 (MicroVideo)、HDR/杜比视界色彩映射以及无损 EXIF 信息的持久化。
+                        基于 Jetpack Compose 构建。涉及帧级精准截帧（OPTION_CLOSEST）、Google MicroVideo 动态照片规范、HDR 色调映射以及 EXIF 元数据读写。
                     </p>
                     <a href="https://github.com/Shangjin-Xiao/FrameEcho" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 text-primary font-semibold hover:underline">
                         访问 GitHub 仓库 
