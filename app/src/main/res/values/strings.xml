@@ -64,11 +64,8 @@
 
     <!-- Format descriptions -->
     <string name="format_desc_jpeg">Universal compatibility, small file size</string>
-    <string name="format_desc_png">Lossless quality, supports transparency</string>
-    <string name="format_desc_webp">Modern format, good compression with transparency</string>
 
     <!-- Quality hints -->
-    <string name="quality_not_applicable_png">PNG is always lossless — quality setting does not apply</string>
     <string name="quality_hint">Higher values produce better quality but larger files</string>
 
     <!-- HDR strategy descriptions -->
@@ -103,9 +100,6 @@
 
     <string name="onboarding_metadata_title">Preserve Metadata</string>
     <string name="onboarding_metadata_desc">Keep the original video\'s EXIF metadata (date, location, camera info) in the exported image.</string>
-
-    <string name="onboarding_format_title">Export Format</string>
-    <string name="onboarding_format_desc">Tap to cycle through formats: JPEG, PNG, WEBP. Each has different quality and compatibility trade-offs.</string>
 
     <string name="onboarding_slider_title">Seek &amp; Fine Scrubbing</string>
     <string name="onboarding_slider_desc">Drag the slider to seek. Swipe UP while dragging to enter fine scrubbing mode for frame-precise control.</string>

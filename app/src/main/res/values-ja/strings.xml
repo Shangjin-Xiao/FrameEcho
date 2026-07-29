@@ -64,11 +64,8 @@
 
     <!-- Format descriptions -->
     <string name="format_desc_jpeg">普遍的な互換性、ファイルサイズが小さい</string>
-    <string name="format_desc_png">ロスレス品質、透明度をサポート</string>
-    <string name="format_desc_webp">最新のフォーマット、透明度のある優れた圧縮</string>
 
     <!-- Quality hints -->
-    <string name="quality_not_applicable_png">PNGは常にロスレスです — 品質設定は適用されません</string>
     <string name="quality_hint">値を高くすると品質が向上しますが、ファイルサイズは大きくなります</string>
 
     <!-- HDR strategy descriptions -->
@@ -103,9 +100,6 @@
 
     <string name="onboarding_metadata_title">メタデータを保持</string>
     <string name="onboarding_metadata_desc">元のビデオのEXIFメタデータ（日付、位置、カメラ情報）をエクスポート画像に保持します。</string>
-
-    <string name="onboarding_format_title">エクスポート形式</string>
-    <string name="onboarding_format_desc">タップしてJPEG、PNG、WEBPを順番に切り替えます。各形式には画質と互換性のトレードオフがあります。</string>
 
     <string name="onboarding_slider_title">シーク＆微調整</string>
     <string name="onboarding_slider_desc">スライダーをドラッグしてシークします。ドラッグ中に上にスワイプすると微調整モードに入り、フレーム単位の精密な制御が可能です。</string>

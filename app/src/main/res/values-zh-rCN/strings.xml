@@ -64,11 +64,8 @@
 
     <!-- Format descriptions -->
     <string name="format_desc_jpeg">通用兼容，文件体积小</string>
-    <string name="format_desc_png">无损画质，支持透明通道</string>
-    <string name="format_desc_webp">现代格式，兼顾压缩率与透明通道</string>
 
     <!-- Quality hints -->
-    <string name="quality_not_applicable_png">PNG 始终为无损格式，质量设置不适用</string>
     <string name="quality_hint">数值越高画质越好，但文件越大</string>
 
     <!-- HDR strategy descriptions -->
@@ -103,9 +100,6 @@
 
     <string name="onboarding_metadata_title">保留元数据</string>
     <string name="onboarding_metadata_desc">将原始视频的 EXIF 元数据（日期、位置、相机信息等）写入导出的图片。</string>
-
-    <string name="onboarding_format_title">导出格式</string>
-    <string name="onboarding_format_desc">点击可在 JPEG、PNG、WEBP 之间循环切换。每种格式在画质与兼容性上各有优劣。</string>
 
     <string name="onboarding_slider_title">拖动与精细调节</string>
     <string name="onboarding_slider_desc">拖动进度条可快速定位。拖动时向上滑动可进入精细调节模式，实现逐帧精准控制。</string>
