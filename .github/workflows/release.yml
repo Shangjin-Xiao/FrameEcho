@@ -66,7 +66,7 @@ jobs:
           retention-days: 30
 
       - name: Create GitHub Release
-        if: ${{ inputs.publish_release }}
+        if: ${{ inputs.publish_release == true }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.version }}
