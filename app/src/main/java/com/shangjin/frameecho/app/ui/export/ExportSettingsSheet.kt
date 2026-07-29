@@ -388,5 +388,6 @@ private fun SectionDivider() {
         modifier = Modifier.padding(vertical = 16.dp),
         color = MaterialTheme.colorScheme.outlineVariant
     )
+}
 
 
