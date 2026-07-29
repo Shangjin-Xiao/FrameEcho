@@ -129,32 +129,4 @@ class PlayerViewModelTest {
             frameExtractor.extractFrameWithInfo(any(), any())
         }
     }
-
-    @Test
-    fun `cycleFormat cycles through all ExportFormat entries and wraps around`() {
-        // Initial format should be JPEG
-        assertEquals(ExportFormat.JPEG, viewModel.uiState.value.exportConfig.format)
-
-        val formats = ExportFormat.entries
-        val startIndex = formats.indexOf(ExportFormat.JPEG)
-
-        // Cycle through all formats once
-        for (i in 1 until formats.size) {
-            viewModel.cycleFormat()
-            val expectedFormat = formats[(startIndex + i) % formats.size]
-            assertEquals(
-                "Failed at cycle $i",
-                expectedFormat,
-                viewModel.uiState.value.exportConfig.format
-            )
-        }
-
-        // One more cycle should wrap around to the beginning
-        viewModel.cycleFormat()
-        assertEquals(
-            "Should wrap around to JPEG",
-            ExportFormat.JPEG,
-            viewModel.uiState.value.exportConfig.format
-        )
-    }
 }

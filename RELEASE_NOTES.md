@@ -48,7 +48,7 @@ This release brings accessibility (A11y) improvements, security hardening, and p
 
 - **精准抽帧** — 始终使用 `OPTION_CLOSEST` 精确定位帧，不回退至关键帧；拖动进度条时实时渲染缩略图时间线
 - **精细调节模式** — 拖动进度条时向上滑动，进入逐帧精细控制模式，毫秒级精度定位
-- **多格式导出** — 支持 JPEG、PNG、WebP、HEIF、AVIF，可调整压缩质量与分辨率上限
+- **图像导出** — 高画质 JPEG 格式，可调整压缩质量与分辨率上限
 - **动态照片** — 遵循 Google MicroVideo 规范，将帧前后的视频片段嵌入静态图片，在相册中长按即可播放
 - **HDR 支持** — 自动检测 HDR10、HDR10+、HLG、杜比视界，提供四种色调映射策略（自动 / SDR / 保留 HDR / 系统）
 - **无损 EXIF 保留** — 将源视频的拍摄时间、GPS、设备信息、ISO、曝光时间、焦距完整写入导出图片
@@ -71,7 +71,7 @@ First stable release.
 
 - **Frame-precise extraction** — Always uses `OPTION_CLOSEST`, never falls back to keyframe seeking; real-time thumbnail timeline while scrubbing
 - **Fine-scrubbing mode** — Swipe up on the seek bar to enter frame-by-frame precision control
-- **Multi-format export** — JPEG, PNG, WebP, HEIF, AVIF with adjustable quality and optional resolution cap
+- **Image export** — High-quality JPEG format with adjustable quality and optional resolution cap
 - **Motion Photos** — Google MicroVideo spec compliant; exported photos come alive with a long press in your gallery
 - **HDR-aware** — Detects HDR10, HDR10+, HLG, Dolby Vision; four tone-mapping strategies (Auto / SDR / Preserve HDR / System)
 - **Lossless EXIF** — Capture time, GPS, device info, ISO, exposure time, focal length all preserved in the exported image

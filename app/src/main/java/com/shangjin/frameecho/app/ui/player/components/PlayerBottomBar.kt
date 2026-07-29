@@ -38,13 +38,11 @@ fun PlayerBottomBar(
     isMuted: Boolean,
     motionPhotoEnabled: Boolean,
     preserveMetadata: Boolean,
-    formatExtension: String,
     isCapturing: Boolean,
     isExporting: Boolean,
     onToggleMute: () -> Unit,
     onToggleMotionPhoto: () -> Unit,
     onToggleMetadata: () -> Unit,
-    onCycleFormat: () -> Unit,
     onCapture: () -> Unit
 ) {
     BottomAppBar(
@@ -121,19 +119,6 @@ fun PlayerBottomBar(
                             if (preserveMetadata) R.string.metadata_on
                             else R.string.metadata_off
                         )
-                    )
-                }
-            }
-            // Format quick-cycle
-            val formatDesc = stringResource(R.string.format)
-            TooltipWrapper(label = formatDesc) {
-                FilledTonalIconButton(
-                    onClick = onCycleFormat,
-                    modifier = Modifier.semantics { contentDescription = formatDesc }
-                ) {
-                    Text(
-                        text = formatExtension.uppercase(),
-                        style = MaterialTheme.typography.labelSmall
                     )
                 }
             }

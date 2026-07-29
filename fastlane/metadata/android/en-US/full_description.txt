@@ -12,7 +12,7 @@ Key features
 - Still image and motion photo export.
 - HDR-aware processing for HDR10, HDR10+, HLG, and Dolby Vision sources.
 - EXIF metadata preservation where supported.
-- Multiple output formats: JPEG, PNG, WebP.
+- Output format: High-quality JPEG.
 - Adjustable quality and resolution limits.
 
 Designed for speed and clarity
