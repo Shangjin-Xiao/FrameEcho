@@ -24,12 +24,14 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -40,22 +42,40 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ScrubbingModeParameters
 import androidx.media3.exoplayer.SeekParameters
 import com.shangjin.frameecho.R
 import com.shangjin.frameecho.app.ui.components.TooltipWrapper
 import com.shangjin.frameecho.core.common.FileUtils
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlin.math.abs
+
+/** A full-width drag in fine-scrub mode covers this much video, whatever the clip length. */
+private const val FINE_SCRUB_SPAN_MS = 2_000L
+
+/** Coarse seeks closer together than this are skipped — they land on the same keyframe anyway. */
+private const val COARSE_SEEK_MIN_DELTA_MS = 40L
+
+/** How long the finger has to hold still before the preview is refined to the exact frame. */
+private const val SETTLE_REFINE_DELAY_MS = 90L
 
 /**
  * Playback controls: seek slider with fine scrubbing, play/pause, skip forward/back,
  * and frame-step buttons.
  *
- * Fine scrubbing improvements for frame-precise capture:
- * - Calculates frame duration from video frame rate for true frame-level granularity
- * - Uses adaptive sensitivity based on video duration
- * - Uses EXACT seek parameters during fine scrubbing for frame-accurate preview
+ * Seeking is a two-tier pipeline (see the seek LaunchedEffect below): a moving finger
+ * only triggers cheap keyframe seeks, and the exact frame is decoded once the drag
+ * settles. Fine-scrub mode seeks exactly right away — its deltas are frame-sized, so
+ * the decoder is already next to the target.
+ *
+ * Fine scrubbing details:
+ * - Frame duration comes from the video frame rate, so deltas snap to real frames
+ * - Sensitivity is derived from FINE_SCRUB_SPAN_MS, so the gesture feels identical
+ *   on a 5-second clip and on an hour-long one
  * - Shows frame number alongside time position in the scrubbing indicator
  * - Provides haptic feedback on frame boundary crossings
  * - Slider thumb stays in sync during fine-scrub mode
@@ -99,17 +119,45 @@ fun PlaybackControls(
         if (videoFrameRate > 0f) (1000.0 / videoFrameRate).toLong().coerceAtLeast(1L) else 0L
     }
 
-    // Adaptive fine-scrub sensitivity: inversely proportional to duration.
-    // Short videos need very low sensitivity; long videos can be faster.
-    // Formula: 500 / durationMs, clamped to [0.02, 0.20]
+    // Fine-scrub sensitivity: a full-width drag always spans FINE_SCRUB_SPAN_MS of video,
+    // so precision per pixel is the same on a short clip and on a long one.
     val fineScrubSensitivity = remember(durationMs) {
         if (durationMs <= 0) 0.10f
-        else (500f / durationMs).coerceIn(0.02f, 0.20f)
+        else (FINE_SCRUB_SPAN_MS.toFloat() / durationMs).coerceIn(0.0005f, 1f)
     }
 
     val previewPositionMs = sliderTargetPositionMs ?: currentPositionMs
     // Track last frame boundary for haptic feedback on frame crossings
     var lastFrameBoundaryMs by remember { mutableLongStateOf(0L) }
+
+    // Seek pipeline. Issuing an EXACT seek per pointer event is what makes a drag feel
+    // laggy: every one of them decodes from the preceding keyframe up to the target, and
+    // the preview falls further behind the thumb the longer you drag. Instead, a moving
+    // finger gets CLOSEST_SYNC (one keyframe decode, near-instant) and the exact frame is
+    // decoded only once the drag settles — collectLatest cancels the pending refine as
+    // soon as the target moves again.
+    LaunchedEffect(isSliderDragging, isFineScrubbing) {
+        if (!isSliderDragging) return@LaunchedEffect
+        var lastCoarseSeekMs = Long.MIN_VALUE
+        snapshotFlow { sliderTargetPositionMs }
+            .filterNotNull()
+            .distinctUntilChanged()
+            .collectLatest { target ->
+                if (isFineScrubbing) {
+                    exoPlayer.setSeekParameters(SeekParameters.EXACT)
+                    exoPlayer.seekTo(target)
+                    return@collectLatest
+                }
+                if (abs(target - lastCoarseSeekMs) >= COARSE_SEEK_MIN_DELTA_MS) {
+                    lastCoarseSeekMs = target
+                    exoPlayer.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+                    exoPlayer.seekTo(target)
+                }
+                delay(SETTLE_REFINE_DELAY_MS)
+                exoPlayer.setSeekParameters(SeekParameters.EXACT)
+                exoPlayer.seekTo(target)
+            }
+    }
 
     Surface(
         tonalElevation = 1.dp,
@@ -146,8 +194,6 @@ fun PlaybackControls(
                                     lastFrameBoundaryMs = if (frameDurationMs > 0L) {
                                         (anchorMs / frameDurationMs) * frameDurationMs
                                     } else anchorMs
-                                    // Switch to EXACT seeking for frame-accurate preview
-                                    exoPlayer.setSeekParameters(SeekParameters.EXACT)
                                 } else if (isFineScrubbing && verticalOffset < fineScrubThresholdPx / 2) {
                                     isFineScrubbing = false
                                     hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -156,8 +202,6 @@ fun PlaybackControls(
                                     localSliderFraction = if (durationMs > 0) {
                                         currentTarget.toFloat() / durationMs.toFloat()
                                     } else 0f
-                                    // Revert to CLOSEST_SYNC for normal scrubbing speed
-                                    exoPlayer.setSeekParameters(SeekParameters.CLOSEST_SYNC)
                                 }
                                 if (event.changes.none { it.pressed }) {
                                     break
@@ -191,19 +235,13 @@ fun PlaybackControls(
                             if (wasPlayingBeforeSliderDrag) {
                                 exoPlayer.pause()
                             }
-                            // Scrubbing mode: Media3 1.8+ optimization
-                            val scrubbingParams = ScrubbingModeParameters.Builder()
-                                .setDisabledTrackTypes(setOf(C.TRACK_TYPE_AUDIO))
-                                .setShouldIncreaseCodecOperatingRate(true)
-                                .setShouldEnableDynamicScheduling(true)
-                                .setAllowSkippingMediaCodecFlush(true)
-                                .setUseDecodeOnlyFlag(true)
-                                .build()
-                            exoPlayer.setScrubbingModeParameters(scrubbingParams)
+                            // Scrubbing mode coalesces queued seeks and keeps the codec hot.
+                            // DEFAULT already disables audio/metadata tracks, raises the codec
+                            // operating rate, enables dynamic scheduling, skips codec flushes
+                            // and keyframe resets, and uses the decode-only flag. Seek
+                            // tolerance is left unset so our own SeekParameters apply.
+                            exoPlayer.setScrubbingModeParameters(ScrubbingModeParameters.DEFAULT)
                             exoPlayer.setScrubbingModeEnabled(true)
-                            // Use EXACT seeking for smooth frame-accurate preview.
-                            // ScrubbingModeParameters optimizations keep it performant.
-                            exoPlayer.setSeekParameters(SeekParameters.EXACT)
                             sliderDragStartFraction = clampedFraction
                             sliderDragStartPositionMs = currentPositionMs
                             fineScrubOffsetMs = 0L
@@ -238,8 +276,8 @@ fun PlaybackControls(
                         }
 
                         fineScrubOffsetMs = newPosition - sliderDragStartPositionMs
+                        // The seek itself is driven by the pipeline above, off the gesture thread.
                         sliderTargetPositionMs = newPosition
-                        exoPlayer.seekTo(newPosition)
                         onScrubStateChanged(true, newPosition)
                     },
                     onValueChangeFinished = {

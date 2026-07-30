@@ -264,7 +264,10 @@ fun PlayerScreen(
                 newPosition: Player.PositionInfo,
                 reason: Int
             ) {
-                if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                // While scrubbing, every seek fires a discontinuity. Pushing those into
+                // the ViewModel would recompose the whole screen per pointer event, and
+                // the position shown during a drag comes from the scrub preview anyway.
+                if (reason == Player.DISCONTINUITY_REASON_SEEK && !isScrubbing) {
                     viewModel.updatePosition(newPosition.positionMs)
                 }
             }
@@ -497,10 +500,18 @@ fun PlayerScreen(
 
                             ThumbnailTimeline(
                                 thumbnailCount = uiState.thumbnailCount,
-                                currentPositionFraction = if (uiState.durationMs > 0) {
-                                    val posMs = if (isScrubbing) scrubPreviewPositionMs else uiState.currentPositionMs
-                                    (posMs.toFloat() / uiState.durationMs).coerceIn(0f, 1f)
-                                } else 0f,
+                                // Passed as a lambda so the position read happens inside
+                                // ThumbnailTimeline: a scrub then recomposes only the strip
+                                // instead of this whole Column.
+                                currentPositionFraction = {
+                                    val durationMs = uiState.durationMs
+                                    if (durationMs > 0) {
+                                        val posMs =
+                                            if (isScrubbing) scrubPreviewPositionMs else uiState.currentPositionMs
+                                        (posMs.toFloat() / durationMs).coerceIn(0f, 1f)
+                                    } else 0f
+                                },
+                                isScrubbing = isScrubbing,
                                 getThumbnail = viewModel::getThumbnail,
                                 requestThumbnail = viewModel::requestThumbnail,
                                 onThumbnailClick = onThumbnailClick,

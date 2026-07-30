@@ -18,6 +18,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -44,17 +45,29 @@ import kotlin.math.roundToInt
 @Composable
 fun ThumbnailTimeline(
     thumbnailCount: Int,
-    currentPositionFraction: Float,
+    /** Playback position as a 0..1 fraction. A lambda so the state read stays in this composable. */
+    currentPositionFraction: () -> Float,
     getThumbnail: (index: Int) -> Bitmap?,
     requestThumbnail: (index: Int) -> Unit,
     onThumbnailClick: (index: Int) -> Unit,
+    /** True while the user is dragging the seek bar — auto-scroll then follows without animating. */
+    isScrubbing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
-    val selectedIndex = if (thumbnailCount > 0) {
-        ((thumbnailCount - 1) * currentPositionFraction).roundToInt().coerceIn(0, thumbnailCount - 1)
-    } else {
-        0
+    val fractionProvider by rememberUpdatedState(currentPositionFraction)
+    // derivedStateOf keeps the position read inside this composable and only invalidates
+    // when the selected thumbnail actually changes, not on every pixel of a scrub.
+    val selectedIndex by remember(thumbnailCount) {
+        derivedStateOf {
+            if (thumbnailCount > 0) {
+                ((thumbnailCount - 1) * fractionProvider())
+                    .roundToInt()
+                    .coerceIn(0, thumbnailCount - 1)
+            } else {
+                0
+            }
+        }
     }
 
     // Use rememberUpdatedState to ensure the latest lambdas are used
@@ -71,8 +84,10 @@ fun ThumbnailTimeline(
         )
 
         // Auto-scroll to follow playback position smoothly.
-        // Uses animateScrollToItem for natural visual movement.
-        LaunchedEffect(selectedIndex, thumbnailCount) {
+        // Uses animateScrollToItem for natural visual movement, except while scrubbing:
+        // a drag changes the target many times a second, so animating would mean starting
+        // and cancelling a scroll animation per pointer event.
+        LaunchedEffect(selectedIndex, thumbnailCount, isScrubbing) {
             if (!listState.isScrollInProgress && thumbnailCount > 0) {
                 val targetIndex = selectedIndex
                 // Center the target in the viewport by computing an offset
@@ -82,7 +97,7 @@ fun ThumbnailTimeline(
                     ((viewportWidth - itemWidth) / 2).coerceAtLeast(0)
                 } else 0
                 val currentIndex = listState.firstVisibleItemIndex
-                if (abs(targetIndex - currentIndex) <= 1) {
+                if (isScrubbing || abs(targetIndex - currentIndex) <= 1) {
                     listState.scrollToItem(targetIndex.coerceAtLeast(0), -offset)
                 } else {
                     listState.animateScrollToItem(targetIndex.coerceAtLeast(0), -offset)
