@@ -2,7 +2,11 @@
 
 package com.shangjin.frameecho.app.ui.player.components
 
+import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.media3.common.util.UnstableApi
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -58,6 +62,38 @@ import com.shangjin.frameecho.R
 import kotlinx.coroutines.delay
 
 /**
+ * Draws the scrub preview frame over the video surface.
+ *
+ * Its own composable so that a new preview frame — which arrives many times per drag —
+ * only invalidates this leaf, and it mirrors the surface's zoom/pan so the preview lines
+ * up with what it is covering.
+ */
+@Composable
+private fun ScrubPreviewOverlay(
+    preview: () -> Bitmap?,
+    scale: () -> Float,
+    offsetX: () -> Float,
+    offsetY: () -> Float
+) {
+    val bitmap = preview() ?: return
+    if (bitmap.isRecycled) return
+    val imageBitmap = remember(bitmap) { bitmap.asImageBitmap() }
+    Image(
+        bitmap = imageBitmap,
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                scaleX = scale()
+                scaleY = scale()
+                translationX = offsetX()
+                translationY = offsetY()
+            }
+    )
+}
+
+/**
  * Video surface with gesture handling (tap-to-play/pause, pinch-to-zoom, pan).
  *
  * Also renders overlays for:
@@ -76,6 +112,12 @@ fun VideoSurface(
     showCaptureFlash: Boolean,
     onTogglePlayPause: () -> Unit,
     onCancelExport: () -> Unit,
+    /**
+     * Preview frame to show instead of the live surface while scrubbing, or null.
+     * A lambda so the (frequently changing) bitmap is only read inside the leaf
+     * composable that draws it, rather than recomposing this whole surface.
+     */
+    scrubPreview: () -> Bitmap? = { null },
     modifier: Modifier = Modifier
 ) {
     // Zoom and pan state
@@ -204,6 +246,16 @@ fun VideoSurface(
                     translationX = videoOffsetX
                     translationY = videoOffsetY
                 }
+        )
+
+        // Scrub preview: while the finger is moving, the frame under it is decoded by a
+        // separate extractor and drawn here, so the playback decoder is left alone. The
+        // real surface takes over once the drag settles and the exact seek has rendered.
+        ScrubPreviewOverlay(
+            preview = scrubPreview,
+            scale = { videoScale },
+            offsetX = { videoOffsetX },
+            offsetY = { videoOffsetY }
         )
 
         // Loading/exporting overlay

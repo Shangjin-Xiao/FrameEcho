@@ -100,8 +100,16 @@ fun PlaybackControls(
     onDragStarted: () -> Unit,
     /** Called when slider drag ends */
     onDragEnded: () -> Unit,
-    /** Provides the current scrub state to the parent (for thumbnail timeline sync) */
-    onScrubStateChanged: (isScrubbing: Boolean, previewPositionMs: Long) -> Unit,
+    /** Provides the current scrub state to the parent (thumbnail timeline sync, preview) */
+    onScrubStateChanged: (isScrubbing: Boolean, previewPositionMs: Long, isFine: Boolean) -> Unit,
+    /**
+     * Whether a preview frame is currently covering the video surface. While it is, coarse
+     * drag movements don't seek the player at all — the preview is what the user sees, and
+     * seeking underneath it would just make the decoder fight the extractor for no gain.
+     */
+    isScrubPreviewLive: () -> Boolean = { false },
+    /** Called when a frame-exact seek is issued, so the caller can retire the preview. */
+    onExactSeekIssued: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val hapticFeedback = LocalHapticFeedback.current
@@ -145,12 +153,18 @@ fun PlaybackControls(
     // Track last frame boundary for haptic feedback on frame crossings
     var lastFrameBoundaryMs by remember { mutableLongStateOf(0L) }
 
-    // Seek pipeline. Issuing an EXACT seek per pointer event is what makes a drag feel
-    // laggy: every one of them decodes from the preceding keyframe up to the target, and
-    // the preview falls further behind the thumb the longer you drag. Instead, a moving
-    // finger gets CLOSEST_SYNC (one keyframe decode, near-instant) and the exact frame is
-    // decoded only once the drag settles — collectLatest cancels the pending refine as
-    // soon as the target moves again.
+    // Seek pipeline. Issuing an exact seek per pointer event is what makes a drag feel
+    // laggy: each one decodes from the preceding keyframe up to the target, so the picture
+    // falls further behind the thumb the longer you drag. Three tiers instead:
+    //
+    //  - coarse drag with a live preview → don't seek the player at all; the extractor's
+    //    preview is what's on screen (how YouTube, Play Movies and NewPipe do it)
+    //  - coarse drag without a preview (extraction unsupported or not warmed up yet) →
+    //    CLOSEST_SYNC, one keyframe decode, near-instant
+    //  - finger settles, or fine scrub → EXACT, the frame the user is actually choosing
+    //
+    // collectLatest cancels the pending refine the moment the target moves again, so a
+    // moving finger never pays for an exact seek.
     LaunchedEffect(isSliderDragging, isFineScrubbing) {
         if (!isSliderDragging) return@LaunchedEffect
         var lastCoarseSeekMs = Long.MIN_VALUE
@@ -159,11 +173,16 @@ fun PlaybackControls(
             .distinctUntilChanged()
             .collectLatest { target ->
                 if (isFineScrubbing) {
+                    // Fine scrub is the precision tool: deltas are frame-sized, so the
+                    // decoder is already next to the target and exact costs almost nothing.
                     exoPlayer.setSeekParameters(SeekParameters.EXACT)
                     exoPlayer.seekTo(target)
+                    onExactSeekIssued()
                     return@collectLatest
                 }
-                if (abs(target - lastCoarseSeekMs) >= COARSE_SEEK_MIN_DELTA_MS) {
+                if (!isScrubPreviewLive() &&
+                    abs(target - lastCoarseSeekMs) >= COARSE_SEEK_MIN_DELTA_MS
+                ) {
                     lastCoarseSeekMs = target
                     exoPlayer.setSeekParameters(SeekParameters.CLOSEST_SYNC)
                     exoPlayer.seekTo(target)
@@ -171,6 +190,7 @@ fun PlaybackControls(
                 delay(SETTLE_REFINE_DELAY_MS)
                 exoPlayer.setSeekParameters(SeekParameters.EXACT)
                 exoPlayer.seekTo(target)
+                onExactSeekIssued()
             }
     }
 
@@ -303,7 +323,7 @@ fun PlaybackControls(
                         fineScrubOffsetMs = newPosition - sliderDragStartPositionMs
                         // The seek itself is driven by the pipeline above, off the gesture thread.
                         sliderTargetPositionMs = newPosition
-                        onScrubStateChanged(true, newPosition)
+                        onScrubStateChanged(true, newPosition, isFineScrubbing)
                     },
                     onValueChangeFinished = {
                         val finalPosition = sliderTargetPositionMs ?: currentPositionMs
@@ -312,11 +332,12 @@ fun PlaybackControls(
                         exoPlayer.setScrubbingModeEnabled(false)
                         onUpdatePosition(finalPosition)
                         exoPlayer.seekTo(finalPosition)
+                        onExactSeekIssued()
                         isSliderDragging = false
                         isFineScrubbing = false
                         fineScrubOffsetMs = 0L
                         sliderTargetPositionMs = null
-                        onScrubStateChanged(false, finalPosition)
+                        onScrubStateChanged(false, finalPosition, false)
                         onDragEnded()
                         if (wasPlayingBeforeSliderDrag && !isExporting) {
                             exoPlayer.play()

@@ -185,6 +185,24 @@ fun PlayerScreen(
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubPreviewPositionMs by remember { mutableLongStateOf(0L) }
 
+    // Preview frame drawn over the surface while coarse-scrubbing. Collected without `by`
+    // so this composable never reads the value — only VideoSurface does, via a lambda.
+    val scrubPreviewState = viewModel.scrubPreview.collectAsStateWithLifecycle()
+    // True between issuing a frame-exact seek and the player actually rendering it. The
+    // preview is held until then, otherwise retiring it would flash the pre-seek frame.
+    var awaitingSettledFrame by remember { mutableStateOf(false) }
+
+    // Safety net for the above: a seek to a position the player is already at renders no
+    // new frame, so onRenderedFirstFrame may never come. Retire the preview regardless
+    // rather than leaving it stuck over the video.
+    LaunchedEffect(awaitingSettledFrame) {
+        if (awaitingSettledFrame) {
+            delay(600L)
+            awaitingSettledFrame = false
+            viewModel.clearScrubPreview()
+        }
+    }
+
     // Capture flash effect
     var showCaptureFlash by remember { mutableStateOf(false) }
 
@@ -269,6 +287,15 @@ fun PlayerScreen(
                 // the position shown during a drag comes from the scrub preview anyway.
                 if (reason == Player.DISCONTINUITY_REASON_SEEK && !isScrubbing) {
                     viewModel.updatePosition(newPosition.positionMs)
+                }
+            }
+
+            override fun onRenderedFirstFrame() {
+                // Fires after every seek once the new frame is on screen — the cue to
+                // hand the surface back and drop the preview overlay.
+                if (awaitingSettledFrame) {
+                    awaitingSettledFrame = false
+                    viewModel.clearScrubPreview()
                 }
             }
 
@@ -453,6 +480,7 @@ fun PlayerScreen(
                             if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
                         },
                         onCancelExport = { viewModel.cancelExport() },
+                        scrubPreview = { scrubPreviewState.value },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
@@ -473,12 +501,26 @@ fun PlayerScreen(
                             if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
                         },
                         onSeekTo = { exoPlayer.seekTo(it) },
-                        onDragStarted = { /* reserved for future use */ },
-                        onDragEnded = { /* reserved for future use */ },
-                        onScrubStateChanged = { scrubbing, posMs ->
+                        // Warm the preview decoding session up while the finger is still
+                        // on its way, so the first preview lands as early as possible.
+                        onDragStarted = { viewModel.beginScrubPreview() },
+                        onDragEnded = { /* preview retires when the final seek renders */ },
+                        onScrubStateChanged = { scrubbing, posMs, isFine ->
                             isScrubbing = scrubbing
                             scrubPreviewPositionMs = posMs
-                        }
+                            // Coarse drag wants speed, so it gets the extractor's preview.
+                            // Fine scrub wants the exact frame, which only the real decoder
+                            // can give — drop the preview and let it show through.
+                            if (scrubbing && !isFine) {
+                                // Moving again — cancel the pending hand-back to the surface.
+                                awaitingSettledFrame = false
+                                viewModel.requestScrubPreview(posMs)
+                            } else if (isFine && scrubPreviewState.value != null) {
+                                viewModel.clearScrubPreview()
+                            }
+                        },
+                        isScrubPreviewLive = { scrubPreviewState.value != null },
+                        onExactSeekIssued = { awaitingSettledFrame = true }
                     )
 
                     // Thumbnail timeline strip
