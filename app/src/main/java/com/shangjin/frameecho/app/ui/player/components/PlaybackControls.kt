@@ -42,6 +42,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ScrubbingModeParameters
 import androidx.media3.exoplayer.SeekParameters
@@ -54,8 +55,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlin.math.abs
 
-/** A full-width drag in fine-scrub mode covers this much video, whatever the clip length. */
-private const val FINE_SCRUB_SPAN_MS = 2_000L
+/** A full-width drag in fine-scrub mode covers this many video frames. */
+private const val FINE_SCRUB_FRAMES_PER_DRAG = 20
+
+/** Fine-scrub span used when the frame rate is unknown and frames can't be counted. */
+private const val FINE_SCRUB_FALLBACK_SPAN_MS = 500L
 
 /** Coarse seeks closer together than this are skipped — they land on the same keyframe anyway. */
 private const val COARSE_SEEK_MIN_DELTA_MS = 40L
@@ -74,8 +78,8 @@ private const val SETTLE_REFINE_DELAY_MS = 90L
  *
  * Fine scrubbing details:
  * - Frame duration comes from the video frame rate, so deltas snap to real frames
- * - Sensitivity is derived from FINE_SCRUB_SPAN_MS, so the gesture feels identical
- *   on a 5-second clip and on an hour-long one
+ * - Sensitivity is counted in frames, so one frame costs the same finger travel on a
+ *   5-second clip and on an hour-long one
  * - Shows frame number alongside time position in the scrubbing indicator
  * - Provides haptic feedback on frame boundary crossings
  * - Slider thumb stays in sync during fine-scrub mode
@@ -119,11 +123,22 @@ fun PlaybackControls(
         if (videoFrameRate > 0f) (1000.0 / videoFrameRate).toLong().coerceAtLeast(1L) else 0L
     }
 
-    // Fine-scrub sensitivity: a full-width drag always spans FINE_SCRUB_SPAN_MS of video,
-    // so precision per pixel is the same on a short clip and on a long one.
-    val fineScrubSensitivity = remember(durationMs) {
-        if (durationMs <= 0) 0.10f
-        else (FINE_SCRUB_SPAN_MS.toFloat() / durationMs).coerceIn(0.0005f, 1f)
+    // Fine-scrub sensitivity: a full-width drag covers FINE_SCRUB_FRAMES_PER_DRAG frames, so
+    // one frame always costs the same finger travel whatever the clip length or frame rate.
+    // The previous formula (500 / durationMs, floored at 0.02) only got that far on clips
+    // under ~25s — the floor meant an hour-long video moved 72s per drag, which is not fine
+    // scrubbing at all. 20 frames is ~660ms at 30fps, i.e. the short-clip feel it already had.
+    val fineScrubSensitivity = remember(durationMs, frameDurationMs) {
+        if (durationMs <= 0) {
+            0.10f
+        } else {
+            val spanMs = if (frameDurationMs > 0L) {
+                frameDurationMs * FINE_SCRUB_FRAMES_PER_DRAG
+            } else {
+                FINE_SCRUB_FALLBACK_SPAN_MS
+            }
+            (spanMs.toFloat() / durationMs).coerceIn(0.0002f, 1f)
+        }
     }
 
     val previewPositionMs = sliderTargetPositionMs ?: currentPositionMs
@@ -235,12 +250,22 @@ fun PlaybackControls(
                             if (wasPlayingBeforeSliderDrag) {
                                 exoPlayer.pause()
                             }
-                            // Scrubbing mode coalesces queued seeks and keeps the codec hot.
-                            // DEFAULT already disables audio/metadata tracks, raises the codec
-                            // operating rate, enables dynamic scheduling, skips codec flushes
-                            // and keyframe resets, and uses the decode-only flag. Seek
-                            // tolerance is left unset so our own SeekParameters apply.
-                            exoPlayer.setScrubbingModeParameters(ScrubbingModeParameters.DEFAULT)
+                            // Scrubbing mode: Media3 1.8+ optimization. Every flag is spelled
+                            // out rather than relying on the library defaults, so a future
+                            // Media3 release can't quietly turn one of them off. Fractional
+                            // seek tolerance is deliberately left unset — setting it would
+                            // override the SeekParameters the seek pipeline above chooses.
+                            val scrubbingParams = ScrubbingModeParameters.Builder()
+                                .setDisabledTrackTypes(
+                                    setOf(C.TRACK_TYPE_AUDIO, C.TRACK_TYPE_METADATA)
+                                )
+                                .setShouldIncreaseCodecOperatingRate(true)
+                                .setShouldEnableDynamicScheduling(true)
+                                .setAllowSkippingMediaCodecFlush(true)
+                                .setAllowSkippingKeyFrameReset(true)
+                                .setUseDecodeOnlyFlag(true)
+                                .build()
+                            exoPlayer.setScrubbingModeParameters(scrubbingParams)
                             exoPlayer.setScrubbingModeEnabled(true)
                             sliderDragStartFraction = clampedFraction
                             sliderDragStartPositionMs = currentPositionMs
