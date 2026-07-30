@@ -1,0 +1,46 @@
+docs/tailwind-input.css
+  s_17e28dd3981351::t_a89d16258a97ad 3-7
+docs/en.html
+  s_17e28dd3981351::t_4be7dfe95c1e17 125-156,158-160,162
+  s_17e28dd3981351::t_cb6177d340f5f3 231
+  s_17e28dd3981351::t_47ae150501317e 330
+  s_17e28dd3981351::t_7b2a7659bda16a 27
+  s_17e28dd3981351::t_5f9e58d9bdbac5 55,57-59
+  s_17e28dd3981351::t_7e0f4a7804fbca 170-174,178
+  s_17e28dd3981351::t_e38ee43597cafd 289-320,322
+  s_17e28dd3981351::t_6d2876095d973b 355-357
+  s_17e28dd3981351::t_6325f1fe55e591 37
+docs/style.css
+  s_17e28dd3981351::t_d8e65adeef69ab 2
+docs/index.html
+  s_17e28dd3981351::t_643a040ad53dce 202,204,209,211
+  s_17e28dd3981351::t_cfe5a99bf097c0 55,57-59
+  s_17e28dd3981351::t_f6729868c17c17 36-37
+  s_17e28dd3981351::t_6dab7d90d93ab2 19,22-23,27,29
+  s_17e28dd3981351::t_ef11bde8df3f18 234
+  s_17e28dd3981351::t_c984a5f0ba65da 292-323
+  s_17e28dd3981351::t_4583a5f8c6eac2 325
+  s_17e28dd3981351::t_b958b63b0932a3 6
+  s_17e28dd3981351::t_812b1e9bce60e6 333
+  s_17e28dd3981351::t_34a1600f49ed34 340
+  s_17e28dd3981351::t_fe9270cc70e934 173-177,181
+  s_17e28dd3981351::t_c42f5f48b07b0f 358-360
+  s_17e28dd3981351::t_8da687114f1d52 366
+  s_17e28dd3981351::t_aeefe2ceaf63dc 128-159,161-163,165
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "8b69929141810778bceaa6ed4daac2ce7a027283",
+  "prompts": {},
+  "sessions": {
+    "s_17e28dd3981351": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f8534643-b5de-4cb5-be1a-88e28a1f8055",
+        "model": "claude-opus-5"
+      },
+      "human_author": "上晋 <84136399+Shangjin-Xiao@users.noreply.github.com>"
+    }
+  }
+}
