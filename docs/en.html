@@ -24,6 +24,7 @@
     <meta property="og:description" content="High-performance Android video frame capture with HDR awareness, motion photo export, and full EXIF preservation.">
     <meta property="og:url" content="https://frameecho.shangjinyun.cn/en.html">
     <meta property="og:image" content="https://frameecho.shangjinyun.cn/icon.png">
+    <meta property="og:image:alt" content="FrameEcho app icon">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="FrameEcho - Freeze Every Frame You Love">
     <meta name="twitter:description" content="High-performance Android video frame capture with HDR awareness, motion photo export, and full EXIF preservation.">
@@ -33,6 +34,7 @@
             "@context": "https://schema.org",
             "@type": "SoftwareApplication",
             "name": "FrameEcho",
+            "alternateName": "帧迹",
             "applicationCategory": "MultimediaApplication",
             "operatingSystem": "Android",
             "inLanguage": "en",
@@ -50,10 +52,11 @@
     <!-- Alpine.js -->
     <script defer src="alpine.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
-        
+        /* System font stack: no render-blocking web font request */
         body {
-            font-family: 'Inter', 'Noto Sans SC', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+                         'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', Roboto,
+                         'Helvetica Neue', Arial, sans-serif;
             background-color: #FAFAFA;
             color: #111827;
             -webkit-font-smoothing: antialiased;
@@ -119,18 +122,44 @@
             background-image: radial-gradient(#E5E7EB 1px, transparent 1px);
             background-size: 32px 32px;
         }
-    </style>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#2563EB',
-                    }
-                }
-            }
+
+        /* Phone frame for app screenshots */
+        .device-frame {
+            background: #fff;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: 2rem;
+            padding: 0.5rem;
+            box-shadow: 0 20px 40px -20px rgba(15, 23, 42, 0.25);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
-    </script>
+        .device-frame:hover { transform: translateY(-6px); }
+        .device-frame img {
+            border-radius: 1.6rem;
+            display: block;
+            width: 100%;
+        }
+
+        /* Keyboard accessibility: consistent focus ring */
+        a:focus-visible,
+        button:focus-visible {
+            outline: 2px solid #2563EB;
+            outline-offset: 3px;
+            border-radius: 4px;
+        }
+
+        /* Respect the OS "reduce motion" preference */
+        @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+            .feature-card:hover,
+            .device-frame:hover,
+            .btn-primary:hover { transform: none; }
+        }
+    </style>
 </head>
 <body class="bg-pattern" x-data="appData()">
 
@@ -138,11 +167,15 @@
     <nav class="fixed w-full z-50 top-0 transition-all duration-300 glass-nav" :class="{ 'py-3': scrolled, 'py-5': !scrolled }">
         <div class="max-w-6xl mx-auto px-6 flex justify-between items-center">
             <div class="flex items-center gap-3 cursor-pointer" @click="window.scrollTo({top: 0, behavior: 'smooth'})">
-                <img src="icon.png" alt="FrameEcho Logo" class="w-10 h-10 rounded-xl shadow-sm border border-gray-100 object-cover">
-                <span class="font-bold text-xl tracking-tight text-gray-900">FrameEcho</span>
+                <img src="icon.png" alt="FrameEcho logo" width="40" height="40" class="w-10 h-10 rounded-xl shadow-sm border border-gray-100 object-cover">
+                <span class="flex items-baseline gap-2">
+                    <span class="font-bold text-xl tracking-tight text-gray-900">FrameEcho</span>
+                    <span class="hidden sm:inline text-sm font-semibold tracking-wide text-gray-400">帧迹</span>
+                </span>
             </div>
             <div class="flex items-center gap-6 text-sm font-medium">
                 <a href="#features" class="hidden sm:block text-gray-600 hover:text-primary transition-colors">Features</a>
+                <a href="#screenshots" class="hidden sm:block text-gray-600 hover:text-primary transition-colors">Screenshots</a>
                 <a href="#developer" class="hidden sm:block text-gray-600 hover:text-primary transition-colors">For Developers</a>
                 <a href="index.html" class="text-gray-600 hover:text-primary transition-colors font-medium">中文</a>
                 <a :href="downloadUrl" class="bg-gray-900 hover:bg-black text-white px-5 py-2.5 rounded-full shadow-md transition-all flex items-center gap-2">
@@ -195,7 +228,7 @@
         <!-- Right visual -->
         <div class="flex-1 w-full max-w-md relative z-0 flex justify-center">
             <div class="icon-container w-4/5 aspect-square bg-gradient-to-tr from-gray-100 to-white p-2">
-                <img src="icon.png" alt="FrameEcho Preview" class="w-full h-full object-cover rounded-[22%]" />
+                <img src="icon.png" alt="FrameEcho app icon" width="512" height="512" class="w-full h-full object-cover rounded-[22%]" />
             </div>
             
             <!-- Floating badges -->
@@ -253,8 +286,40 @@
         </div>
     </section>
 
+    <!-- Screenshots -->
+    <section id="screenshots" class="py-24 bg-gray-50 border-t border-gray-100">
+        <div class="max-w-6xl mx-auto px-6">
+            <div class="text-center mb-16">
+                <span class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2 block">SCREENSHOTS</span>
+                <h2 class="text-3xl md:text-4xl font-black mb-4 text-gray-900">A Look Inside</h2>
+                <p class="text-lg text-gray-500 max-w-2xl mx-auto font-medium">Import a video, land on the frame, export it. Three steps.</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-8 md:gap-10">
+                <figure>
+                    <div class="device-frame">
+                        <img src="screenshot_empty.jpg" alt="FrameEcho home screen: pick a video to start" width="1220" height="2435" loading="lazy" decoding="async">
+                    </div>
+                    <figcaption class="mt-5 text-center text-sm text-gray-500 font-medium">Pick a video, start right away</figcaption>
+                </figure>
+                <figure>
+                    <div class="device-frame">
+                        <img src="screenshot_player.jpg" alt="FrameEcho player: timeline thumbnails and frame stepping" width="1220" height="2545" loading="lazy" decoding="async">
+                    </div>
+                    <figcaption class="mt-5 text-center text-sm text-gray-500 font-medium">Scrub the timeline, frame by frame</figcaption>
+                </figure>
+                <figure>
+                    <div class="device-frame">
+                        <img src="screenshot_export.jpg" alt="FrameEcho export settings: format, quality and metadata options" width="1220" height="2491" loading="lazy" decoding="async">
+                    </div>
+                    <figcaption class="mt-5 text-center text-sm text-gray-500 font-medium">Export exactly how you want</figcaption>
+                </figure>
+            </div>
+        </div>
+    </section>
+
     <!-- Developer section -->
-    <section id="developer" class="py-24 bg-gray-50">
+    <section id="developer" class="py-24 bg-white border-t border-gray-100">
         <div class="max-w-4xl mx-auto px-6">
             <div class="text-center mb-12">
                 <span class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2 block">FOR DEVELOPERS</span>
@@ -262,7 +327,7 @@
                 <p class="text-lg text-gray-500 mx-auto font-medium">No hidden code — developers are welcome to build together.</p>
             </div>
             
-            <div class="bg-white p-8 md:p-10 rounded-3xl border border-gray-200 flex flex-col md:flex-row items-center gap-8 shadow-sm">
+            <div class="bg-gray-50 p-8 md:p-10 rounded-3xl border border-gray-200 flex flex-col md:flex-row items-center gap-8 shadow-sm">
                 <div class="w-20 h-20 rounded-full bg-gray-900 text-white flex items-center justify-center flex-shrink-0">
                     <svg class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path></svg>
                 </div>
@@ -287,6 +352,9 @@
                 <div class="flex flex-col items-center md:items-start">
                     <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Resources & Links</p>
                     <div class="flex flex-wrap justify-center md:justify-start gap-x-6 gap-y-2 text-sm font-medium text-gray-500">
+                        <a href="https://github.com/Shangjin-Xiao/FrameEcho" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors duration-200">GitHub</a>
+                        <a href="https://github.com/Shangjin-Xiao/FrameEcho/releases" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors duration-200">Releases</a>
+                        <a href="index.html" class="hover:text-primary transition-colors duration-200">中文</a>
                         <a href="https://shangjinyun.cn/" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors duration-200">Homepage</a>
                         <a href="https://note.shangjinyun.cn/" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors duration-200">ThoughtEcho</a>
                     </div>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FrameEcho - 定格你所爱的每一帧</title>
+    <title>帧迹 FrameEcho - 定格你所爱的每一帧</title>
     <meta name="robots" content="index,follow,max-image-preview:large">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="icon" type="image/svg+xml" href="icon.svg">
@@ -16,23 +16,25 @@
     <link rel="alternate" hreflang="en" href="https://frameecho.shangjinyun.cn/en.html">
     <link rel="alternate" hreflang="x-default" href="https://frameecho.shangjinyun.cn/">
     <meta name="theme-color" content="#BAE6FD">
-    <meta name="description" content="从视频中精准提取高质量画面，保存动态照片，保留所有珍贵记忆。">
+    <meta name="description" content="帧迹（FrameEcho）是一款 Android 视频抽帧应用：从视频中精准提取高质量画面，保存动态照片，保留完整 EXIF 元数据。">
     <meta property="og:type" content="website">
     <meta property="og:locale" content="zh_CN">
-    <meta property="og:site_name" content="FrameEcho">
-    <meta property="og:title" content="FrameEcho - 定格你所爱的每一帧">
+    <meta property="og:site_name" content="帧迹 FrameEcho">
+    <meta property="og:title" content="帧迹 FrameEcho - 定格你所爱的每一帧">
     <meta property="og:description" content="Android 高性能视频抽帧应用，支持 HDR 感知、动态照片导出与完整 EXIF 保留。">
     <meta property="og:url" content="https://frameecho.shangjinyun.cn/">
     <meta property="og:image" content="https://frameecho.shangjinyun.cn/icon.png">
+    <meta property="og:image:alt" content="帧迹 FrameEcho 应用图标">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="FrameEcho - 定格你所爱的每一帧">
+    <meta name="twitter:title" content="帧迹 FrameEcho - 定格你所爱的每一帧">
     <meta name="twitter:description" content="Android 高性能视频抽帧应用，支持 HDR 感知、动态照片导出与完整 EXIF 保留。">
     <meta name="twitter:image" content="https://frameecho.shangjinyun.cn/icon.png">
     <script type="application/ld+json">
         {
             "@context": "https://schema.org",
             "@type": "SoftwareApplication",
-            "name": "FrameEcho",
+            "name": "帧迹",
+            "alternateName": "FrameEcho",
             "applicationCategory": "MultimediaApplication",
             "operatingSystem": "Android",
             "inLanguage": "zh-CN",
@@ -50,10 +52,11 @@
     <!-- Alpine.js -->
     <script defer src="alpine.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
-        
+        /* 使用系统字体栈：国内网络下无需等待 Google Fonts，首屏不再阻塞 */
         body {
-            font-family: 'Inter', 'Noto Sans SC', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+                         'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', Roboto,
+                         'Helvetica Neue', Arial, sans-serif;
             background-color: #FAFAFA;
             color: #111827;
             -webkit-font-smoothing: antialiased;
@@ -122,18 +125,44 @@
             background-image: radial-gradient(#E5E7EB 1px, transparent 1px);
             background-size: 32px 32px;
         }
-    </style>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#2563EB',
-                    }
-                }
-            }
+
+        /* 应用截图的手机外框 */
+        .device-frame {
+            background: #fff;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: 2rem;
+            padding: 0.5rem;
+            box-shadow: 0 20px 40px -20px rgba(15, 23, 42, 0.25);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
-    </script>
+        .device-frame:hover { transform: translateY(-6px); }
+        .device-frame img {
+            border-radius: 1.6rem;
+            display: block;
+            width: 100%;
+        }
+
+        /* 键盘可访问性：统一焦点样式 */
+        a:focus-visible,
+        button:focus-visible {
+            outline: 2px solid #2563EB;
+            outline-offset: 3px;
+            border-radius: 4px;
+        }
+
+        /* 尊重系统的“减少动态效果”设置 */
+        @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+            .feature-card:hover,
+            .device-frame:hover,
+            .btn-primary:hover { transform: none; }
+        }
+    </style>
 </head>
 <body class="bg-pattern" x-data="appData()">
 
@@ -141,11 +170,15 @@
     <nav class="fixed w-full z-50 top-0 transition-all duration-300 glass-nav" :class="{ 'py-3': scrolled, 'py-5': !scrolled }">
         <div class="max-w-6xl mx-auto px-6 flex justify-between items-center">
             <div class="flex items-center gap-3 cursor-pointer" @click="window.scrollTo({top: 0, behavior: 'smooth'})">
-                <img src="icon.png" alt="FrameEcho 标志" class="w-10 h-10 rounded-xl shadow-sm border border-gray-100 object-cover">
-                <span class="font-bold text-xl tracking-tight text-gray-900">FrameEcho</span>
+                <img src="icon.png" alt="帧迹 FrameEcho 标志" width="40" height="40" class="w-10 h-10 rounded-xl shadow-sm border border-gray-100 object-cover">
+                <span class="flex items-baseline gap-2">
+                    <span class="font-bold text-xl tracking-tight text-gray-900">帧迹</span>
+                    <span class="hidden sm:inline text-sm font-semibold tracking-wide text-gray-400">FrameEcho</span>
+                </span>
             </div>
             <div class="flex items-center gap-6 text-sm font-medium">
                 <a href="#features" class="hidden sm:block text-gray-600 hover:text-primary transition-colors">探索功能</a>
+                <a href="#screenshots" class="hidden sm:block text-gray-600 hover:text-primary transition-colors">应用截图</a>
                 <a href="#developer" class="hidden sm:block text-gray-600 hover:text-primary transition-colors">开发者支持</a>
                 <a href="en.html" class="text-gray-600 hover:text-primary transition-colors font-medium">EN</a>
                 <a :href="downloadUrl" class="bg-gray-900 hover:bg-black text-white px-5 py-2.5 rounded-full shadow-md transition-all flex items-center gap-2">
@@ -166,16 +199,16 @@
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                   <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
                 </span>
-                <span>定格你所爱的每一帧</span>
+                <span>帧迹 · 定格你所爱的每一帧</span>
             </div>
-            
+
             <h1 class="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-tight mb-8 text-gray-900">
                 将视频里的瞬间<br />
                 变成<span class="gradient-text">永恒画面</span>
             </h1>
-            
+
             <p class="text-xl text-gray-600 mb-10 max-w-2xl mx-auto md:mx-0 leading-relaxed font-normal">
-                我们常常在事后发现视频里藏着想保留的瞬间。FrameEcho 让你从视频中提取任意一帧，并将画面和元数据原样保存下来。
+                我们常常在事后发现视频里藏着想保留的瞬间。帧迹（FrameEcho）让你从视频中提取任意一帧，并将画面和元数据原样保存下来。
             </p>
             
             <div class="flex flex-col sm:flex-row items-center gap-4 justify-center md:justify-start">
@@ -198,7 +231,7 @@
         <!-- 右侧视觉 -->
         <div class="flex-1 w-full max-w-md relative z-0 flex justify-center">
             <div class="icon-container w-4/5 aspect-square bg-gradient-to-tr from-gray-100 to-white p-2">
-                <img src="icon.png" alt="FrameEcho 预览" class="w-full h-full object-cover rounded-[22%]" />
+                <img src="icon.png" alt="帧迹 FrameEcho 应用图标" width="512" height="512" class="w-full h-full object-cover rounded-[22%]" />
             </div>
             
             <!-- 视觉点缀 -->
@@ -256,8 +289,40 @@
         </div>
     </section>
 
+    <!-- 应用截图 -->
+    <section id="screenshots" class="py-24 bg-gray-50 border-t border-gray-100">
+        <div class="max-w-6xl mx-auto px-6">
+            <div class="text-center mb-16">
+                <span class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2 block">SCREENSHOTS</span>
+                <h2 class="text-3xl md:text-4xl font-black mb-4 text-gray-900">看看帧迹长什么样</h2>
+                <p class="text-lg text-gray-500 max-w-2xl mx-auto font-medium">导入视频、逐帧定位、导出保存，三步完成。</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-8 md:gap-10">
+                <figure>
+                    <div class="device-frame">
+                        <img src="screenshot_empty.jpg" alt="帧迹主界面：选择一个视频开始" width="1220" height="2435" loading="lazy" decoding="async">
+                    </div>
+                    <figcaption class="mt-5 text-center text-sm text-gray-500 font-medium">选择视频，即刻开始</figcaption>
+                </figure>
+                <figure>
+                    <div class="device-frame">
+                        <img src="screenshot_player.jpg" alt="帧迹播放器界面：时间线缩略图与逐帧步进" width="1220" height="2545" loading="lazy" decoding="async">
+                    </div>
+                    <figcaption class="mt-5 text-center text-sm text-gray-500 font-medium">时间线拖动，逐帧定位</figcaption>
+                </figure>
+                <figure>
+                    <div class="device-frame">
+                        <img src="screenshot_export.jpg" alt="帧迹导出设置界面：格式、画质与元数据选项" width="1220" height="2491" loading="lazy" decoding="async">
+                    </div>
+                    <figcaption class="mt-5 text-center text-sm text-gray-500 font-medium">导出参数，尽在掌握</figcaption>
+                </figure>
+            </div>
+        </div>
+    </section>
+
     <!-- 面向开发者/技术细节区域 -->
-    <section id="developer" class="py-24 bg-gray-50">
+    <section id="developer" class="py-24 bg-white border-t border-gray-100">
         <div class="max-w-4xl mx-auto px-6">
             <div class="text-center mb-12">
                 <span class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2 block">FOR DEVELOPERS</span>
@@ -265,14 +330,14 @@
                 <p class="text-lg text-gray-500 mx-auto font-medium">没有任何隐藏代码，欢迎开发者共同建设。</p>
             </div>
             
-            <div class="bg-white p-8 md:p-10 rounded-3xl border border-gray-200 flex flex-col md:flex-row items-center gap-8 shadow-sm">
+            <div class="bg-gray-50 p-8 md:p-10 rounded-3xl border border-gray-200 flex flex-col md:flex-row items-center gap-8 shadow-sm">
                 <div class="w-20 h-20 rounded-full bg-gray-900 text-white flex items-center justify-center flex-shrink-0">
                     <svg class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path></svg>
                 </div>
                 <div class="flex-1 text-center md:text-left">
                     <h3 class="text-xl font-bold mb-3 text-gray-900">探索技术实现</h3>
                     <p class="text-gray-600 mb-5 text-sm leading-relaxed">
-                        基于 Jetpack Compose 构建。涉及帧级精准截帧（OPTION_CLOSEST）、Google MicroVideo 动态照片规范、HDR 色调映射以及 EXIF 元数据读写。
+                        帧迹基于 Jetpack Compose 构建。涉及帧级精准截帧（OPTION_CLOSEST）、Google MicroVideo 动态照片规范、HDR 色调映射以及 EXIF 元数据读写。
                     </p>
                     <a href="https://github.com/Shangjin-Xiao/FrameEcho" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 text-primary font-semibold hover:underline">
                         访问 GitHub 仓库 
@@ -290,12 +355,15 @@
                 <div class="flex flex-col items-center md:items-start">
                     <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">资源与链接</p>
                     <div class="flex flex-wrap justify-center md:justify-start gap-x-6 gap-y-2 text-sm font-medium text-gray-500">
+                        <a href="https://github.com/Shangjin-Xiao/FrameEcho" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors duration-200">GitHub 仓库</a>
+                        <a href="https://github.com/Shangjin-Xiao/FrameEcho/releases" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors duration-200">版本记录</a>
+                        <a href="en.html" class="hover:text-primary transition-colors duration-200">English</a>
                         <a href="https://shangjinyun.cn/" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors duration-200">个人主页</a>
                         <a href="https://note.shangjinyun.cn/" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors duration-200">ThoughtEcho</a>
                     </div>
                 </div>
                 <div class="text-center md:text-right">
-                    <p class="text-gray-400 text-sm font-medium">© <span x-text="new Date().getFullYear()"></span> FrameEcho. All Rights Reserved.</p>
+                    <p class="text-gray-400 text-sm font-medium">© <span x-text="new Date().getFullYear()"></span> 帧迹 FrameEcho. All Rights Reserved.</p>
                 </div>
             </div>
         </div>
