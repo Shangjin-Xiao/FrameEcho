@@ -1,0 +1,23 @@
+app/src/main/java/com/shangjin/frameecho/app/ui/player/components/PlaybackControls.kt
+  s_3401cad7ce087f::t_571d18fec69a81 81-82
+  s_3401cad7ce087f::t_b7d0ce543c819f 253-268
+  s_3401cad7ce087f::t_a0ce7f923c6c8a 45
+  s_3401cad7ce087f::t_1f817f6965a801 58-62
+  s_3401cad7ce087f::t_e65ce998bf6520 126-141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "2cca23c204751ad40d79f6d774dffc0336615882",
+  "prompts": {},
+  "sessions": {
+    "s_3401cad7ce087f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cd9163c7-428e-4855-a61f-a43d1aaaf8a6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "上晋 <84136399+Shangjin-Xiao@users.noreply.github.com>"
+    }
+  }
+}
