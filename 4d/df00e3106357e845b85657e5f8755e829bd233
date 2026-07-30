@@ -1,0 +1,31 @@
+app/src/main/java/com/shangjin/frameecho/app/ui/player/PlayerScreen.kt
+  s_3401cad7ce087f::t_091f4817804477 267-270
+  s_3401cad7ce087f::t_6f87569faedb80 503-514
+app/src/main/java/com/shangjin/frameecho/app/ui/components/ThumbnailTimeline.kt
+  s_3401cad7ce087f::t_931fcdff5fec62 48-49,53-54,58-70
+  s_3401cad7ce087f::t_a9dd9710490821 21
+  s_3401cad7ce087f::t_d7ea2d9f8459bb 87-90,100
+app/src/main/java/com/shangjin/frameecho/app/ui/player/components/PlaybackControls.kt
+  s_3401cad7ce087f::t_415aa2e4f362a8 238-243
+  s_3401cad7ce087f::t_dd079414e40866 51-64,70-78
+  s_3401cad7ce087f::t_ff15ec5c6a1e71 122-123,126,133-160
+  s_3401cad7ce087f::t_4be5c8215a07a5 279
+  s_3401cad7ce087f::t_e2413f78019072 27,34
+  s_3401cad7ce087f::t_be8adb71d59740 161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "4ddf00e3106357e845b85657e5f8755e829bd233",
+  "prompts": {},
+  "sessions": {
+    "s_3401cad7ce087f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cd9163c7-428e-4855-a61f-a43d1aaaf8a6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "上晋 <84136399+Shangjin-Xiao@users.noreply.github.com>"
+    }
+  }
+}
