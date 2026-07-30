@@ -1,0 +1,53 @@
+app/src/main/java/com/shangjin/frameecho/app/ui/player/components/PlaybackControls.kt
+  s_3401cad7ce087f::t_ad1f6f86a0ac4a 335,340
+  s_3401cad7ce087f::t_a919c8c49824d6 103-112
+  s_3401cad7ce087f::t_6a2eaa409b83b6 156-167,176-177,180,183-185,193
+  s_3401cad7ce087f::t_cb4de7a1709f63 326
+core/media/build.gradle.kts
+  s_3401cad7ce087f::t_bcb09d2047a40e 31-32
+app/src/main/java/com/shangjin/frameecho/app/ui/player/PlayerScreen.kt
+  s_3401cad7ce087f::t_bf14653681489b 195-205
+  s_3401cad7ce087f::t_57d1072a40b21e 188-194
+  s_3401cad7ce087f::t_7e5a306cec11d2 483
+  s_3401cad7ce087f::t_7ccb5aa0e8292c 293-301
+  s_3401cad7ce087f::t_d44e50c465a202 515-516
+  s_3401cad7ce087f::t_01eb73dc59f5ed 504-508,511-514,517-523
+core/media/src/main/java/com/shangjin/frameecho/core/media/extraction/ScrubPreviewExtractor.kt
+  s_3401cad7ce087f::t_d9c63b5f06701b 8
+  s_3401cad7ce087f::t_13f9f2f3a56457 1-7,9-64,66-123
+  s_3401cad7ce087f::t_5b918ea52c312b 65
+app/src/main/java/com/shangjin/frameecho/app/ui/player/PlayerViewModel.kt
+  s_3401cad7ce087f::t_240e3d7f61e1b6 173-174
+  s_3401cad7ce087f::t_9ea5dc66337d9c 202
+  s_3401cad7ce087f::t_a80470f7b93e18 91-99
+  s_3401cad7ce087f::t_0705466c50c2aa 369-468
+  s_3401cad7ce087f::t_30fc090225cf37 10
+  s_3401cad7ce087f::t_e3c4dd1916f280 136-143
+  s_3401cad7ce087f::t_843b78368c1233 20-21
+  s_3401cad7ce087f::t_6bd23c93a417c3 111-119
+  s_3401cad7ce087f::t_72a6a1376c3447 615-616
+app/src/main/java/com/shangjin/frameecho/app/ui/player/components/VideoSurface.kt
+  s_3401cad7ce087f::t_971f660ac48196 5,7-9
+  s_3401cad7ce087f::t_dd6563f7b80f7c 65-95
+  s_3401cad7ce087f::t_1fbd19cea67336 251-260
+  s_3401cad7ce087f::t_b518d89169b81f 115-120
+  s_3401cad7ce087f::t_b7fc7ed9ffcfd1 64
+gradle/libs.versions.toml
+  s_3401cad7ce087f::t_f4cbeaaf9d3c54 46-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "53ad825f14252b6d89aab839f263b8b001f7ce37",
+  "prompts": {},
+  "sessions": {
+    "s_3401cad7ce087f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cd9163c7-428e-4855-a61f-a43d1aaaf8a6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "上晋 <84136399+Shangjin-Xiao@users.noreply.github.com>"
+    }
+  }
+}
