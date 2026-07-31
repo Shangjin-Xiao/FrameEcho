@@ -448,6 +448,19 @@ class PlayerViewModel : ViewModel() {
                     LogUtils.w(ctx, "PlayerViewModel", "Scrub preview unavailable", e)
                 }
                 _scrubPreview.value = null
+            } finally {
+                // The worker owns the session for its whole lifetime. Without this, a
+                // worker that ends on its own — an extraction failure, or the request
+                // channel closing — would leave a dead extractor cached in the field for
+                // the next drag to pick up and keep failing on, holding its decoder and
+                // GL context until the video changed.
+                //
+                // release() is idempotent, so this and the deterministic release in
+                // releaseScrubPreview() can't conflict; whichever runs first wins.
+                extractor.release()
+                if (scrubPreviewExtractor === extractor) {
+                    scrubPreviewExtractor = null
+                }
             }
         }
     }
