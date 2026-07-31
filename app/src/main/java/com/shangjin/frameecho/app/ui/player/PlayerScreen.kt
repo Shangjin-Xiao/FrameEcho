@@ -185,6 +185,26 @@ fun PlayerScreen(
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubPreviewPositionMs by remember { mutableLongStateOf(0L) }
 
+    // Preview frame drawn over the surface while coarse-scrubbing. Collected without `by`
+    // so this composable never reads the value — only VideoSurface does, via a lambda.
+    val scrubPreviewState = viewModel.scrubPreview.collectAsStateWithLifecycle()
+    // True between issuing a frame-exact seek and the player actually rendering it. The
+    // preview is held until then, otherwise retiring it would flash the pre-seek frame.
+    var awaitingSettledFrame by remember { mutableStateOf(false) }
+
+    // Safety net for the above: a seek to a position the player is already at renders no
+    // new frame, so onRenderedFirstFrame may never come. Retire the preview regardless
+    // rather than leaving it stuck over the video. Deliberately long — a slow exact seek
+    // on a long-GOP 4K clip must be allowed to finish and report, since expiring early
+    // shows the pre-seek frame, which is the very thing the preview exists to hide.
+    LaunchedEffect(awaitingSettledFrame) {
+        if (awaitingSettledFrame) {
+            delay(1_500L)
+            awaitingSettledFrame = false
+            viewModel.clearScrubPreview()
+        }
+    }
+
     // Capture flash effect
     var showCaptureFlash by remember { mutableStateOf(false) }
 
@@ -264,8 +284,20 @@ fun PlayerScreen(
                 newPosition: Player.PositionInfo,
                 reason: Int
             ) {
-                if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                // While scrubbing, every seek fires a discontinuity. Pushing those into
+                // the ViewModel would recompose the whole screen per pointer event, and
+                // the position shown during a drag comes from the scrub preview anyway.
+                if (reason == Player.DISCONTINUITY_REASON_SEEK && !isScrubbing) {
                     viewModel.updatePosition(newPosition.positionMs)
+                }
+            }
+
+            override fun onRenderedFirstFrame() {
+                // Fires after every seek once the new frame is on screen — the cue to
+                // hand the surface back and drop the preview overlay.
+                if (awaitingSettledFrame) {
+                    awaitingSettledFrame = false
+                    viewModel.clearScrubPreview()
                 }
             }
 
@@ -450,6 +482,7 @@ fun PlayerScreen(
                             if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
                         },
                         onCancelExport = { viewModel.cancelExport() },
+                        scrubPreview = { scrubPreviewState.value },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
@@ -470,12 +503,26 @@ fun PlayerScreen(
                             if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
                         },
                         onSeekTo = { exoPlayer.seekTo(it) },
-                        onDragStarted = { /* reserved for future use */ },
-                        onDragEnded = { /* reserved for future use */ },
-                        onScrubStateChanged = { scrubbing, posMs ->
+                        // Warm the preview decoding session up while the finger is still
+                        // on its way, so the first preview lands as early as possible.
+                        onDragStarted = { viewModel.beginScrubPreview() },
+                        onDragEnded = { /* preview retires when the final seek renders */ },
+                        onScrubStateChanged = { scrubbing, posMs, isFine ->
                             isScrubbing = scrubbing
                             scrubPreviewPositionMs = posMs
-                        }
+                            // Coarse drag wants speed, so it gets the extractor's preview.
+                            // Fine scrub wants the exact frame, which only the real decoder
+                            // can give — drop the preview and let it show through.
+                            if (scrubbing && !isFine) {
+                                // Moving again — cancel the pending hand-back to the surface.
+                                awaitingSettledFrame = false
+                                viewModel.requestScrubPreview(posMs)
+                            } else if (isFine && scrubPreviewState.value != null) {
+                                viewModel.clearScrubPreview()
+                            }
+                        },
+                        isScrubPreviewLive = { scrubPreviewState.value != null },
+                        onExactSeekIssued = { awaitingSettledFrame = true }
                     )
 
                     // Thumbnail timeline strip
@@ -497,10 +544,18 @@ fun PlayerScreen(
 
                             ThumbnailTimeline(
                                 thumbnailCount = uiState.thumbnailCount,
-                                currentPositionFraction = if (uiState.durationMs > 0) {
-                                    val posMs = if (isScrubbing) scrubPreviewPositionMs else uiState.currentPositionMs
-                                    (posMs.toFloat() / uiState.durationMs).coerceIn(0f, 1f)
-                                } else 0f,
+                                // Passed as a lambda so the position read happens inside
+                                // ThumbnailTimeline: a scrub then recomposes only the strip
+                                // instead of this whole Column.
+                                currentPositionFraction = {
+                                    val durationMs = uiState.durationMs
+                                    if (durationMs > 0) {
+                                        val posMs =
+                                            if (isScrubbing) scrubPreviewPositionMs else uiState.currentPositionMs
+                                        (posMs.toFloat() / durationMs).coerceIn(0f, 1f)
+                                    } else 0f
+                                },
+                                isScrubbing = isScrubbing,
                                 getThumbnail = viewModel::getThumbnail,
                                 requestThumbnail = viewModel::requestThumbnail,
                                 onThumbnailClick = onThumbnailClick,

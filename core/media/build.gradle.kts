@@ -28,6 +28,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.common)
+    implementation(libs.androidx.media3.inspector)
+    implementation(libs.androidx.media3.effect)
     implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.documentfile)
     implementation(libs.kotlinx.coroutines.core)

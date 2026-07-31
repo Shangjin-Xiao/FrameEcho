@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shangjin.frameecho.core.media.extraction.FrameExtractor
+import com.shangjin.frameecho.core.media.extraction.ScrubPreviewExtractor
 import com.shangjin.frameecho.core.media.export.FrameExporter
 import com.shangjin.frameecho.core.media.utils.LogUtils
 import com.shangjin.frameecho.core.model.CapturedFrame
@@ -16,6 +17,8 @@ import com.shangjin.frameecho.core.model.ExportFormat
 import com.shangjin.frameecho.core.model.ExportResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -85,6 +88,15 @@ class PlayerViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
+    /**
+     * Preview frame shown over the video while the seek bar is being dragged.
+     *
+     * Deliberately kept out of [PlayerUiState]: it changes many times per drag, and folding
+     * it into the main state would recompose the whole player screen every time.
+     */
+    private val _scrubPreview = MutableStateFlow<Bitmap?>(null)
+    val scrubPreview: StateFlow<Bitmap?> = _scrubPreview.asStateFlow()
+
     private var frameExtractor: FrameExtractor? = null
     private var frameExporter: FrameExporter? = null
     private var preferencesStore: PlayerPreferencesStore? = null
@@ -95,6 +107,19 @@ class PlayerViewModel : ViewModel() {
     private var batchThumbnailJob: Job? = null
     private var captureAndSaveJob: Job? = null
     private var activeBitmapExportRefCount: Int = 0
+
+    // ── Scrub preview ───────────────────────────────────────────────────
+    private var scrubPreviewExtractor: ScrubPreviewExtractor? = null
+    private var scrubPreviewJob: Job? = null
+    private var scrubPreviewIdleJob: Job? = null
+    /** Conflated: while one frame is being extracted, only the newest target survives. */
+    private var scrubRequests: Channel<Long>? = null
+    /**
+     * Bumped whenever the preview is retired. An extraction that was already running
+     * carries the generation it started under, so its result is discarded instead of
+     * popping back over the video after the player has taken the surface back.
+     */
+    private var scrubPreviewGeneration: Int = 0
 
     companion object {
         /** Width of each thumbnail in the timeline strip (px) */
@@ -112,6 +137,14 @@ class PlayerViewModel : ViewModel() {
         }
         /** Thumbnails per batch for progressive loading */
         const val THUMBNAIL_BATCH_SIZE = 5
+
+        /**
+         * How long the preview decoding session is kept open after a drag ends.
+         * Keeping it means back-to-back drags stay instant; releasing it eventually
+         * gives the decoder and GL context back, which matters on devices with few
+         * concurrent codec instances.
+         */
+        const val SCRUB_PREVIEW_IDLE_RELEASE_MS = 10_000L
     }
 
     fun initialize(context: Context) {
@@ -141,6 +174,8 @@ class PlayerViewModel : ViewModel() {
         val canRecycleImmediately = !isAnyExportRunning()
         cancelExport()
         clearThumbnailCache()
+        // The preview session is bound to a single URI — tear it down before switching.
+        releaseScrubPreview()
 
         _uiState.update {
             it.copy(
@@ -168,6 +203,7 @@ class PlayerViewModel : ViewModel() {
         val canRecycleImmediately = !isAnyExportRunning()
         cancelExport()
         clearThumbnailCache()
+        releaseScrubPreview()
         _uiState.update {
             PlayerUiState(
                 isMuted = it.isMuted,
@@ -334,6 +370,124 @@ class PlayerViewModel : ViewModel() {
         _thumbnailCache.clear()
     }
 
+    // ── Scrub preview ───────────────────────────────────────────────────
+
+    /**
+     * Open the preview session as a drag begins.
+     *
+     * Called on drag start rather than lazily on the first frame request so the decoding
+     * session is warming up while the finger is still on its way.
+     */
+    fun beginScrubPreview() {
+        scrubPreviewIdleJob?.cancel()
+        scrubPreviewIdleJob = null
+        // Drop whatever the last drag left behind. A leftover frame would both show the
+        // wrong moment and, because the UI treats a live preview as "no need to seek the
+        // player", keep the surface frozen until the first fresh frame arrives.
+        scrubPreviewGeneration++
+        _scrubPreview.value = null
+        startScrubPreviewWorker()
+    }
+
+    /**
+     * Ask for a preview at [positionMs]. Never blocks and never queues up: if an
+     * extraction is already running, this replaces whatever target was waiting behind it,
+     * so the preview always heads for where the finger is now.
+     */
+    fun requestScrubPreview(positionMs: Long) {
+        startScrubPreviewWorker()
+        scrubRequests?.trySend(positionMs)
+    }
+
+    /**
+     * Drop the preview overlay, revealing the real (now exactly seeked) video surface.
+     * The decoding session stays open for [SCRUB_PREVIEW_IDLE_RELEASE_MS] in case the
+     * user drags again.
+     */
+    fun clearScrubPreview() {
+        scrubPreviewGeneration++
+        _scrubPreview.value = null
+        scrubPreviewIdleJob?.cancel()
+        scrubPreviewIdleJob = viewModelScope.launch {
+            delay(SCRUB_PREVIEW_IDLE_RELEASE_MS)
+            releaseScrubPreview()
+        }
+    }
+
+    private fun startScrubPreviewWorker() {
+        if (scrubPreviewJob?.isActive == true) return
+        val uri = _uiState.value.videoUri ?: return
+        val context = appContext ?: return
+
+        val requests = Channel<Long>(Channel.CONFLATED)
+        scrubRequests = requests
+        scrubPreviewJob = viewModelScope.launch {
+            val extractor = scrubPreviewExtractor ?: ScrubPreviewExtractor(context).also {
+                scrubPreviewExtractor = it
+            }
+            try {
+                extractor.prepare(uri)
+                // Awaiting each frame before taking the next request is what paces this:
+                // one extraction in flight, newest target wins. Firing requests faster
+                // than the decoder can serve them only builds a backlog the user then
+                // has to wait out.
+                for (positionMs in requests) {
+                    val generation = scrubPreviewGeneration
+                    val bitmap = extractor.frameAt(positionMs) ?: continue
+                    // The preview was retired while this frame was being decoded — the
+                    // player owns the surface again, so this result is no longer wanted.
+                    if (generation != scrubPreviewGeneration) continue
+                    _scrubPreview.value = bitmap
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Preview is an optimisation, not a requirement — the UI falls back to
+                // seeking the player when no preview arrives.
+                appContext?.let { ctx ->
+                    LogUtils.w(ctx, "PlayerViewModel", "Scrub preview unavailable", e)
+                }
+                _scrubPreview.value = null
+            } finally {
+                // The worker owns the session for its whole lifetime. Without this, a
+                // worker that ends on its own — an extraction failure, or the request
+                // channel closing — would leave a dead extractor cached in the field for
+                // the next drag to pick up and keep failing on, holding its decoder and
+                // GL context until the video changed.
+                //
+                // release() is idempotent, so this and the deterministic release in
+                // releaseScrubPreview() can't conflict; whichever runs first wins.
+                extractor.release()
+                if (scrubPreviewExtractor === extractor) {
+                    scrubPreviewExtractor = null
+                }
+            }
+        }
+    }
+
+    /**
+     * Preview frames are deliberately never recycled.
+     *
+     * A frame that has been published can still be referenced by a composition, or by a
+     * draw pass already in flight when the state flips — recycling it races that draw and
+     * crashes. Since API 26 (this app's minSdk) bitmap pixels live on the native heap and
+     * are freed when the Bitmap becomes unreachable, so an explicit recycle buys nothing
+     * here. They are small by construction: [ScrubPreviewExtractor] downscales to a 480px
+     * short side on the GPU, and at most a couple are reachable at a time.
+     */
+    private fun releaseScrubPreview() {
+        scrubPreviewIdleJob?.cancel()
+        scrubPreviewIdleJob = null
+        scrubRequests?.close()
+        scrubRequests = null
+        scrubPreviewJob?.cancel()
+        scrubPreviewJob = null
+        scrubPreviewExtractor?.release()
+        scrubPreviewExtractor = null
+        scrubPreviewGeneration++
+        _scrubPreview.value = null
+    }
+
     // ── Frame capture ───────────────────────────────────────────────────
 
     /**
@@ -480,6 +634,8 @@ class PlayerViewModel : ViewModel() {
         // reference is released by GC.
         // Recycle thumbnail bitmaps — no composables reference them after ViewModel destruction
         clearThumbnailCache(recycleBitmaps = true)
+        // Same for the preview session: it owns a decoder and a GL context.
+        releaseScrubPreview()
     }
 
     private fun beginBitmapExportUsage() {
