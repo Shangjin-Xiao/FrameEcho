@@ -1,5 +1,45 @@
 # Release Notes
 
+## v1.2.0
+
+> 定格你所爱的每一帧 · Freeze Every Frame You Love
+
+此版本重点提升了动态照片音频兼容性，简化并精简了导出流程与 HDR 处理，同时增强了自定义路径权限持久化与发布流水线。
+
+### 优化与改进
+
+- **动态照片音频转码** — 引入音频解码与 AAC 自动转码机制，修复 Sony ZV-1 等相机录制的 LPCM（audio/raw）及非标音频在导出动态照片时无声的问题；增加音频丢弃提示与安全回退机制
+- **导出流程精简** — 统一导出格式为高画质 JPEG，移除兼容性不佳的格式及过度设定的 HDR 策略，简化底栏与设置面板交互
+- **路径与权限持久化** — 支持 SAF 自定义文件夹 URI 的持久化记忆与自动权限校验，提升导出路径切换体验
+- **导出可靠性与安全性** — 优化导出取消响应与临时文件清理逻辑；精准反馈 EXIF 写入状态，完善权限异常提示
+- **构建与发布自动化** — 重构 GitHub Actions 自动化发布流水线，完善版本号自动注入与签名安全机制
+
+### 系统要求
+
+- Android 8.0（API 26）及以上
+
+---
+
+## v1.2.0
+
+> Freeze Every Frame You Love
+
+This release brings enhanced audio compatibility for Motion Photos, simplified export options, persistent storage permissions, and improved release pipelines.
+
+### Highlights
+
+- **Motion Photo Audio Transcoding** — Introduced audio decoding and automatic AAC encoding to fix silent Motion Photo exports from cameras recording LPCM (e.g. Sony ZV-1) or non-standard audio; added user warnings when audio cannot be preserved.
+- **Simplified Export Options** — Standardized output on high-quality JPEG and streamlined HDR processing, delivering a faster and cleaner user experience.
+- **Persistent Storage Permissions** — Added full persistence and permission verification for SAF custom export folders across app launches.
+- **Export Reliability & Security** — Enhanced export cancellation checkpoints and temporary file cleanup; added precise EXIF write status reporting and improved permission exception diagnostics.
+- **Build & Release Automation** — Overhauled GitHub Actions release pipelines with automated version code injection and hardened release signing security.
+
+### Requirements
+
+- Android 8.0 (API 26) or higher
+
+---
+
 ## v1.1.0
 
 > 定格你所爱的每一帧 · Freeze Every Frame You Love

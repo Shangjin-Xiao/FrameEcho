@@ -145,7 +145,11 @@ fun PlaybackControls(
             } else {
                 FINE_SCRUB_FALLBACK_SPAN_MS
             }
-            (spanMs.toFloat() / durationMs).coerceIn(0.0002f, 1f)
+            // Only the upper bound is clamped. A lower clamp would put the span back
+            // under the video's duration for very long clips — exactly the drift this
+            // is meant to remove — and the ratio can't underflow to zero for any
+            // duration a video file can actually have.
+            (spanMs.toFloat() / durationMs).coerceAtMost(1f)
         }
     }
 

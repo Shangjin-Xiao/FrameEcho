@@ -75,8 +75,10 @@ private fun ScrubPreviewOverlay(
     offsetX: () -> Float,
     offsetY: () -> Float
 ) {
+    // No isRecycled guard: preview frames are never recycled (see PlayerViewModel), and
+    // checking would only paper over the race — the bitmap could be recycled between the
+    // check and the draw pass that reads it.
     val bitmap = preview() ?: return
-    if (bitmap.isRecycled) return
     val imageBitmap = remember(bitmap) { bitmap.asImageBitmap() }
     Image(
         bitmap = imageBitmap,

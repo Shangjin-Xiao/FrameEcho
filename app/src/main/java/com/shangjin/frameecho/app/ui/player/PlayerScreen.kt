@@ -194,10 +194,12 @@ fun PlayerScreen(
 
     // Safety net for the above: a seek to a position the player is already at renders no
     // new frame, so onRenderedFirstFrame may never come. Retire the preview regardless
-    // rather than leaving it stuck over the video.
+    // rather than leaving it stuck over the video. Deliberately long — a slow exact seek
+    // on a long-GOP 4K clip must be allowed to finish and report, since expiring early
+    // shows the pre-seek frame, which is the very thing the preview exists to hide.
     LaunchedEffect(awaitingSettledFrame) {
         if (awaitingSettledFrame) {
-            delay(600L)
+            delay(1_500L)
             awaitingSettledFrame = false
             viewModel.clearScrubPreview()
         }

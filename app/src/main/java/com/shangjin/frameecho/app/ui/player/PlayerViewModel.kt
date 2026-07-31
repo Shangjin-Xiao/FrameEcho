@@ -114,8 +114,12 @@ class PlayerViewModel : ViewModel() {
     private var scrubPreviewIdleJob: Job? = null
     /** Conflated: while one frame is being extracted, only the newest target survives. */
     private var scrubRequests: Channel<Long>? = null
-    /** Previous preview, recycled one generation late so an in-flight draw can't read it. */
-    private var scrubPreviewToRecycle: Bitmap? = null
+    /**
+     * Bumped whenever the preview is retired. An extraction that was already running
+     * carries the generation it started under, so its result is discarded instead of
+     * popping back over the video after the player has taken the surface back.
+     */
+    private var scrubPreviewGeneration: Int = 0
 
     companion object {
         /** Width of each thumbnail in the timeline strip (px) */
@@ -377,6 +381,11 @@ class PlayerViewModel : ViewModel() {
     fun beginScrubPreview() {
         scrubPreviewIdleJob?.cancel()
         scrubPreviewIdleJob = null
+        // Drop whatever the last drag left behind. A leftover frame would both show the
+        // wrong moment and, because the UI treats a live preview as "no need to seek the
+        // player", keep the surface frozen until the first fresh frame arrives.
+        scrubPreviewGeneration++
+        _scrubPreview.value = null
         startScrubPreviewWorker()
     }
 
@@ -396,7 +405,8 @@ class PlayerViewModel : ViewModel() {
      * user drags again.
      */
     fun clearScrubPreview() {
-        publishScrubPreview(null)
+        scrubPreviewGeneration++
+        _scrubPreview.value = null
         scrubPreviewIdleJob?.cancel()
         scrubPreviewIdleJob = viewModelScope.launch {
             delay(SCRUB_PREVIEW_IDLE_RELEASE_MS)
@@ -422,8 +432,12 @@ class PlayerViewModel : ViewModel() {
                 // than the decoder can serve them only builds a backlog the user then
                 // has to wait out.
                 for (positionMs in requests) {
+                    val generation = scrubPreviewGeneration
                     val bitmap = extractor.frameAt(positionMs) ?: continue
-                    publishScrubPreview(bitmap)
+                    // The preview was retired while this frame was being decoded — the
+                    // player owns the surface again, so this result is no longer wanted.
+                    if (generation != scrubPreviewGeneration) continue
+                    _scrubPreview.value = bitmap
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -433,25 +447,21 @@ class PlayerViewModel : ViewModel() {
                 appContext?.let { ctx ->
                     LogUtils.w(ctx, "PlayerViewModel", "Scrub preview unavailable", e)
                 }
-                publishScrubPreview(null)
+                _scrubPreview.value = null
             }
         }
     }
 
     /**
-     * Swap in a new preview frame, recycling the one before last.
+     * Preview frames are deliberately never recycled.
      *
-     * The immediately previous bitmap is kept alive for one more generation: a draw pass
-     * already in flight when the state flips may still be reading it.
+     * A frame that has been published can still be referenced by a composition, or by a
+     * draw pass already in flight when the state flips — recycling it races that draw and
+     * crashes. Since API 26 (this app's minSdk) bitmap pixels live on the native heap and
+     * are freed when the Bitmap becomes unreachable, so an explicit recycle buys nothing
+     * here. They are small by construction: [ScrubPreviewExtractor] downscales to a 480px
+     * short side on the GPU, and at most a couple are reachable at a time.
      */
-    private fun publishScrubPreview(bitmap: Bitmap?) {
-        val previous = _scrubPreview.value
-        if (previous === bitmap) return
-        _scrubPreview.value = bitmap
-        scrubPreviewToRecycle?.takeIf { !it.isRecycled }?.recycle()
-        scrubPreviewToRecycle = previous
-    }
-
     private fun releaseScrubPreview() {
         scrubPreviewIdleJob?.cancel()
         scrubPreviewIdleJob = null
@@ -461,9 +471,8 @@ class PlayerViewModel : ViewModel() {
         scrubPreviewJob = null
         scrubPreviewExtractor?.release()
         scrubPreviewExtractor = null
-        publishScrubPreview(null)
-        scrubPreviewToRecycle?.takeIf { !it.isRecycled }?.recycle()
-        scrubPreviewToRecycle = null
+        scrubPreviewGeneration++
+        _scrubPreview.value = null
     }
 
     // ── Frame capture ───────────────────────────────────────────────────
