@@ -1,0 +1,19 @@
+app/src/main/java/com/shangjin/frameecho/app/ui/player/PlayerViewModel.kt
+  s_3401cad7ce087f::t_cca39ed3253639 451-463
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "c7dda99cc3f88b8f8c36c1dc67be1f8f9871c07a",
+  "prompts": {},
+  "sessions": {
+    "s_3401cad7ce087f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cd9163c7-428e-4855-a61f-a43d1aaaf8a6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "上晋 <84136399+Shangjin-Xiao@users.noreply.github.com>"
+    }
+  }
+}
