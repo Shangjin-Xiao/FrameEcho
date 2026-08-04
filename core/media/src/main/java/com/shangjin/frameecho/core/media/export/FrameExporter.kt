@@ -488,13 +488,14 @@ class FrameExporter(private val context: Context) {
         seekMode: Int,
         rotation: Int = 0
     ): VideoClipResult {
-        var tempFile = java.io.File.createTempFile("motion_clip_", ".mp4", context.cacheDir)
+        var tempFile: java.io.File? = null
         var actualStartUs = startUs
         var videoSamplesWritten = 0
         var audioSamplesWritten = 0
         var audioTrackIndex = -1
         val extractor = MediaExtractor()
         try {
+            tempFile = java.io.File.createTempFile("motion_clip_", ".mp4", context.cacheDir)
             extractor.setDataSource(context, videoUri, null)
 
             // Select only the video track for extraction to avoid multi-track
@@ -576,10 +577,10 @@ class FrameExporter(private val context: Context) {
                 } catch (releaseException: Exception) {
                     LogUtils.w(context, "FrameExporter", "Failed to release failed muxer", releaseException)
                 }
-                tempFile.delete()
+                tempFile?.delete()
                 tempFile = java.io.File.createTempFile("motion_clip_", ".mp4", context.cacheDir)
                 muxer = MediaMuxer(
-                    tempFile.absolutePath,
+                    tempFile!!.absolutePath,
                     MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
                 )
                 muxer.addTrack(createCleanVideoFormat(videoFormat))
@@ -730,6 +731,12 @@ class FrameExporter(private val context: Context) {
                     LogUtils.w(context, "FrameExporter", "Failed to release muxer", e)
                 }
             }
+        } catch (e: CancellationException) {
+            tempFile?.delete()
+            throw e
+        } catch (e: Exception) {
+            tempFile?.delete()
+            throw e
         } finally {
             try {
                 extractor.release()
@@ -739,7 +746,7 @@ class FrameExporter(private val context: Context) {
         }
 
         return VideoClipResult(
-            file = tempFile,
+            file = tempFile!!,
             actualStartUs = actualStartUs,
             videoSamplesWritten = videoSamplesWritten,
             audioIncluded = audioSamplesWritten > 0,
