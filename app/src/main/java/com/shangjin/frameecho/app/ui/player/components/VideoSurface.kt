@@ -18,6 +18,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -265,7 +266,8 @@ fun VideoSurface(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(scrimColor32),
+                    .background(scrimColor32)
+                    .pointerInput(Unit) { detectTapGestures { } },
                 contentAlignment = Alignment.Center
             ) {
                 ElevatedCard(shape = RoundedCornerShape(28.dp)) {
@@ -296,7 +298,8 @@ fun VideoSurface(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(scrimColor18),
+                    .background(scrimColor18)
+                    .pointerInput(Unit) { detectTapGestures { } },
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
