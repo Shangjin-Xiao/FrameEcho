@@ -493,6 +493,7 @@ class FrameExporter(private val context: Context) {
         var videoSamplesWritten = 0
         var audioSamplesWritten = 0
         var audioTrackIndex = -1
+        var success = false
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(context, videoUri, null)
@@ -723,6 +724,7 @@ class FrameExporter(private val context: Context) {
                 } else if (muxerStarted) {
                     try { muxer.stop() } catch (_: Exception) { }
                 }
+                success = true
             } finally {
                 try {
                     muxer.release()
@@ -735,6 +737,9 @@ class FrameExporter(private val context: Context) {
                 extractor.release()
             } catch (e: Exception) {
                 LogUtils.w(context, "FrameExporter", "Failed to release extractor", e)
+            }
+            if (!success) {
+                try { tempFile.delete() } catch (_: Exception) { }
             }
         }
 
