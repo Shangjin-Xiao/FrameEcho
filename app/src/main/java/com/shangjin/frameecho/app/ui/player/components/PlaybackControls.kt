@@ -113,6 +113,9 @@ fun PlaybackControls(
     modifier: Modifier = Modifier
 ) {
     val hapticFeedback = LocalHapticFeedback.current
+    val colorScheme = MaterialTheme.colorScheme
+    val onTertiaryContainer70 = colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+    val onPrimaryContainer70 = colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
     val fineScrubThresholdPx = with(LocalDensity.current) { 24.dp.toPx() }
 
     // Slider user-dragging state
@@ -421,9 +424,9 @@ fun PlaybackControls(
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (isFineScrubbing) {
-                                    MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                                    onTertiaryContainer70
                                 } else {
-                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                    onPrimaryContainer70
                                 }
                             )
                         }

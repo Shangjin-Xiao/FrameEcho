@@ -23,3 +23,7 @@
 ## 2024-05-18 - 优化 ColorSpace 实例化性能
 **Learning:** `AndroidColorSpace.get()` 会在内部进行字典查找，在热路径（如图像处理或转换期间）频繁调用会导致不必要的 CPU 开销。
 **Action:** 使用 `by lazy` 将无状态、不可变的框架对象（如 `AndroidColorSpace`）缓存到伴生对象或单例中。如果某些属性依赖于较新的 SDK 版本（例如 `ColorSpace.Named.BT2020` 要求 API 34+），在 `lazy` 初始化块内使用 `Build.VERSION.SDK_INT` 进行检查并提供安全的回退（Fallback）。
+
+## 2024-05-18 - Jetpack Compose Modifier Extraction Pitfall
+**Learning:** Extracting `Modifier` like `Modifier.fillMaxWidth()` to `private val` is an anti-pattern. This can cause recursive type problems during Kotlin type-checking if not used properly and offers no tangible performance benefits as Modifiers are already highly optimized to be reused.
+**Action:** Let Jetpack Compose instantiate `Modifier.fillMaxWidth()`, `Modifier.fillMaxSize()`, etc., directly instead of creating top-level caching constants.
