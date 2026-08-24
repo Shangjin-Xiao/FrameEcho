@@ -489,6 +489,8 @@ class FrameExporter(private val context: Context) {
         rotation: Int = 0
     ): VideoClipResult {
         var tempFile = java.io.File.createTempFile("motion_clip_", ".mp4", context.cacheDir)
+        var success = false
+        try {
         var actualStartUs = startUs
         var videoSamplesWritten = 0
         var audioSamplesWritten = 0
@@ -738,6 +740,7 @@ class FrameExporter(private val context: Context) {
             }
         }
 
+        success = true
         return VideoClipResult(
             file = tempFile,
             actualStartUs = actualStartUs,
@@ -745,6 +748,11 @@ class FrameExporter(private val context: Context) {
             audioIncluded = audioSamplesWritten > 0,
             hasAudioTrack = audioTrackIndex >= 0
         )
+        } finally {
+            if (!success) {
+                tempFile.delete()
+            }
+        }
     }
 
     /**
