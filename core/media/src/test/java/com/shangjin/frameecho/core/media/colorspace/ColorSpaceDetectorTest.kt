@@ -1,6 +1,7 @@
 package com.shangjin.frameecho.core.media.colorspace
 
 import android.media.MediaFormat
+import java.nio.ByteBuffer
 import com.shangjin.frameecho.core.model.ColorSpaceType
 import io.mockk.every
 import io.mockk.mockk
@@ -44,7 +45,7 @@ class ColorSpaceDetectorTest {
         every { format.containsKey("color-standard") } returns true
         every { format.getInteger("color-standard") } returns 6 // BT2020
         every { format.getString(MediaFormat.KEY_MIME) } returns "video/hevc"
-        every { format.containsKey("hdr-static-info") } returns true
+        every { format.getByteBuffer("hdr-static-info") } returns mockk()
 
         val info = ColorSpaceDetector.detect(format)
         assertEquals(ColorSpaceType.HDR10, info.type)
@@ -58,7 +59,7 @@ class ColorSpaceDetectorTest {
         every { format.containsKey("color-transfer") } returns true
         every { format.getInteger("color-transfer") } returns 6 // ST2084
         every { format.getString(MediaFormat.KEY_MIME) } returns "video/hevc"
-        every { format.containsKey("hdr10-plus-info") } returns true
+        every { format.getByteBuffer("hdr10-plus-info") } returns mockk()
 
         val info = ColorSpaceDetector.detect(format)
         assertEquals(ColorSpaceType.HDR10_PLUS, info.type)

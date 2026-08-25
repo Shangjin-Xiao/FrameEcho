@@ -441,12 +441,10 @@ class FrameExporter(private val context: Context) {
         // position already at the limit, causing MediaMuxer to see zero-length CSD.
         for (csdKey in arrayOf("csd-0", "csd-1", "csd-2")) {
             try {
-                if (original.containsKey(csdKey)) {
-                    val csd = original.getByteBuffer(csdKey)
-                    if (csd != null) {
-                        csd.rewind()
-                        clean.setByteBuffer(csdKey, csd)
-                    }
+                val csd = runCatching { original.getByteBuffer(csdKey) }.getOrNull()
+                if (csd != null) {
+                    csd.rewind()
+                    clean.setByteBuffer(csdKey, csd)
                 }
             } catch (e: Exception) {
                 LogUtils.w(context, "FrameExporter", "Failed to copy CSD key: $csdKey", e)
@@ -460,8 +458,9 @@ class FrameExporter(private val context: Context) {
         )
         for (key in intKeys) {
             try {
-                if (original.containsKey(key)) {
-                    clean.setInteger(key, original.getInteger(key))
+                val intVal = runCatching { original.getInteger(key) }.getOrNull()
+                if (intVal != null) {
+                    clean.setInteger(key, intVal)
                 }
             } catch (e: Exception) {
                 LogUtils.w(context, "FrameExporter", "Failed to copy optional int key: $key", e)
@@ -470,8 +469,9 @@ class FrameExporter(private val context: Context) {
 
         // Duration
         try {
-            if (original.containsKey(MediaFormat.KEY_DURATION)) {
-                clean.setLong(MediaFormat.KEY_DURATION, original.getLong(MediaFormat.KEY_DURATION))
+            val duration = runCatching { original.getLong(MediaFormat.KEY_DURATION) }.getOrNull()
+            if (duration != null) {
+                clean.setLong(MediaFormat.KEY_DURATION, duration)
             }
         } catch (e: Exception) {
             LogUtils.w(context, "FrameExporter", "Failed to copy KEY_DURATION", e)
@@ -516,8 +516,9 @@ class FrameExporter(private val context: Context) {
                     audioTrackIndex = i
                     audioFormat = format
                 }
-                if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
-                    maxInputSize = maxOf(maxInputSize, format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE))
+                val trackMaxInputSize = runCatching { format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) }.getOrNull()
+                if (trackMaxInputSize != null) {
+                    maxInputSize = maxOf(maxInputSize, trackMaxInputSize)
                 }
             }
 
@@ -812,9 +813,8 @@ class FrameExporter(private val context: Context) {
         // Only 16-bit PCM can feed the AAC encoder directly.
         // Requires KEY_PCM_ENCODING to be explicitly present and ENCODING_PCM_16BIT.
         // If KEY_PCM_ENCODING is missing or non-16BIT, fall back to MediaCodec decoding.
-        if (audioFormat.containsKey(MediaFormat.KEY_PCM_ENCODING) &&
-            audioFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) == AudioFormat.ENCODING_PCM_16BIT
-        ) {
+        val pcmEncoding = runCatching { audioFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) }.getOrNull()
+        if (pcmEncoding == AudioFormat.ENCODING_PCM_16BIT) {
             extractor.seekTo(clipStartUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
             return readPcmFromExtractor(extractor, clipStartUs, endUs, sampleRate, channelCount)
         }

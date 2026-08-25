@@ -66,7 +66,7 @@ object ColorSpaceDetector {
     fun detect(format: MediaFormat): ColorSpaceInfo {
         val transfer = format.getIntegerSafe(KEY_COLOR_TRANSFER, COLOR_TRANSFER_SDR)
         val standard = format.getIntegerSafe(KEY_COLOR_STANDARD, COLOR_STANDARD_BT709)
-        val hasStaticMetadata = format.containsKey(KEY_HDR_STATIC_INFO)
+        val hasStaticMetadata = runCatching { format.getByteBuffer(KEY_HDR_STATIC_INFO) != null }.getOrDefault(false)
         val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
         val profile = format.getIntegerSafe(KEY_PROFILE, 0)
         val bitDepth = detectBitDepth(format)
@@ -143,7 +143,7 @@ object ColorSpaceDetector {
             if (features) return true
         }
         // Fallback: check for HDR10+ specific keys
-        return format.containsKey(KEY_HDR10_PLUS_INFO)
+        return runCatching { format.getByteBuffer(KEY_HDR10_PLUS_INFO) != null }.getOrDefault(false)
     }
 
     /**

@@ -238,8 +238,7 @@ object MetadataExtractor {
 
     private fun getStringFromKeys(format: MediaFormat, vararg keys: String): String? {
         for (key in keys) {
-            if (!format.containsKey(key)) continue
-            val value = runCatching { format.getString(key) }.getOrNull()
+            val value = runCatching { format.getString(key) }.getOrNull() ?: continue
             if (!value.isNullOrBlank()) return value
         }
         return null
@@ -247,8 +246,7 @@ object MetadataExtractor {
 
     private fun getIntFromKeys(format: MediaFormat, vararg keys: String): Int? {
         for (key in keys) {
-            if (!format.containsKey(key)) continue
-            val value = runCatching { format.getInteger(key) }.getOrNull()
+            val value = runCatching { format.getInteger(key) }.getOrNull() ?: continue
             if (value != null) return value
         }
         return null
@@ -256,7 +254,6 @@ object MetadataExtractor {
 
     private fun getFloatFromKeys(format: MediaFormat, vararg keys: String): Float? {
         for (key in keys) {
-            if (!format.containsKey(key)) continue
             val floatValue = runCatching { format.getFloat(key) }.getOrNull()
             if (floatValue != null) return floatValue
 
