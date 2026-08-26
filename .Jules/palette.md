@@ -1,3 +1,6 @@
 ## 2024-05-24 - Tap Gesture Consumption for Accessibility
 **Learning:** In Jetpack Compose, using `Modifier.clickable` simply to consume clicks (e.g., on a background overlay to prevent click-throughs) introduces accessibility noise. Screen readers will announce the element as a button (Role.Button) because `clickable` automatically adds this semantic role.
 **Action:** When blocking click propagation without adding interactive semantics, use `Modifier.pointerInput(Unit) { detectTapGestures { } }` instead of `Modifier.clickable`.
+## 2026-08-26 - Modifier.pointerInput Stale Closure Bug
+**Learning:** When using `Modifier.pointerInput(Unit)` to handle gestures (e.g., in a video player surface for tap-to-play), any state variables or callbacks (like `onTogglePlayPause` or `exoPlayer.isPlaying`) referenced inside the block must be wrapped in `rememberUpdatedState`. Because `pointerInput(Unit)` memoizes its block for the lifetime of the component, capturing raw variables results in a stale closure bug if the parent recomposes and provides new instances.
+**Action:** Always wrap lambda callbacks and changing state references in `rememberUpdatedState` before accessing them inside `pointerInput(Unit)` to ensure the gesture detector executes with the freshest context.
