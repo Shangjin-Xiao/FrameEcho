@@ -27,3 +27,7 @@
 ## 2024-05-18 - Jetpack Compose Modifier Extraction Pitfall
 **Learning:** Extracting `Modifier` like `Modifier.fillMaxWidth()` to `private val` is an anti-pattern. This can cause recursive type problems during Kotlin type-checking if not used properly and offers no tangible performance benefits as Modifiers are already highly optimized to be reused.
 **Action:** Let Jetpack Compose instantiate `Modifier.fillMaxWidth()`, `Modifier.fillMaxSize()`, etc., directly instead of creating top-level caching constants.
+
+## 2024-05-18 - Jetpack Compose Color Allocation Optimization Pitfall
+**Learning:** Do NOT wrap `Color.copy(alpha = ...)` in `remember` blocks. Because `Color` is a value class (wrapping a primitive `ULong`), `.copy()` performs lightweight bitwise math without heap allocation. Using `remember` forces boxing of the primitive to store it in the Compose slot table, actually *introducing* memory allocation and overhead (micro-pessimization).
+**Action:** Let Jetpack Compose instantiate primitive values (like `Color`) via bitwise operations directly instead of attempting to memoize them with `remember` blocks, which leads to primitive boxing.
