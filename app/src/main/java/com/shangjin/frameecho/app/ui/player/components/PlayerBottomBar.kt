@@ -124,9 +124,11 @@ fun PlayerBottomBar(
             }
         },
         floatingActionButton = {
-            TooltipWrapper(label = stringResource(R.string.capture_and_save)) {
+            val captureDesc = stringResource(R.string.capture_and_save)
+            TooltipWrapper(label = captureDesc) {
                 FloatingActionButton(
                     onClick = onCapture,
+                    modifier = Modifier.semantics { contentDescription = captureDesc },
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ) {
@@ -139,7 +141,7 @@ fun PlayerBottomBar(
                     } else {
                         Icon(
                             Icons.Default.CameraAlt,
-                            contentDescription = stringResource(R.string.capture_and_save)
+                            contentDescription = null
                         )
                     }
                 }
