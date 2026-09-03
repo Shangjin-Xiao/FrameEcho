@@ -132,13 +132,16 @@ fun VideoSurface(
     var tapFeedbackIsPlaying by remember { mutableStateOf<Boolean?>(null) }
     var lastTapTimeMs by remember { mutableLongStateOf(0L) }
 
-    // Memoize colors to avoid allocations during recomposition
+    // Derive colors with copy(alpha) directly. Do NOT use remember{} for Color.copy()
+    // because Color is a value class (wrapping ULong). copy() is just lightweight bitwise math.
+    // Using remember forces boxing of the primitive to store it in the Compose slot table,
+    // which introduces memory allocation and overhead.
     val colorScheme = MaterialTheme.colorScheme
-    val scrimColor32 = remember(colorScheme.scrim) { colorScheme.scrim.copy(alpha = 0.32f) }
-    val scrimColor18 = remember(colorScheme.scrim) { colorScheme.scrim.copy(alpha = 0.18f) }
-    val inverseSurfaceColor70 = remember(colorScheme.inverseSurface) { colorScheme.inverseSurface.copy(alpha = 0.7f) }
-    val inverseSurfaceColor60 = remember(colorScheme.inverseSurface) { colorScheme.inverseSurface.copy(alpha = 0.6f) }
-    val whiteColor60 = remember { Color.White.copy(alpha = 0.6f) }
+    val scrimColor32 = colorScheme.scrim.copy(alpha = 0.32f)
+    val scrimColor18 = colorScheme.scrim.copy(alpha = 0.18f)
+    val inverseSurfaceColor70 = colorScheme.inverseSurface.copy(alpha = 0.7f)
+    val inverseSurfaceColor60 = colorScheme.inverseSurface.copy(alpha = 0.6f)
+    val whiteColor60 = Color.White.copy(alpha = 0.6f)
 
     LaunchedEffect(tapFeedbackIsPlaying) {
         if (tapFeedbackIsPlaying != null) {
