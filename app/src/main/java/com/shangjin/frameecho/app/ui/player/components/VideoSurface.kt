@@ -134,11 +134,12 @@ fun VideoSurface(
 
     // Memoize colors to avoid allocations during recomposition
     val colorScheme = MaterialTheme.colorScheme
-    val scrimColor32 = remember(colorScheme.scrim) { colorScheme.scrim.copy(alpha = 0.32f) }
-    val scrimColor18 = remember(colorScheme.scrim) { colorScheme.scrim.copy(alpha = 0.18f) }
-    val inverseSurfaceColor70 = remember(colorScheme.inverseSurface) { colorScheme.inverseSurface.copy(alpha = 0.7f) }
-    val inverseSurfaceColor60 = remember(colorScheme.inverseSurface) { colorScheme.inverseSurface.copy(alpha = 0.6f) }
-    val whiteColor60 = remember { Color.White.copy(alpha = 0.6f) }
+    // ⚡ Bolt: Color is a value class in Compose. remember() forces boxing which causes unnecessary allocations.
+    val scrimColor32 = colorScheme.scrim.copy(alpha = 0.32f)
+    val scrimColor18 = colorScheme.scrim.copy(alpha = 0.18f)
+    val inverseSurfaceColor70 = colorScheme.inverseSurface.copy(alpha = 0.7f)
+    val inverseSurfaceColor60 = colorScheme.inverseSurface.copy(alpha = 0.6f)
+    val whiteColor60 = Color.White.copy(alpha = 0.6f)
 
     LaunchedEffect(tapFeedbackIsPlaying) {
         if (tapFeedbackIsPlaying != null) {
