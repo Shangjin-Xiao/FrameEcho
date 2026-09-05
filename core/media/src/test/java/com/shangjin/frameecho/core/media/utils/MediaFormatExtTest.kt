@@ -18,15 +18,6 @@ class MediaFormatExtTest {
     }
 
     @Test
-    fun `getIntegerSafe returns default when key does not exist`() {
-        val format = mockk<MediaFormat>()
-        every { format.getInteger("key") } throws NullPointerException()
-
-        val result = format.getIntegerSafe("key", 99)
-        assertEquals(99, result)
-    }
-
-    @Test
     fun `getIntegerSafe returns default when exception occurs`() {
         val format = mockk<MediaFormat>()
         every { format.getInteger("key") } throws RuntimeException("Stub!")

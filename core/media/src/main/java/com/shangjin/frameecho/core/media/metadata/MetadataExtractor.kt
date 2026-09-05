@@ -246,7 +246,7 @@ object MetadataExtractor {
 
     private fun getIntFromKeys(format: MediaFormat, vararg keys: String): Int? {
         for (key in keys) {
-            val value = runCatching { format.getInteger(key) }.getOrNull() ?: continue
+            val value = runCatching { format.getInteger(key) }.getOrNull()
             if (value != null) return value
         }
         return null
