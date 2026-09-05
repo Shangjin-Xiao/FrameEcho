@@ -61,6 +61,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.shangjin.frameecho.R
 import kotlinx.coroutines.delay
+private val whiteColor60 = Color.White.copy(alpha = 0.6f)
+
 
 /**
  * Draws the scrub preview frame over the video surface.
@@ -141,7 +143,6 @@ fun VideoSurface(
     val scrimColor18 = colorScheme.scrim.copy(alpha = 0.18f)
     val inverseSurfaceColor70 = colorScheme.inverseSurface.copy(alpha = 0.7f)
     val inverseSurfaceColor60 = colorScheme.inverseSurface.copy(alpha = 0.6f)
-    val whiteColor60 = Color.White.copy(alpha = 0.6f)
 
     LaunchedEffect(tapFeedbackIsPlaying) {
         if (tapFeedbackIsPlaying != null) {
