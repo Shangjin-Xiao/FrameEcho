@@ -47,6 +47,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -151,6 +152,9 @@ fun VideoSurface(
         }
     }
 
+    val currentOnTogglePlayPause by rememberUpdatedState(onTogglePlayPause)
+    val currentExoPlayer by rememberUpdatedState(exoPlayer)
+
     // Reset zoom when video changes (parent re-creates this composable)
     Box(modifier = modifier) {
         AndroidView(
@@ -238,8 +242,8 @@ fun VideoSurface(
                                     lastTapTimeMs = now
                                 }
                             } else {
-                                tapFeedbackIsPlaying = !exoPlayer.isPlaying
-                                onTogglePlayPause()
+                                tapFeedbackIsPlaying = !currentExoPlayer.isPlaying
+                                currentOnTogglePlayPause()
                             }
                         }
                     }
