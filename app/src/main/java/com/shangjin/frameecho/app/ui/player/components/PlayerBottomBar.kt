@@ -60,9 +60,7 @@ fun PlayerBottomBar(
                     Icon(
                         if (isMuted) Icons.AutoMirrored.Filled.VolumeOff
                         else Icons.AutoMirrored.Filled.VolumeUp,
-                        contentDescription = stringResource(
-                            if (isMuted) R.string.unmute else R.string.mute
-                        )
+                        contentDescription = null
                     )
                 }
             }
@@ -87,10 +85,7 @@ fun PlayerBottomBar(
                     Icon(
                         if (motionPhotoEnabled) Icons.Filled.MotionPhotosOn
                         else Icons.Outlined.MotionPhotosOn,
-                        contentDescription = stringResource(
-                            if (motionPhotoEnabled) R.string.motion_photo_on
-                            else R.string.motion_photo_off
-                        )
+                        contentDescription = null
                     )
                 }
             }
@@ -115,10 +110,7 @@ fun PlayerBottomBar(
                     Icon(
                         if (preserveMetadata) Icons.Filled.Info
                         else Icons.Outlined.Info,
-                        contentDescription = stringResource(
-                            if (preserveMetadata) R.string.metadata_on
-                            else R.string.metadata_off
-                        )
+                        contentDescription = null
                     )
                 }
             }
