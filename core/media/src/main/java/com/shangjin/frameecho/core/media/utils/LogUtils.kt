@@ -31,6 +31,48 @@ object LogUtils {
     }
 
     /**
+     * Log a debug message with an optional exception.
+     *
+     * Debug logs are only printed in debug builds (where `FLAG_DEBUGGABLE` is set).
+     *
+     * @param context The context used to determine the build type.
+     * @param tag Used to identify the source of a log message.
+     * @param message The message you would like logged.
+     * @param exception An optional exception to log.
+     */
+    fun d(context: Context, tag: String, message: String, exception: Throwable? = null) {
+        if (!isDebuggable(context)) return
+        if (exception != null) {
+            Log.d(tag, message, exception)
+        } else {
+            Log.d(tag, message)
+        }
+    }
+
+    /**
+     * Log an info message with an optional exception.
+     *
+     * In release builds (where `FLAG_DEBUGGABLE` is not set), the exception details are
+     * sanitized to only include its simple class name to prevent PII leakage.
+     *
+     * @param context The context used to determine the build type.
+     * @param tag Used to identify the source of a log message.
+     * @param message The message you would like logged.
+     * @param exception An optional exception to log.
+     */
+    fun i(context: Context, tag: String, message: String, exception: Throwable? = null) {
+        if (exception != null) {
+            if (isDebuggable(context)) {
+                Log.i(tag, message, exception)
+            } else {
+                Log.i(tag, "$message: ${exception.javaClass.simpleName}")
+            }
+        } else {
+            Log.i(tag, message)
+        }
+    }
+
+    /**
      * Log a warning message with an optional exception.
      *
      * In release builds (where `FLAG_DEBUGGABLE` is not set), the exception details are
