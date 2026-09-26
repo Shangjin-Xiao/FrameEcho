@@ -61,6 +61,12 @@ class FrameExporter(private val context: Context) {
         private const val AUDIO_COPY_CHUNK_BYTES = 64 * 1024
         private const val PCM_READ_BUFFER_BYTES = 256 * 1024
         private const val MAX_PCM_BUFFER_BYTES = 15 * 1024 * 1024
+
+        private val CSD_KEYS = arrayOf("csd-0", "csd-1", "csd-2")
+        private val OPTIONAL_INT_KEYS = arrayOf(
+            MediaFormat.KEY_FRAME_RATE,
+            MediaFormat.KEY_MAX_INPUT_SIZE
+        )
     }
 
     /**
@@ -439,7 +445,7 @@ class FrameExporter(private val context: Context) {
         // Codec-specific data (SPS/PPS for H.264, VPS/SPS/PPS for H.265) — essential for playback.
         // IMPORTANT: rewind() the ByteBuffer — MediaExtractor may return buffers with
         // position already at the limit, causing MediaMuxer to see zero-length CSD.
-        for (csdKey in arrayOf("csd-0", "csd-1", "csd-2")) {
+        for (csdKey in CSD_KEYS) {
             try {
                 val csd = runCatching { original.getByteBuffer(csdKey) }.getOrNull()
                 if (csd != null) {
@@ -452,11 +458,7 @@ class FrameExporter(private val context: Context) {
         }
 
         // Optional but helpful keys — copy only if present
-        val intKeys = arrayOf(
-            MediaFormat.KEY_FRAME_RATE,
-            MediaFormat.KEY_MAX_INPUT_SIZE,
-        )
-        for (key in intKeys) {
+        for (key in OPTIONAL_INT_KEYS) {
             try {
                 val intVal = runCatching { original.getInteger(key) }.getOrNull()
                 if (intVal != null) {

@@ -31,3 +31,7 @@
 ## 2024-05-18 - Jetpack Compose Color Allocation Optimization Pitfall
 **Learning:** Do NOT wrap `Color.copy(alpha = ...)` in `remember` blocks. Because `Color` is a value class (wrapping a primitive `ULong`), `.copy()` performs lightweight bitwise math without heap allocation. Using `remember` forces boxing of the primitive to store it in the Compose slot table, actually *introducing* memory allocation and overhead (micro-pessimization).
 **Action:** Let Jetpack Compose instantiate primitive values (like `Color`) via bitwise operations directly instead of attempting to memoize them with `remember` blocks, which leads to primitive boxing.
+
+## 2026-09-26 - Extract Array Allocations from Loop Context
+**Learning:** Instantiating temporary arrays (e.g. `arrayOf("csd-0", "csd-1", ...)` or `arrayOf(KEY1, KEY2)`) inside method execution loops causes unnecessary heap allocations and GC pressure.
+**Action:** Extract constant string/key array allocations into `private val` properties within the companion object to reuse allocated array references across invocations.
