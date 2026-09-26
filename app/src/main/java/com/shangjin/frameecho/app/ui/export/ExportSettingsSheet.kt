@@ -321,40 +321,65 @@ private fun ExportLocationSelector(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Custom folder option
         if (onPickCustomFolder != null) {
-            FilterChip(
-                selected = isCustomActive,
-                onClick = {
-                    if (isCustomActive) {
-                        onClearCustomFolder?.invoke()
-                    } else {
-                        onPickCustomFolder()
-                    }
-                },
-                label = { Text(stringResource(R.string.location_custom)) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
+            CustomFolderChip(
+                isCustomActive = isCustomActive,
+                onPickCustomFolder = onPickCustomFolder,
+                onClearCustomFolder = onClearCustomFolder
             )
         }
         ExportDirectory.entries.forEach { dir ->
-            val label = when (dir) {
-                ExportDirectory.PICTURES_FRAMEECHO -> stringResource(R.string.location_pictures)
-                ExportDirectory.DCIM_FRAMEECHO -> stringResource(R.string.location_dcim)
-                ExportDirectory.MOVIES_FRAMEECHO -> stringResource(R.string.location_movies)
-                ExportDirectory.PICTURES -> stringResource(R.string.location_pictures_root)
-                ExportDirectory.DCIM -> stringResource(R.string.location_dcim_root)
-                ExportDirectory.MOVIES -> stringResource(R.string.location_movies_root)
-            }
-            FilterChip(
-                selected = dir == selected && !isCustomActive,
-                onClick = { onSelect(dir) },
-                label = { Text(label) }
+            ExportDirectoryChip(
+                dir = dir,
+                isSelected = dir == selected && !isCustomActive,
+                onSelect = { onSelect(dir) }
             )
         }
     }
+}
+
+@Composable
+private fun CustomFolderChip(
+    isCustomActive: Boolean,
+    onPickCustomFolder: () -> Unit,
+    onClearCustomFolder: (() -> Unit)?
+) {
+    FilterChip(
+        selected = isCustomActive,
+        onClick = {
+            if (isCustomActive) {
+                onClearCustomFolder?.invoke()
+            } else {
+                onPickCustomFolder()
+            }
+        },
+        label = { Text(stringResource(R.string.location_custom)) },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+    )
+}
+
+@Composable
+private fun ExportDirectoryChip(
+    dir: ExportDirectory,
+    isSelected: Boolean,
+    onSelect: () -> Unit
+) {
+    val label = when (dir) {
+        ExportDirectory.PICTURES_FRAMEECHO -> stringResource(R.string.location_pictures)
+        ExportDirectory.DCIM_FRAMEECHO -> stringResource(R.string.location_dcim)
+        ExportDirectory.MOVIES_FRAMEECHO -> stringResource(R.string.location_movies)
+        ExportDirectory.PICTURES -> stringResource(R.string.location_pictures_root)
+        ExportDirectory.DCIM -> stringResource(R.string.location_dcim_root)
+        ExportDirectory.MOVIES -> stringResource(R.string.location_movies_root)
+    }
+    FilterChip(
+        selected = isSelected,
+        onClick = onSelect,
+        label = { Text(label) }
+    )
 }
 
 @Composable
