@@ -31,3 +31,7 @@
 ## 2024-05-18 - Jetpack Compose Color Allocation Optimization Pitfall
 **Learning:** Do NOT wrap `Color.copy(alpha = ...)` in `remember` blocks. Because `Color` is a value class (wrapping a primitive `ULong`), `.copy()` performs lightweight bitwise math without heap allocation. Using `remember` forces boxing of the primitive to store it in the Compose slot table, actually *introducing* memory allocation and overhead (micro-pessimization).
 **Action:** Let Jetpack Compose instantiate primitive values (like `Color`) via bitwise operations directly instead of attempting to memoize them with `remember` blocks, which leads to primitive boxing.
+
+## 2026-05-20 - Avoid runCatching Overhead in Hot Loops
+**Learning:** `runCatching` constructs a `Result<T>` value object wrapper on every call, catching all `Throwable` instances. When called in loops or frequent helper functions (e.g., MediaFormat value lookups), this causes unnecessary object allocations and overhead compared to explicit `try-catch` blocks targeting expected exception paths.
+**Action:** Replace `runCatching { ... }.getOrNull()` with direct `try { ... } catch (_: Exception) { null }` in frequently invoked utility/helper methods to eliminate `Result` object allocations.
