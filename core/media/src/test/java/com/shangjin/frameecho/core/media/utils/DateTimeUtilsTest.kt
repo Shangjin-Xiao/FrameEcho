@@ -85,4 +85,37 @@ class DateTimeUtilsTest {
         assertNull(DateTimeUtils.parseToMillis("invalid"))
         assertNull(DateTimeUtils.parseToMillis(""))
     }
+
+    @Test
+    fun benchmarkParsingPerformance() {
+        val testInputs = listOf(
+            "20231027T103000.500Z",
+            "2023-10-27T10:30:00Z",
+            "2023-10-27T10:30:00+0000",
+            "2023-10-27T20:30:00+0800",
+            "2023-10-27T10:30:00.500+0000",
+            "20231027T103000",
+            "2023 10 27",
+            "2023-10-27T10:30:00",
+            "2023-10-27T10:30:00+08:00",
+            "invalid_date_format_test"
+        )
+
+        // Warmup
+        repeat(10_000) {
+            for (input in testInputs) {
+                DateTimeUtils.normalizeToIso(input)
+            }
+        }
+
+        val iterations = 100_000
+        val startTime = System.nanoTime()
+        repeat(iterations) {
+            for (input in testInputs) {
+                DateTimeUtils.normalizeToIso(input)
+            }
+        }
+        val elapsedTimeMs = (System.nanoTime() - startTime) / 1_000_000.0
+        println("BENCHMARK_RESULT: Total time for ${iterations * testInputs.size} operations: $elapsedTimeMs ms")
+    }
 }
