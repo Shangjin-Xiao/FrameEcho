@@ -31,3 +31,7 @@
 ## 2024-05-18 - Jetpack Compose Color Allocation Optimization Pitfall
 **Learning:** Do NOT wrap `Color.copy(alpha = ...)` in `remember` blocks. Because `Color` is a value class (wrapping a primitive `ULong`), `.copy()` performs lightweight bitwise math without heap allocation. Using `remember` forces boxing of the primitive to store it in the Compose slot table, actually *introducing* memory allocation and overhead (micro-pessimization).
 **Action:** Let Jetpack Compose instantiate primitive values (like `Color`) via bitwise operations directly instead of attempting to memoize them with `remember` blocks, which leads to primitive boxing.
+
+## 2026-09-26 - DateTimeUtils 启发式过滤与格式化器列表预分配优化
+**Learning:** 在 `DateTimeUtils` 中，对日期字符串进行顺序解析时，若未先提取字符特征（如 `'T'`, `' '`, `:`, `-`, `.`），则会顺次调用不匹配的 `DateTimeFormatter`，增加多余的 `parseUnresolved` 计算。此外，`parseOffsetDateTime` 曾使用 `contains('-')` 作为 Fast Path 判断，导致标准本地日期（如 `"2023-10-27T10:30:00"`）误入 Offset 解析环节。同时，在解析函数内部通过 `listOf(...)` 动态构造格式化器列表会在热路径上触发频繁的堆内存分配。
+**Action:** 在使用 `DateTimeFormatter` 进行多模式匹配前，先分析字符串的定界符（如通过判断 `'T'` 之后是否有 offset 标志或包含 `.` / `-` / `:`）精准选取唯一的目标 `DateTimeFormatter` 列表，并将格式化器集合提取为单例对象级别的 `private val` 常量，从而最大化削减无效解析与垃圾回收开销。

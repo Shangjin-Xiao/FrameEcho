@@ -34,21 +34,15 @@ object DateTimeUtils {
     private val FMT_COMPACT_NO_T = DateTimeFormatter.ofPattern("yyyyMMddHHmmss", Locale.US)
     private val FMT_SPACE_SEP_LOCAL = DateTimeFormatter.ofPattern("yyyy MM dd", Locale.US)
 
-    private val OFFSET_INPUT_FORMATTERS = listOf(
-        DateTimeFormatter.ISO_OFFSET_DATE_TIME,
-        FMT_ISO_SECONDS_X,
-        FMT_ISO_OFFSET_NO_COLON,
-        FMT_ISO_MILLIS_OFFSET_NO_COLON,
-        FMT_COMPACT_MILLIS_OFFSET
-    )
+    private val FORMATTERS_OFFSET_COMPACT = listOf(FMT_COMPACT_MILLIS_OFFSET)
+    private val FORMATTERS_OFFSET_ISO_MILLIS = listOf(FMT_ISO_MILLIS_OFFSET_NO_COLON, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+    private val FORMATTERS_OFFSET_ISO_STANDARD = listOf(DateTimeFormatter.ISO_OFFSET_DATE_TIME, FMT_ISO_SECONDS_X, FMT_ISO_OFFSET_NO_COLON)
 
-    private val LOCAL_DATE_TIME_INPUT_FORMATTERS = listOf(
-        FMT_ISO_LOCAL,
-        FMT_ISO_MILLIS_LOCAL,
-        FMT_COMPACT_LOCAL,
-        FMT_SPACE_SEP_DATE_TIME,
-        FMT_COMPACT_NO_T
-    )
+    private val FORMATTERS_LOCAL_ISO_MILLIS = listOf(FMT_ISO_MILLIS_LOCAL)
+    private val FORMATTERS_LOCAL_ISO_STANDARD = listOf(FMT_ISO_LOCAL)
+    private val FORMATTERS_LOCAL_COMPACT = listOf(FMT_COMPACT_LOCAL)
+    private val FORMATTERS_LOCAL_SPACE_SEP = listOf(FMT_SPACE_SEP_DATE_TIME)
+    private val FORMATTERS_LOCAL_COMPACT_NO_T = listOf(FMT_COMPACT_NO_T)
 
     /**
      * Normalizes a date string to ISO 8601 format.
@@ -113,11 +107,27 @@ object DateTimeUtils {
     }
 
     private fun parseOffsetDateTime(dateStr: String): OffsetDateTime? {
-        // Fast path: if there is no timezone/offset indicator, it's not an OffsetDateTime
-        val hasZ = dateStr.contains('Z') || dateStr.contains('+') || dateStr.contains('-')
-        if (!hasZ) return null
+        // Fast path: if there is no timezone/offset indicator after 'T' or space, it's not an OffsetDateTime
+        val tIndex = dateStr.indexOf('T').let { if (it < 0) dateStr.indexOf(' ') else it }
+        val hasOffset = if (tIndex >= 0) {
+            val timePart = dateStr.substring(tIndex + 1)
+            timePart.endsWith("Z", ignoreCase = true) || timePart.contains('+') || timePart.contains('-')
+        } else {
+            dateStr.endsWith("Z", ignoreCase = true) || dateStr.contains('+')
+        }
+        if (!hasOffset) return null
 
-        for (formatter in OFFSET_INPUT_FORMATTERS) {
+        val hasColon = dateStr.contains(':')
+        val hasHyphen = dateStr.contains('-')
+        val hasDot = dateStr.contains('.')
+
+        val formatters = if (hasColon || hasHyphen) {
+            if (hasDot) FORMATTERS_OFFSET_ISO_MILLIS else FORMATTERS_OFFSET_ISO_STANDARD
+        } else {
+            FORMATTERS_OFFSET_COMPACT
+        }
+
+        for (formatter in formatters) {
             val pos = java.text.ParsePosition(0)
             val parsed = formatter.parseUnresolved(dateStr, pos)
             if (parsed != null && pos.errorIndex < 0 && pos.index == dateStr.length) {
@@ -138,11 +148,15 @@ object DateTimeUtils {
         // Use heuristics to select a subset of formatters, preventing performance degradation
         // caused by exception handling in sequential parsing loops for invalid/mismatched formats.
         val formatters = if (hasT) {
-            listOf(FMT_ISO_LOCAL, FMT_ISO_MILLIS_LOCAL, FMT_COMPACT_LOCAL)
+            val hasDot = dateStr.contains('.')
+            val hasHyphen = dateStr.contains('-')
+            if (hasDot) FORMATTERS_LOCAL_ISO_MILLIS
+            else if (hasHyphen) FORMATTERS_LOCAL_ISO_STANDARD
+            else FORMATTERS_LOCAL_COMPACT
         } else if (hasSpace) {
-            listOf(FMT_SPACE_SEP_DATE_TIME)
+            FORMATTERS_LOCAL_SPACE_SEP
         } else {
-            listOf(FMT_COMPACT_NO_T)
+            FORMATTERS_LOCAL_COMPACT_NO_T
         }
 
         for (formatter in formatters) {
