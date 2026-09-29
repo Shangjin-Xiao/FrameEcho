@@ -31,3 +31,7 @@
 ## 2024-05-18 - Jetpack Compose Color Allocation Optimization Pitfall
 **Learning:** Do NOT wrap `Color.copy(alpha = ...)` in `remember` blocks. Because `Color` is a value class (wrapping a primitive `ULong`), `.copy()` performs lightweight bitwise math without heap allocation. Using `remember` forces boxing of the primitive to store it in the Compose slot table, actually *introducing* memory allocation and overhead (micro-pessimization).
 **Action:** Let Jetpack Compose instantiate primitive values (like `Color`) via bitwise operations directly instead of attempting to memoize them with `remember` blocks, which leads to primitive boxing.
+
+## 2026-05-20 - Batch MediaMetadataRetriever Frame Extractions
+**Learning:** Chunking frame/thumbnail extractions into small batches (e.g., using `chunked(THUMBNAIL_BATCH_SIZE)`) causes sequential processing and repeated creation/initialization of `MediaMetadataRetriever` instances across multiple calls. Passing all requested timestamps at once into a single batch extraction method allows reuse of the same underlying `MediaMetadataRetriever` and native data source, eliminating N+1 retriever initialization overhead.
+**Action:** Always batch frame/thumbnail requests together into a single call to `FrameExtractor.extractThumbnails` rather than splitting them into multiple batch iterations.
