@@ -316,34 +316,31 @@ class PlayerViewModel : ViewModel() {
             }
             if (missingIndices.isEmpty()) return@launch
 
-            // Load in small batches for progressive appearance
-            for (batch in missingIndices.chunked(THUMBNAIL_BATCH_SIZE)) {
-                ensureActive()
+            ensureActive()
 
-                val indexToTimestamp = batch.associateWith { index ->
-                    val positionMs = (durationMs * index) / denominator
-                    positionMs * 1000L
+            val indexToTimestamp = missingIndices.associateWith { index ->
+                val positionMs = (durationMs * index) / denominator
+                positionMs * 1000L
+            }
+
+            try {
+                val results = extractor.extractThumbnails(
+                    uri,
+                    indexToTimestamp.values.toList(),
+                    THUMBNAIL_WIDTH_PX
+                )
+
+                val timestampToBitmap = results.toMap()
+                indexToTimestamp.forEach { (index, timestampUs) ->
+                    timestampToBitmap[timestampUs]?.let { bitmap ->
+                        _thumbnailCache[index] = bitmap
+                    }
                 }
-
-                try {
-                    val results = extractor.extractThumbnails(
-                        uri,
-                        indexToTimestamp.values.toList(),
-                        THUMBNAIL_WIDTH_PX
-                    )
-
-                    val timestampToBitmap = results.toMap()
-                    indexToTimestamp.forEach { (index, timestampUs) ->
-                        timestampToBitmap[timestampUs]?.let { bitmap ->
-                            _thumbnailCache[index] = bitmap
-                        }
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    appContext?.let { ctx ->
-                        LogUtils.w(ctx, "PlayerViewModel", "Failed to load thumbnail batch", e)
-                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                appContext?.let { ctx ->
+                    LogUtils.w(ctx, "PlayerViewModel", "Failed to load thumbnails", e)
                 }
             }
         }
