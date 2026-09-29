@@ -115,5 +115,13 @@ class FrameExporterTest {
         org.junit.Assert.assertEquals("test", exporter.sanitizeFileName("\u0000test\u0007"))
         org.junit.Assert.assertEquals("FrameEcho", exporter.sanitizeFileName("..."))
         org.junit.Assert.assertEquals("my_image", exporter.sanitizeFileName("my_image"))
+
+        // Additional edge cases
+        org.junit.Assert.assertEquals("FrameEcho", exporter.sanitizeFileName(""))
+        org.junit.Assert.assertEquals("FrameEcho", exporter.sanitizeFileName("   "))
+        org.junit.Assert.assertEquals("FrameEcho", exporter.sanitizeFileName("___"))
+        org.junit.Assert.assertEquals("file_name.jpg", exporter.sanitizeFileName(".  _file_name.jpg._  "))
+        org.junit.Assert.assertEquals("a_b_c_d_e_f_g_h", exporter.sanitizeFileName("a*b?c<d>e|f\"g\\h"))
+        org.junit.Assert.assertEquals("test", exporter.sanitizeFileName("\r\ntest\t\u007F"))
     }
 }
