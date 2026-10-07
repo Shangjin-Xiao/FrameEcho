@@ -8,3 +8,7 @@
 ## 2026-08-26 - Modifier.pointerInput Stale Closure Bug
 **Learning:** When using `Modifier.pointerInput(Unit)` to handle gestures (e.g., in a video player surface for tap-to-play), any state variables or callbacks (like `onTogglePlayPause` or `exoPlayer.isPlaying`) referenced inside the block must be wrapped in `rememberUpdatedState`. Because `pointerInput(Unit)` memoizes its block for the lifetime of the component, capturing raw variables results in a stale closure bug if the parent recomposes and provides new instances.
 **Action:** Always wrap lambda callbacks and changing state references in `rememberUpdatedState` before accessing them inside `pointerInput(Unit)` to ensure the gesture detector executes with the freshest context.
+
+## 2024-10-07 - Use clearAndSetSemantics for Text-based IconButtons
+**Learning:** When using `IconButton` that contains a text node (like "‹‹" or "-5s") instead of an SVG icon, applying `Modifier.semantics { contentDescription = ... }` does not override the inner text. Screen readers will read both the text label AND the custom description, creating a confusing and redundant accessibility experience.
+**Action:** Use `Modifier.clearAndSetSemantics { contentDescription = ... }` on these types of buttons. This completely clears out the semantic properties of the descendants (the raw text) and replaces it with the explicitly provided localized description.
