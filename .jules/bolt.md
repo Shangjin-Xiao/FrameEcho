@@ -35,3 +35,7 @@
 ## 2026-05-20 - 优化 List 过滤中的 Set 查找性能
 **Learning:** 在使用 `list.filter { it.key in unseenKeys }` 对列表进行过滤时，如果 `unseenKeys` 是 List 类型，`in` 关键字会导致对 `unseenKeys` 进行全列表线性扫描（$O(M)$ 复杂度），导致总体筛选时间复杂度达到 $O(N \times M)$。
 **Action:** 将查找集合显式转换为 `Set`（如 `getUnseenStepKeys(...).toSet()`），使 `in` 操作下降至 $O(1)$ 哈希查找时间复杂度，整体时间复杂度降至 $O(N + M)$。
+
+## 2026-05-20 - Avoid runCatching Overhead in Hot Loops
+**Learning:** `runCatching` constructs a `Result<T>` value object wrapper on every call, catching all `Throwable` instances. When called in loops or frequent helper functions (e.g., MediaFormat value lookups), this causes unnecessary object allocations and overhead compared to explicit `try-catch` blocks targeting expected exception paths.
+**Action:** Replace `runCatching { ... }.getOrNull()` with direct `try { ... } catch (_: Exception) { null }` in frequently invoked utility/helper methods to eliminate `Result` object allocations.

@@ -107,4 +107,55 @@ class MetadataExtractorTest {
         assertEquals(34.0522, lat!!, 0.0001)
         assertEquals(-118.2437, lon!!, 0.0001)
     }
+
+    @Test
+    fun `getStringFromKeys returns first non-blank string value`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.getString("key1") } throws NullPointerException("Missing key")
+        io.mockk.every { format.getString("key2") } returns ""
+        io.mockk.every { format.getString("key3") } returns "1/100"
+
+        val result = MetadataExtractor.getStringFromKeys(format, "key1", "key2", "key3")
+        assertEquals("1/100", result)
+    }
+
+    @Test
+    fun `getIntFromKeys returns first valid integer`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.getInteger("key1") } throws ClassCastException("Wrong type")
+        io.mockk.every { format.getInteger("key2") } returns 400
+
+        val result = MetadataExtractor.getIntFromKeys(format, "key1", "key2")
+        assertEquals(400, result)
+    }
+
+    @Test
+    fun `getFloatFromKeys falls back to string parsing if getFloat throws`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.getFloat("key1") } throws ClassCastException("Wrong type")
+        io.mockk.every { format.getString("key1") } returns "2.8"
+
+        val result = MetadataExtractor.getFloatFromKeys(format, "key1")
+        assertEquals(2.8f, result!!, 0.001f)
+    }
+
+    @Test
+    fun `benchmark getStringFromKeys execution`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.getString("invalid1") } throws NullPointerException()
+        io.mockk.every { format.getString("invalid2") } throws NullPointerException()
+        io.mockk.every { format.getString("validKey") } returns "1/500"
+
+        // Warmup
+        repeat(100) {
+            MetadataExtractor.getStringFromKeys(format, "invalid1", "invalid2", "validKey")
+        }
+
+        val startTime = System.nanoTime()
+        repeat(1_000) {
+            MetadataExtractor.getStringFromKeys(format, "invalid1", "invalid2", "validKey")
+        }
+        val durationNs = System.nanoTime() - startTime
+        println("getStringFromKeys 1k iterations took: ${durationNs / 1_000_000.0} ms")
+    }
 }
