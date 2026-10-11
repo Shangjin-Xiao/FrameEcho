@@ -135,8 +135,6 @@ class PlayerViewModel : ViewModel() {
             // sqrt curve: gives ~10 for 5s, ~28 for 30s, ~55 for 2min, ~77 for 5min, ~110 for 10min
             return (5.0 * kotlin.math.sqrt(durationS)).toInt().coerceIn(10, 150)
         }
-        /** Thumbnails per batch for progressive loading */
-        const val THUMBNAIL_BATCH_SIZE = 5
 
         /**
          * How long the preview decoding session is kept open after a drag ends.
@@ -297,8 +295,9 @@ class PlayerViewModel : ViewModel() {
      * Thumbnails are evenly distributed across the entire video, so they
      * load once and remain stable throughout playback.
      *
-     * Uses progressive batch loading (5 at a time) so thumbnails appear
-     * incrementally as they're extracted, instead of all-or-nothing.
+     * All missing thumbnails are extracted in a single batch call so the
+     * resource-heavy `MediaMetadataRetriever` (and its native decoder) is
+     * created and released only once instead of once per chunk.
      */
     private fun loadThumbnailsForFullVideo() {
         if (batchThumbnailJob?.isActive == true) return
