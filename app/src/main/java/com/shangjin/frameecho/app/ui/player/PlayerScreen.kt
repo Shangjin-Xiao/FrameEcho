@@ -272,9 +272,8 @@ fun PlayerScreen(
                 if (playbackState == Player.STATE_READY) {
                     viewModel.updateDuration(exoPlayer.duration)
                     // Extract frame rate from ExoPlayer's selected video track
-                    val videoFormat = exoPlayer.videoFormat
-                    if (videoFormat != null && videoFormat.frameRate > 0f) {
-                        viewModel.updateVideoFrameRate(videoFormat.frameRate)
+                    exoPlayer.videoFormat?.takeIf { it.frameRate > 0f }?.let { format ->
+                        viewModel.updateVideoFrameRate(format.frameRate)
                     }
                 }
             }
