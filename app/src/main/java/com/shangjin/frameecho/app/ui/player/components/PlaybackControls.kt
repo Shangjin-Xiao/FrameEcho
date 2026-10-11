@@ -39,6 +39,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -304,19 +305,15 @@ fun PlaybackControls(
                             onDragStarted()
                         }
                         isSliderDragging = true
-                        val newPosition = if (isFineScrubbing) {
-                            val deltaFraction = clampedFraction - sliderDragStartFraction
-                            val rawDeltaMs = (deltaFraction * durationMs * fineScrubSensitivity).toLong()
-                            if (frameDurationMs > 0L) {
-                                // Snap to frame boundaries for true frame-level precision
-                                val snappedDeltaMs = (rawDeltaMs / frameDurationMs) * frameDurationMs
-                                (sliderDragStartPositionMs + snappedDeltaMs).coerceIn(0L, durationMs)
-                            } else {
-                                (sliderDragStartPositionMs + rawDeltaMs).coerceIn(0L, durationMs)
-                            }
-                        } else {
-                            (clampedFraction * durationMs).toLong()
-                        }
+                        val newPosition = calculateScrubPosition(
+                            isFineScrubbing = isFineScrubbing,
+                            clampedFraction = clampedFraction,
+                            sliderDragStartFraction = sliderDragStartFraction,
+                            durationMs = durationMs,
+                            fineScrubSensitivity = fineScrubSensitivity,
+                            frameDurationMs = frameDurationMs,
+                            sliderDragStartPositionMs = sliderDragStartPositionMs
+                        )
 
                         // Haptic feedback on frame boundary crossing during fine scrub
                         if (isFineScrubbing && frameDurationMs > 0L) {
@@ -472,7 +469,7 @@ fun PlaybackControls(
                                 },
                                 modifier = Modifier
                                     .size(36.dp)
-                                    .semantics { contentDescription = prevFrameDesc }
+                                    .clearAndSetSemantics { contentDescription = prevFrameDesc }
                             ) {
                                 Text(
                                     text = "‹‹",
@@ -493,7 +490,7 @@ fun PlaybackControls(
                             },
                             modifier = Modifier
                                 .size(40.dp)
-                                .semantics { contentDescription = replayDesc }
+                                .clearAndSetSemantics { contentDescription = replayDesc }
                         ) {
                             Text(
                                 text = "-${seekIntervalMs / 1000}s",
@@ -528,7 +525,7 @@ fun PlaybackControls(
                             },
                             modifier = Modifier
                                 .size(40.dp)
-                                .semantics { contentDescription = forwardDesc }
+                                .clearAndSetSemantics { contentDescription = forwardDesc }
                         ) {
                             Text(
                                 text = "+${seekIntervalMs / 1000}s",
@@ -553,7 +550,7 @@ fun PlaybackControls(
                                 },
                                 modifier = Modifier
                                     .size(36.dp)
-                                    .semantics { contentDescription = nextFrameDesc }
+                                    .clearAndSetSemantics { contentDescription = nextFrameDesc }
                             ) {
                                 Text(
                                     text = "››",
@@ -572,5 +569,31 @@ fun PlaybackControls(
                 )
             }
         }
+    }
+}
+
+/**
+ * Calculates target position in milliseconds during scrubbing.
+ */
+internal fun calculateScrubPosition(
+    isFineScrubbing: Boolean,
+    clampedFraction: Float,
+    sliderDragStartFraction: Float,
+    durationMs: Long,
+    fineScrubSensitivity: Float,
+    frameDurationMs: Long,
+    sliderDragStartPositionMs: Long
+): Long {
+    if (!isFineScrubbing) {
+        return (clampedFraction * durationMs).toLong()
+    }
+    val deltaFraction = clampedFraction - sliderDragStartFraction
+    val rawDeltaMs = (deltaFraction * durationMs * fineScrubSensitivity).toLong()
+    return if (frameDurationMs > 0L) {
+        // Snap to frame boundaries for true frame-level precision
+        val snappedDeltaMs = (rawDeltaMs / frameDurationMs) * frameDurationMs
+        (sliderDragStartPositionMs + snappedDeltaMs).coerceIn(0L, durationMs)
+    } else {
+        (sliderDragStartPositionMs + rawDeltaMs).coerceIn(0L, durationMs)
     }
 }

@@ -56,6 +56,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.exoplayer.ExoPlayer
@@ -283,8 +285,10 @@ fun VideoSurface(
                         modifier = Modifier.padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        val exportLoadingLabel = stringResource(R.string.exporting)
                         CircularProgressIndicator(
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.semantics { contentDescription = exportLoadingLabel }
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
@@ -311,8 +315,11 @@ fun VideoSurface(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    val bufferingLabel = stringResource(R.string.video_loading)
                     CircularProgressIndicator(
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier
+                            .size(40.dp)
+                            .semantics { contentDescription = bufferingLabel },
                         color = MaterialTheme.colorScheme.primary,
                         strokeWidth = 3.dp
                     )
