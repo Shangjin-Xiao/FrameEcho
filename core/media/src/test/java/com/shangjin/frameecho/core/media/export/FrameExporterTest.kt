@@ -115,6 +115,14 @@ class FrameExporterTest {
         assertEquals("test", exporter.sanitizeFileName("\u0000test\u0007"))
         assertEquals("FrameEcho", exporter.sanitizeFileName("..."))
         assertEquals("my_image", exporter.sanitizeFileName("my_image"))
+
+        // Additional edge cases
+        assertEquals("FrameEcho", exporter.sanitizeFileName(""))
+        assertEquals("FrameEcho", exporter.sanitizeFileName("   "))
+        assertEquals("FrameEcho", exporter.sanitizeFileName("___"))
+        assertEquals("file_name.jpg", exporter.sanitizeFileName(".  _file_name.jpg._  "))
+        assertEquals("a_b_c_d_e_f_g_h", exporter.sanitizeFileName("a*b?c<d>e|f\"g\\h"))
+        assertEquals("test", exporter.sanitizeFileName("\r\ntest\t\u007F"))
     }
 
     @Test
