@@ -236,28 +236,44 @@ object MetadataExtractor {
         )
     }
 
-    private fun getStringFromKeys(format: MediaFormat, vararg keys: String): String? {
+    internal fun getStringFromKeys(format: MediaFormat, vararg keys: String): String? {
         for (key in keys) {
-            val value = runCatching { format.getString(key) }.getOrNull() ?: continue
+            val value = try {
+                format.getString(key)
+            } catch (_: Exception) {
+                null
+            } ?: continue
             if (!value.isNullOrBlank()) return value
         }
         return null
     }
 
-    private fun getIntFromKeys(format: MediaFormat, vararg keys: String): Int? {
+    internal fun getIntFromKeys(format: MediaFormat, vararg keys: String): Int? {
         for (key in keys) {
-            val value = runCatching { format.getInteger(key) }.getOrNull()
+            val value = try {
+                format.getInteger(key)
+            } catch (_: Exception) {
+                null
+            }
             if (value != null) return value
         }
         return null
     }
 
-    private fun getFloatFromKeys(format: MediaFormat, vararg keys: String): Float? {
+    internal fun getFloatFromKeys(format: MediaFormat, vararg keys: String): Float? {
         for (key in keys) {
-            val floatValue = runCatching { format.getFloat(key) }.getOrNull()
+            val floatValue = try {
+                format.getFloat(key)
+            } catch (_: Exception) {
+                null
+            }
             if (floatValue != null) return floatValue
 
-            val stringValue = runCatching { format.getString(key) }.getOrNull()
+            val stringValue = try {
+                format.getString(key)
+            } catch (_: Exception) {
+                null
+            }
             val parsedFloat = stringValue?.toFloatOrNull()
             if (parsedFloat != null) return parsedFloat
         }
