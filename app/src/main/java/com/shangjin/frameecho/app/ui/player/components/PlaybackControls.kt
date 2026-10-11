@@ -39,6 +39,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -468,7 +469,7 @@ fun PlaybackControls(
                                 },
                                 modifier = Modifier
                                     .size(36.dp)
-                                    .semantics { contentDescription = prevFrameDesc }
+                                    .clearAndSetSemantics { contentDescription = prevFrameDesc }
                             ) {
                                 Text(
                                     text = "‹‹",
@@ -489,7 +490,7 @@ fun PlaybackControls(
                             },
                             modifier = Modifier
                                 .size(40.dp)
-                                .semantics { contentDescription = replayDesc }
+                                .clearAndSetSemantics { contentDescription = replayDesc }
                         ) {
                             Text(
                                 text = "-${seekIntervalMs / 1000}s",
@@ -524,7 +525,7 @@ fun PlaybackControls(
                             },
                             modifier = Modifier
                                 .size(40.dp)
-                                .semantics { contentDescription = forwardDesc }
+                                .clearAndSetSemantics { contentDescription = forwardDesc }
                         ) {
                             Text(
                                 text = "+${seekIntervalMs / 1000}s",
@@ -549,7 +550,7 @@ fun PlaybackControls(
                                 },
                                 modifier = Modifier
                                     .size(36.dp)
-                                    .semantics { contentDescription = nextFrameDesc }
+                                    .clearAndSetSemantics { contentDescription = nextFrameDesc }
                             ) {
                                 Text(
                                     text = "››",
