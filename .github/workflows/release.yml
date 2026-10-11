@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-tags: true
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -65,7 +67,13 @@ jobs:
       - name: Resolve release notes
         if: ${{ inputs.publish_release == true }}
         run: |
-          python3 scripts/resolve_release_notes.py --version "${{ inputs.version }}" --output $RUNNER_TEMP/release-body.md
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v -x -e "${{ inputs.version }}" -e "v${{ inputs.version }}" | head -n 1 || true)
+          echo "Previous tag: $PREV_TAG"
+          python3 scripts/resolve_release_notes.py \
+            --version "${{ inputs.version }}" \
+            --output $RUNNER_TEMP/release-body.md \
+            --repo "${{ github.repository }}" \
+            --previous-tag "$PREV_TAG"
           echo "--- release body preview ---"
           cat $RUNNER_TEMP/release-body.md
 
@@ -77,6 +85,6 @@ jobs:
           name: FrameEcho ${{ inputs.version }}
           body_path: ${{ runner.temp }}/release-body.md
           files: app/build/outputs/apk/release/app-release.apk
-          generate_release_notes: true
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
