@@ -110,10 +110,28 @@ class FrameExporterTest {
         val context = mockk<Context>()
         val exporter = FrameExporter(context)
 
-        org.junit.Assert.assertEquals("etc_passwd", exporter.sanitizeFileName("../../etc/passwd"))
-        org.junit.Assert.assertEquals("photo_2026_07.jpg", exporter.sanitizeFileName("photo/2026:07.jpg"))
-        org.junit.Assert.assertEquals("test", exporter.sanitizeFileName("\u0000test\u0007"))
-        org.junit.Assert.assertEquals("FrameEcho", exporter.sanitizeFileName("..."))
-        org.junit.Assert.assertEquals("my_image", exporter.sanitizeFileName("my_image"))
+        assertEquals("etc_passwd", exporter.sanitizeFileName("../../etc/passwd"))
+        assertEquals("photo_2026_07.jpg", exporter.sanitizeFileName("photo/2026:07.jpg"))
+        assertEquals("test", exporter.sanitizeFileName("\u0000test\u0007"))
+        assertEquals("FrameEcho", exporter.sanitizeFileName("..."))
+        assertEquals("my_image", exporter.sanitizeFileName("my_image"))
+    }
+
+    @Test
+    fun `sanitizeFileName should sanitize complex security edge cases`() {
+        val context = mockk<Context>()
+        val exporter = FrameExporter(context)
+
+        // Nested and multi-dot path traversal attempts
+        assertEquals("etc_passwd", exporter.sanitizeFileName("....//....//etc/passwd"))
+        assertEquals("win_sys.dll", exporter.sanitizeFileName("..\\..\\win\\sys.dll"))
+
+        // Unicode BIDI / RTL / Format override characters (\u202E, \u200B)
+        assertEquals("test_exe.jpg", exporter.sanitizeFileName("test\u202Eexe.jpg"))
+        assertEquals("hidden_file", exporter.sanitizeFileName("\u200B.hidden_file"))
+
+        // Whitespace + null byte mixtures and trailing/leading invalid boundaries
+        assertEquals("malicious", exporter.sanitizeFileName(" _\u0000..malicious.._ "))
+        assertEquals("FrameEcho", exporter.sanitizeFileName("\u0000___...\t "))
     }
 }

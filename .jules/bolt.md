@@ -32,6 +32,14 @@
 **Learning:** Do NOT wrap `Color.copy(alpha = ...)` in `remember` blocks. Because `Color` is a value class (wrapping a primitive `ULong`), `.copy()` performs lightweight bitwise math without heap allocation. Using `remember` forces boxing of the primitive to store it in the Compose slot table, actually *introducing* memory allocation and overhead (micro-pessimization).
 **Action:** Let Jetpack Compose instantiate primitive values (like `Color`) via bitwise operations directly instead of attempting to memoize them with `remember` blocks, which leads to primitive boxing.
 
+## 2026-05-20 - 优化 List 过滤中的 Set 查找性能
+**Learning:** 在使用 `list.filter { it.key in unseenKeys }` 对列表进行过滤时，如果 `unseenKeys` 是 List 类型，`in` 关键字会导致对 `unseenKeys` 进行全列表线性扫描（$O(M)$ 复杂度），导致总体筛选时间复杂度达到 $O(N \times M)$。
+**Action:** 将查找集合显式转换为 `Set`（如 `getUnseenStepKeys(...).toSet()`），使 `in` 操作下降至 $O(1)$ 哈希查找时间复杂度，整体时间复杂度降至 $O(N + M)$。
+
+## 2026-05-20 - Avoid runCatching Overhead in Hot Loops
+**Learning:** `runCatching` constructs a `Result<T>` value object wrapper on every call, catching all `Throwable` instances. When called in loops or frequent helper functions (e.g., MediaFormat value lookups), this causes unnecessary object allocations and overhead compared to explicit `try-catch` blocks targeting expected exception paths.
+**Action:** Replace `runCatching { ... }.getOrNull()` with direct `try { ... } catch (_: Exception) { null }` in frequently invoked utility/helper methods to eliminate `Result` object allocations.
+
 ## 2026-05-20 - Batch MediaMetadataRetriever Frame Extractions
 **Learning:** Chunking frame/thumbnail extractions into small batches (e.g., using `chunked(THUMBNAIL_BATCH_SIZE)`) causes sequential processing and repeated creation/initialization of `MediaMetadataRetriever` instances across multiple calls. Passing all requested timestamps at once into a single batch extraction method allows reuse of the same underlying `MediaMetadataRetriever` and native data source, eliminating N+1 retriever initialization overhead.
 **Action:** Always batch frame/thumbnail requests together into a single call to `FrameExtractor.extractThumbnails` rather than splitting them into multiple batch iterations.
