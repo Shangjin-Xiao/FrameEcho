@@ -304,19 +304,15 @@ fun PlaybackControls(
                             onDragStarted()
                         }
                         isSliderDragging = true
-                        val newPosition = if (isFineScrubbing) {
-                            val deltaFraction = clampedFraction - sliderDragStartFraction
-                            val rawDeltaMs = (deltaFraction * durationMs * fineScrubSensitivity).toLong()
-                            if (frameDurationMs > 0L) {
-                                // Snap to frame boundaries for true frame-level precision
-                                val snappedDeltaMs = (rawDeltaMs / frameDurationMs) * frameDurationMs
-                                (sliderDragStartPositionMs + snappedDeltaMs).coerceIn(0L, durationMs)
-                            } else {
-                                (sliderDragStartPositionMs + rawDeltaMs).coerceIn(0L, durationMs)
-                            }
-                        } else {
-                            (clampedFraction * durationMs).toLong()
-                        }
+                        val newPosition = calculateScrubPosition(
+                            isFineScrubbing = isFineScrubbing,
+                            clampedFraction = clampedFraction,
+                            sliderDragStartFraction = sliderDragStartFraction,
+                            durationMs = durationMs,
+                            fineScrubSensitivity = fineScrubSensitivity,
+                            frameDurationMs = frameDurationMs,
+                            sliderDragStartPositionMs = sliderDragStartPositionMs
+                        )
 
                         // Haptic feedback on frame boundary crossing during fine scrub
                         if (isFineScrubbing && frameDurationMs > 0L) {
@@ -572,5 +568,31 @@ fun PlaybackControls(
                 )
             }
         }
+    }
+}
+
+/**
+ * Calculates target position in milliseconds during scrubbing.
+ */
+internal fun calculateScrubPosition(
+    isFineScrubbing: Boolean,
+    clampedFraction: Float,
+    sliderDragStartFraction: Float,
+    durationMs: Long,
+    fineScrubSensitivity: Float,
+    frameDurationMs: Long,
+    sliderDragStartPositionMs: Long
+): Long {
+    if (!isFineScrubbing) {
+        return (clampedFraction * durationMs).toLong()
+    }
+    val deltaFraction = clampedFraction - sliderDragStartFraction
+    val rawDeltaMs = (deltaFraction * durationMs * fineScrubSensitivity).toLong()
+    return if (frameDurationMs > 0L) {
+        // Snap to frame boundaries for true frame-level precision
+        val snappedDeltaMs = (rawDeltaMs / frameDurationMs) * frameDurationMs
+        (sliderDragStartPositionMs + snappedDeltaMs).coerceIn(0L, durationMs)
+    } else {
+        (sliderDragStartPositionMs + rawDeltaMs).coerceIn(0L, durationMs)
     }
 }

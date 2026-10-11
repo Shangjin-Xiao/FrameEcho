@@ -19,10 +19,14 @@ private val Context.onboardingDataStore: DataStore<Preferences>
  * Each onboarding step has a unique string key. When the user sees a step,
  * its key is added to a persisted set. This allows new steps to be introduced
  * in future app updates without replaying steps the user has already seen.
+ *
+ * @param dataStore The DataStore instance to use. Production code should use
+ *   the convenience [Context] constructor; tests can inject an in-memory store.
  */
-class OnboardingManager(context: Context) {
+class OnboardingManager(private val dataStore: DataStore<Preferences>) {
 
-    private val dataStore = context.onboardingDataStore
+    /** Convenience constructor for production use. */
+    constructor(context: Context) : this(context.onboardingDataStore)
 
     /** Set of step keys that the user has already seen. */
     private suspend fun getSeenStepKeys(): Set<String> =
