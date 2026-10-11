@@ -56,18 +56,26 @@ jobs:
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: frameecho-release-apk-v${{ inputs.version }}
+          name: frameecho-release-apk-${{ inputs.version }}
           path: app/build/outputs/apk/release/app-release.apk
           archive: false
           if-no-files-found: error
           retention-days: 30
 
+      - name: Resolve release notes
+        if: ${{ inputs.publish_release == true }}
+        run: |
+          python3 scripts/resolve_release_notes.py --version "${{ inputs.version }}" --output $RUNNER_TEMP/release-body.md
+          echo "--- release body preview ---"
+          cat $RUNNER_TEMP/release-body.md
+
       - name: Create GitHub Release
         if: ${{ inputs.publish_release == true }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ inputs.version }}
-          name: FrameEcho v${{ inputs.version }}
+          tag_name: ${{ inputs.version }}
+          name: FrameEcho ${{ inputs.version }}
+          body_path: ${{ runner.temp }}/release-body.md
           files: app/build/outputs/apk/release/app-release.apk
           generate_release_notes: true
         env:
