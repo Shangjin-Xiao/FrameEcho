@@ -106,7 +106,7 @@ fun PlayerScreen(
     LaunchedEffect(uiState.videoUri) {
         if (uiState.videoUri != null) {
             val allKeys = allOnboardingSteps.map { it.key }
-            val unseenKeys = onboardingManager.getUnseenStepKeys(allKeys, LEGACY_ONBOARDING_STEP_KEYS)
+            val unseenKeys = onboardingManager.getUnseenStepKeys(allKeys, LEGACY_ONBOARDING_STEP_KEYS).toSet()
             if (unseenKeys.isNotEmpty()) {
                 unseenSteps = allOnboardingSteps.filter { it.key in unseenKeys }
                 onboardingStep = 0

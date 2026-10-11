@@ -31,3 +31,7 @@
 ## 2024-05-18 - Jetpack Compose Color Allocation Optimization Pitfall
 **Learning:** Do NOT wrap `Color.copy(alpha = ...)` in `remember` blocks. Because `Color` is a value class (wrapping a primitive `ULong`), `.copy()` performs lightweight bitwise math without heap allocation. Using `remember` forces boxing of the primitive to store it in the Compose slot table, actually *introducing* memory allocation and overhead (micro-pessimization).
 **Action:** Let Jetpack Compose instantiate primitive values (like `Color`) via bitwise operations directly instead of attempting to memoize them with `remember` blocks, which leads to primitive boxing.
+
+## 2026-05-20 - 优化 List 过滤中的 Set 查找性能
+**Learning:** 在使用 `list.filter { it.key in unseenKeys }` 对列表进行过滤时，如果 `unseenKeys` 是 List 类型，`in` 关键字会导致对 `unseenKeys` 进行全列表线性扫描（$O(M)$ 复杂度），导致总体筛选时间复杂度达到 $O(N \times M)$。
+**Action:** 将查找集合显式转换为 `Set`（如 `getUnseenStepKeys(...).toSet()`），使 `in` 操作下降至 $O(1)$ 哈希查找时间复杂度，整体时间复杂度降至 $O(N + M)$。
