@@ -47,3 +47,7 @@
 ## 2026-05-20 - Batch MediaMetadataRetriever Frame Extractions
 **Learning:** Chunking frame/thumbnail extractions into small batches (e.g., using `chunked(THUMBNAIL_BATCH_SIZE)`) causes sequential processing and repeated creation/initialization of `MediaMetadataRetriever` instances across multiple calls. Passing all requested timestamps at once into a single batch extraction method allows reuse of the same underlying `MediaMetadataRetriever` and native data source, eliminating N+1 retriever initialization overhead.
 **Action:** Always batch frame/thumbnail requests together into a single call to `FrameExtractor.extractThumbnails` rather than splitting them into multiple batch iterations.
+
+## 2026-05-19 - 避免在循环或方法中重复分配数组常量
+**Learning:** 在频繁调用的方法或循环中直接书写 `arrayOf(...)` 或 `intArrayOf(...)`（如 CSD 键名列表、格式属性列表、旋转角度集合等）会在每次方法执行或条件检查时触发新的数组堆内存分配，增加 GC 压力。
+**Action:** 将固定不变的数组文字提升至 `companion object` 或顶层的 `private val` 常量（如 `CSD_KEYS`、`VALID_ROTATIONS`），实现对象重用并消除不必要的垃圾回收开销。
