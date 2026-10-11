@@ -2,14 +2,16 @@
 
 <img src="docs/banner.svg" alt="FrameEcho Banner" width="100%" />
 
-<br/>
+<a id="frameecho"></a>
 
-# FrameEcho
+# FrameEcho (帧迹)
 
-**定格你所爱的每一帧**
-Android 视频抽帧应用
+**定格你所爱的每一帧 · Freeze Every Frame You Love**<br/>
+Android 视频抽帧应用 · High-Performance Video Frame Capture for Android
 
 从任意视频中精确截取画面，支持 HDR、动态照片与完整 EXIF 保留。通过快捷按钮和底部设置面板可调整格式、质量、导出目录、文件名、静音等。
+
+Extract precise frames from any video with HDR awareness, motion photo export, and full EXIF preservation. Quick‑access toggles and a settings sheet let you choose format, quality, export folder, filename template, and audio muting.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-26%20(Android%208.0)-green.svg)](https://developer.android.com/about/versions/oreo)
@@ -17,7 +19,7 @@ Android 视频抽帧应用
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-purple.svg)](https://kotlinlang.org/)
 [![Build](https://img.shields.io/github/actions/workflow/status/Shangjin-Xiao/FrameEcho/ci.yml?label=CI)](https://github.com/Shangjin-Xiao/FrameEcho/actions)
 
-[English ↓](#-frameecho-1)　·　[官网](https://frameecho.shangjinyun.cn)　·　[下载](https://github.com/Shangjin-Xiao/FrameEcho/releases)
+[English ↓](#-frameecho-1)　·　[官网 / Website](https://frameecho.shangjinyun.cn)　·　[下载 / Releases](https://github.com/Shangjin-Xiao/FrameEcho/releases)
 
 </div>
 
@@ -122,6 +124,9 @@ FrameEcho/
 
 <div align="center">
 
+<a id="english"></a>
+<a id="-frameecho-1"></a>
+
 ## 🇬🇧 FrameEcho
 
 **Freeze Every Frame You Love**
@@ -130,24 +135,25 @@ Video frame capture for Android
 
 Extract precise frames from any video with HDR awareness, motion photo export, and full EXIF preservation. Quick‑access toggles and a settings sheet let you choose format, quality, export folder, filename template and audio muting.
 
-[Website](https://frameecho.shangjinyun.cn)　·　[Releases](https://github.com/Shangjin-Xiao/FrameEcho/releases)
+[中文 ↑](#frameecho)　·　[Website](https://frameecho.shangjinyun.cn)　·　[Releases](https://github.com/Shangjin-Xiao/FrameEcho/releases)
 
 </div>
 
 ## ✨ Features
 
 - **Frame-Accurate Seeking & Capture** — Always uses `MediaMetadataRetriever.OPTION_CLOSEST`; never falls back to keyframe seeking
-- **Static & Motion Photo Export** — JPEG, PNG, WebP; motion photo follows [Google MicroVideo spec](https://developer.android.com/media/camera/motion-photo-specification)
+- **Static & Motion Photo Export** — Standard high-quality JPEG export; motion photo follows [Google MicroVideo spec](https://developer.android.com/media/camera/motion-photo-specification) (XMP + appended MP4)
 - **Mute Audio Option** — omit audio when exporting motion photos
 - **HDR & Dolby Vision Aware** — Detects HDR10, HDR10+, HLG, Dolby Vision; tone-maps HDR frames to sRGB so exports look correct
-- **Quick‑Access Controls** — bottom toolbar lets you toggle mute, motion‑photo mode, metadata preservation and tap to cycle formats
+- **Quick‑Access Controls** — bottom toolbar lets you toggle mute, motion‑photo mode, metadata preservation
 - **Custom File Names & Export Locations** — presets, manual input with length validation, root folders or SAF-picked custom directory
 - **Lossless Metadata Preservation** — full EXIF from source video written to exported image
 - **Quality & Resolution Controls** — 100% default, adjustable quality and optional max resolution with bounds checks
 - **Memory-Optimized for 4K Videos** — explicit `recycle()`, thumbnail caching, heavy work runs on `Dispatchers.IO` to prevent memory issues
 - **Lazy Thumbnail Timeline** — `LazyRow`‑based strip with on-demand 120px thumbnails and live position indicator
-- **Material 3 UI** — Dynamic Color (Android 12+), custom playback controls, `ModalBottomSheet` export settings
+- **Material 3 UI** — Dynamic Color (Android 12+), custom playback controls, `ModalBottomSheet` export settings
 - **Scoped Storage & SAF** — strict `MediaStore` API; gallery refreshes immediately after export
+- **Bilingual** — English and Simplified Chinese support with automatic system locale detection
 
 ## 📱 Screens
 
