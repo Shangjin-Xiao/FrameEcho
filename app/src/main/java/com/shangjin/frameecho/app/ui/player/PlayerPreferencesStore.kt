@@ -31,9 +31,8 @@ private val Context.playerPrefsDataStore: DataStore<Preferences>
  * Persistence for player quick toggles using Jetpack DataStore.
  *
  * DataStore replaces SharedPreferences with a coroutine-based, type-safe API
- * that avoids blocking the main thread on reads. For the initial load (called
- * from ViewModel.initialize), we use `runBlocking` because the ViewModel needs
- * the values synchronously before the first composition.
+ * that avoids blocking the main thread on reads. Initial loading is performed
+ * asynchronously via coroutines in ViewModelScope to prevent main thread disk I/O blocking.
  *
  * @param dataStore The DataStore instance to use. Production code should use
  *   the convenience [Context] constructor; tests can inject an in-memory store.
