@@ -6,5 +6,5 @@ import android.media.MediaFormat
  * Safely get an integer from MediaFormat.
  */
 internal fun MediaFormat.getIntegerSafe(key: String, default: Int): Int {
-    return runCatching { getInteger(key) }.getOrDefault(default)
+    return try { getInteger(key) } catch (_: Exception) { default }
 }
