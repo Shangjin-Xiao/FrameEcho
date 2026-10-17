@@ -111,6 +111,7 @@ class MetadataExtractorTest {
     @Test
     fun `getStringFromKeys returns first non-blank string value`() {
         val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.containsKey(any()) } returns true
         io.mockk.every { format.getString("key1") } throws NullPointerException("Missing key")
         io.mockk.every { format.getString("key2") } returns ""
         io.mockk.every { format.getString("key3") } returns "1/100"
@@ -120,8 +121,24 @@ class MetadataExtractorTest {
     }
 
     @Test
+    fun `getStringFromKeys skips key when containsKey returns false`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.containsKey("key1") } returns false
+        io.mockk.every { format.containsKey("key2") } returns true
+        io.mockk.every { format.getString("key1") } throws NullPointerException()
+        io.mockk.every { format.getString("key2") } returns "1/200"
+
+        val result = MetadataExtractor.getStringFromKeys(format, "key1", "key2")
+        assertEquals("1/200", result)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            io.mockk.verify(exactly = 0) { format.getString("key1") }
+        }
+    }
+
+    @Test
     fun `getIntFromKeys returns first valid integer`() {
         val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.containsKey(any()) } returns true
         io.mockk.every { format.getInteger("key1") } throws ClassCastException("Wrong type")
         io.mockk.every { format.getInteger("key2") } returns 400
 
@@ -130,8 +147,24 @@ class MetadataExtractorTest {
     }
 
     @Test
+    fun `getIntFromKeys skips key when containsKey returns false`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.containsKey("key1") } returns false
+        io.mockk.every { format.containsKey("key2") } returns true
+        io.mockk.every { format.getInteger("key1") } throws NullPointerException()
+        io.mockk.every { format.getInteger("key2") } returns 800
+
+        val result = MetadataExtractor.getIntFromKeys(format, "key1", "key2")
+        assertEquals(800, result)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            io.mockk.verify(exactly = 0) { format.getInteger("key1") }
+        }
+    }
+
+    @Test
     fun `getFloatFromKeys falls back to string parsing if getFloat throws`() {
         val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.containsKey(any()) } returns true
         io.mockk.every { format.getFloat("key1") } throws ClassCastException("Wrong type")
         io.mockk.every { format.getString("key1") } returns "2.8"
 
@@ -142,8 +175,9 @@ class MetadataExtractorTest {
     @Test
     fun `benchmark getStringFromKeys execution`() {
         val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
-        io.mockk.every { format.getString("invalid1") } throws NullPointerException()
-        io.mockk.every { format.getString("invalid2") } throws NullPointerException()
+        io.mockk.every { format.containsKey("invalid1") } returns false
+        io.mockk.every { format.containsKey("invalid2") } returns false
+        io.mockk.every { format.containsKey("validKey") } returns true
         io.mockk.every { format.getString("validKey") } returns "1/500"
 
         // Warmup

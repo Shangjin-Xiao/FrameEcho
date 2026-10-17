@@ -51,3 +51,7 @@
 ## 2026-05-19 - 避免在循环或方法中重复分配数组常量
 **Learning:** 在频繁调用的方法或循环中直接书写 `arrayOf(...)` 或 `intArrayOf(...)`（如 CSD 键名列表、格式属性列表、旋转角度集合等）会在每次方法执行或条件检查时触发新的数组堆内存分配，增加 GC 压力。
 **Action:** 将固定不变的数组文字提升至 `companion object` 或顶层的 `private val` 常量（如 `CSD_KEYS`、`VALID_ROTATIONS`），实现对象重用并消除不必要的垃圾回收开销。
+
+## 2026-05-21 - 避免 MediaFormat 属性提取时的异常抛出开销
+**Learning:** 从 `MediaFormat` 中提取 ISO、曝光时间、光圈、焦距等可选属性时，若键名不存在，调用 `getString` / `getInteger` / `getFloat` 会频繁抛出异常，在循环与多候选 Key 匹配时引发显著的 CPU 与异常处理开销。
+**Action:** 在 API Level 29+ (`Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q`) 环境下，在尝试从 `MediaFormat` 获取值之前先调用 `format.containsKey(key)` 进行前置判断，对于不存在的 Key 提前跳过，规避异常抛出与堆栈收集开销。
