@@ -111,6 +111,7 @@ class MetadataExtractorTest {
     @Test
     fun `getStringFromKeys returns first non-blank string value`() {
         val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.containsKey(any()) } returns true
         io.mockk.every { format.getString("key1") } throws NullPointerException("Missing key")
         io.mockk.every { format.getString("key2") } returns ""
         io.mockk.every { format.getString("key3") } returns "1/100"
@@ -122,6 +123,7 @@ class MetadataExtractorTest {
     @Test
     fun `getIntFromKeys returns first valid integer`() {
         val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.containsKey(any()) } returns true
         io.mockk.every { format.getInteger("key1") } throws ClassCastException("Wrong type")
         io.mockk.every { format.getInteger("key2") } returns 400
 
@@ -130,8 +132,32 @@ class MetadataExtractorTest {
     }
 
     @Test
+    fun `getIntFromKeys skips key when containsKey is false on API 29+`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.containsKey("key1") } returns false
+        io.mockk.every { format.containsKey("key2") } returns true
+        io.mockk.every { format.getInteger("key2") } returns 800
+
+        val result = MetadataExtractor.getIntFromKeys(format, "key1", "key2", sdkInt = 29)
+        assertEquals(800, result)
+        io.mockk.verify(exactly = 0) { format.getInteger("key1") }
+    }
+
+    @Test
+    fun `getIntFromKeys falls back to try catch on legacy API below 29`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.getInteger("key1") } throws ClassCastException("Missing or bad type")
+        io.mockk.every { format.getInteger("key2") } returns 800
+
+        val result = MetadataExtractor.getIntFromKeys(format, "key1", "key2", sdkInt = 28)
+        assertEquals(800, result)
+        io.mockk.verify(exactly = 0) { format.containsKey(any()) }
+    }
+
+    @Test
     fun `getFloatFromKeys falls back to string parsing if getFloat throws`() {
         val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.containsKey(any()) } returns true
         io.mockk.every { format.getFloat("key1") } throws ClassCastException("Wrong type")
         io.mockk.every { format.getString("key1") } returns "2.8"
 
@@ -142,8 +168,9 @@ class MetadataExtractorTest {
     @Test
     fun `benchmark getStringFromKeys execution`() {
         val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
-        io.mockk.every { format.getString("invalid1") } throws NullPointerException()
-        io.mockk.every { format.getString("invalid2") } throws NullPointerException()
+        io.mockk.every { format.containsKey("invalid1") } returns false
+        io.mockk.every { format.containsKey("invalid2") } returns false
+        io.mockk.every { format.containsKey("validKey") } returns true
         io.mockk.every { format.getString("validKey") } returns "1/500"
 
         // Warmup
@@ -157,5 +184,26 @@ class MetadataExtractorTest {
         }
         val durationNs = System.nanoTime() - startTime
         println("getStringFromKeys 1k iterations took: ${durationNs / 1_000_000.0} ms")
+    }
+
+    @Test
+    fun `benchmark getIntFromKeys execution`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.containsKey("invalid1") } returns false
+        io.mockk.every { format.containsKey("invalid2") } returns false
+        io.mockk.every { format.containsKey("validKey") } returns true
+        io.mockk.every { format.getInteger("validKey") } returns 100
+
+        // Warmup
+        repeat(100) {
+            MetadataExtractor.getIntFromKeys(format, "invalid1", "invalid2", "validKey")
+        }
+
+        val startTime = System.nanoTime()
+        repeat(1_000) {
+            MetadataExtractor.getIntFromKeys(format, "invalid1", "invalid2", "validKey")
+        }
+        val durationNs = System.nanoTime() - startTime
+        println("getIntFromKeys 1k iterations took: ${durationNs / 1_000_000.0} ms")
     }
 }
