@@ -51,3 +51,7 @@
 ## 2026-05-19 - 避免在循环或方法中重复分配数组常量
 **Learning:** 在频繁调用的方法或循环中直接书写 `arrayOf(...)` 或 `intArrayOf(...)`（如 CSD 键名列表、格式属性列表、旋转角度集合等）会在每次方法执行或条件检查时触发新的数组堆内存分配，增加 GC 压力。
 **Action:** 将固定不变的数组文字提升至 `companion object` 或顶层的 `private val` 常量（如 `CSD_KEYS`、`VALID_ROTATIONS`），实现对象重用并消除不必要的垃圾回收开销。
+
+## 2026-05-21 - 优化 MediaFormat Key 提取避免异常控制流
+**Learning:** 在 Android Q (API 29) 及以上版本中，`MediaFormat.getInteger()`, `getString()`, `getFloat()` 等方法在 key 不存在时会抛出 `NullPointerException` 或 `ClassCastException`。在循环提取多个可选 key 的热路径中，依赖 try-catch 进行流程控制会产生剧烈的 CPU 异常栈捕获开销。
+**Action:** 在调用 `MediaFormat` 的 Getter 方法前，先进行 `Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && format.containsKey(key)` 判断。若 key 不存在则直接跳过，仅在 key 存在或低于 API 29 时才尝试 Getter 读取，彻底消除缺失 key 时的异常抛出开销。
