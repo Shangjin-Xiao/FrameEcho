@@ -132,15 +132,26 @@ class MetadataExtractorTest {
     }
 
     @Test
-    fun `getIntFromKeys skips key when containsKey is false`() {
+    fun `getIntFromKeys skips key when containsKey is false on API 29+`() {
         val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
         io.mockk.every { format.containsKey("key1") } returns false
         io.mockk.every { format.containsKey("key2") } returns true
         io.mockk.every { format.getInteger("key2") } returns 800
 
-        val result = MetadataExtractor.getIntFromKeys(format, "key1", "key2")
+        val result = MetadataExtractor.getIntFromKeys(format, "key1", "key2", sdkInt = 29)
         assertEquals(800, result)
         io.mockk.verify(exactly = 0) { format.getInteger("key1") }
+    }
+
+    @Test
+    fun `getIntFromKeys falls back to try catch on legacy API below 29`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.getInteger("key1") } throws ClassCastException("Missing or bad type")
+        io.mockk.every { format.getInteger("key2") } returns 800
+
+        val result = MetadataExtractor.getIntFromKeys(format, "key1", "key2", sdkInt = 28)
+        assertEquals(800, result)
+        io.mockk.verify(exactly = 0) { format.containsKey(any()) }
     }
 
     @Test

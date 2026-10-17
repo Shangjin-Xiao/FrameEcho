@@ -237,9 +237,13 @@ object MetadataExtractor {
         )
     }
 
-    internal fun getStringFromKeys(format: MediaFormat, vararg keys: String): String? {
+    internal fun getStringFromKeys(
+        format: MediaFormat,
+        vararg keys: String,
+        sdkInt: Int = Build.VERSION.SDK_INT
+    ): String? {
         for (key in keys) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !format.containsKey(key)) {
+            if (sdkInt >= Build.VERSION_CODES.Q && !format.containsKey(key)) {
                 continue
             }
             val value = try {
@@ -252,9 +256,13 @@ object MetadataExtractor {
         return null
     }
 
-    internal fun getIntFromKeys(format: MediaFormat, vararg keys: String): Int? {
+    internal fun getIntFromKeys(
+        format: MediaFormat,
+        vararg keys: String,
+        sdkInt: Int = Build.VERSION.SDK_INT
+    ): Int? {
         for (key in keys) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !format.containsKey(key)) {
+            if (sdkInt >= Build.VERSION_CODES.Q && !format.containsKey(key)) {
                 continue
             }
             val value = try {
@@ -267,9 +275,13 @@ object MetadataExtractor {
         return null
     }
 
-    internal fun getFloatFromKeys(format: MediaFormat, vararg keys: String): Float? {
+    internal fun getFloatFromKeys(
+        format: MediaFormat,
+        vararg keys: String,
+        sdkInt: Int = Build.VERSION.SDK_INT
+    ): Float? {
         for (key in keys) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !format.containsKey(key)) {
+            if (sdkInt >= Build.VERSION_CODES.Q && !format.containsKey(key)) {
                 continue
             }
             val floatValue = try {

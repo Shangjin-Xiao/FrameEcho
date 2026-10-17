@@ -6,8 +6,12 @@ import android.os.Build
 /**
  * Safely get an integer from MediaFormat.
  */
-internal fun MediaFormat.getIntegerSafe(key: String, default: Int): Int {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !containsKey(key)) {
+internal fun MediaFormat.getIntegerSafe(
+    key: String,
+    default: Int,
+    sdkInt: Int = Build.VERSION.SDK_INT
+): Int {
+    if (sdkInt >= Build.VERSION_CODES.Q && !containsKey(key)) {
         return default
     }
     return try {
