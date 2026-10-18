@@ -305,11 +305,11 @@ object MetadataExtractor {
             if (secondSignIndex < 0) return Pair(null, null)
             val thirdSignIndex = clean.indexOfAny(charArrayOf('+', '-'), startIndex = secondSignIndex + 1)
 
-            val lat = clean.substring(0, secondSignIndex).toDouble()
+            val lat = clean.substring(0, secondSignIndex).toDoubleOrNull() ?: return Pair(null, null)
             val lon = if (thirdSignIndex > secondSignIndex) {
-                clean.substring(secondSignIndex, thirdSignIndex).toDouble()
+                clean.substring(secondSignIndex, thirdSignIndex).toDoubleOrNull()
             } else {
-                clean.substring(secondSignIndex).toDouble()
+                clean.substring(secondSignIndex).toDoubleOrNull()
             }
             Pair(lat, lon)
         } catch (_: Exception) {
