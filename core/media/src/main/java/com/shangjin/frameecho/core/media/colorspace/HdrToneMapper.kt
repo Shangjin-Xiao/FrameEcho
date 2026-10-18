@@ -2,7 +2,7 @@ package com.shangjin.frameecho.core.media.colorspace
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.ColorSpace as AndroidColorSpace
+import android.graphics.ColorSpace
 import android.graphics.Paint
 import androidx.core.graphics.createBitmap
 import com.shangjin.frameecho.core.model.ColorSpaceInfo
@@ -15,7 +15,7 @@ import com.shangjin.frameecho.core.model.ColorSpaceInfo
  */
 object HdrToneMapper {
 
-    private val srgbColorSpace by lazy { AndroidColorSpace.get(AndroidColorSpace.Named.SRGB) }
+    private val srgbColorSpace by lazy { ColorSpace.get(ColorSpace.Named.SRGB) }
 
     /**
      * Process a bitmap for export, applying tone mapping if necessary.
