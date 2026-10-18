@@ -50,7 +50,6 @@ import kotlin.math.roundToInt
 import com.shangjin.frameecho.R
 import com.shangjin.frameecho.core.model.ExportConfig
 import com.shangjin.frameecho.core.model.ExportDirectory
-import com.shangjin.frameecho.core.model.ExportFormat
 
 /**
  * M3 Modal Bottom Sheet for export settings.
