@@ -333,7 +333,8 @@ class FrameExporter(private val context: Context) {
 
     /** One encoded AAC packet ready for [MediaMuxer.writeSampleData]. */
     private class EncodedAudioPacket(
-        val data: ByteArray,
+        val offset: Int,
+        val size: Int,
         val presentationTimeUs: Long,
         val flags: Int
     )
@@ -341,6 +342,7 @@ class FrameExporter(private val context: Context) {
     /** AAC-encoded audio held in memory until the muxer has started. */
     private class EncodedAudio(
         val format: MediaFormat,
+        val data: ByteArray,
         val packets: List<EncodedAudioPacket>
     )
 
@@ -668,17 +670,20 @@ class FrameExporter(private val context: Context) {
                     if (encodedAudio != null) {
                         // Transcoded AAC packets were encoded before muxer.start();
                         // write them now that the muxer is running.
+                        val sharedAudioBuffer = ByteBuffer.wrap(encodedAudio.data)
                         for (packet in encodedAudio.packets) {
                             if (++sampleCount % 10 == 0) {
                                 currentCoroutineContext().ensureActive()
                             }
-                            bufferInfo.offset = 0
-                            bufferInfo.size = packet.data.size
+                            bufferInfo.offset = packet.offset
+                            bufferInfo.size = packet.size
                             bufferInfo.presentationTimeUs = packet.presentationTimeUs
                             bufferInfo.flags = packet.flags
+                            sharedAudioBuffer.position(packet.offset)
+                            sharedAudioBuffer.limit(packet.offset + packet.size)
                             muxer.writeSampleData(
                                 muxerAudioTrack,
-                                ByteBuffer.wrap(packet.data),
+                                sharedAudioBuffer,
                                 bufferInfo
                             )
                             audioSamplesWritten++
@@ -1098,6 +1103,8 @@ class FrameExporter(private val context: Context) {
 
         try {
             val packets = ArrayList<EncodedAudioPacket>()
+            val audioStream = ByteArrayOutputStream(PCM_READ_BUFFER_BYTES)
+            val scratchBuffer = ByteArray(AUDIO_COPY_CHUNK_BYTES)
             var outputFormat: MediaFormat? = null
             val bufferInfo = MediaCodec.BufferInfo()
             var inputOffset = 0
@@ -1163,13 +1170,20 @@ class FrameExporter(private val context: Context) {
                         ) {
                             val outputBuffer = encoder.getOutputBuffer(outputIndex)
                             if (outputBuffer != null) {
-                                val data = ByteArray(bufferInfo.size)
+                                val offset = audioStream.size()
+                                var remaining = bufferInfo.size
                                 outputBuffer.position(bufferInfo.offset)
                                 outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
-                                outputBuffer.get(data)
+                                while (remaining > 0) {
+                                    val toRead = minOf(remaining, scratchBuffer.size)
+                                    outputBuffer.get(scratchBuffer, 0, toRead)
+                                    audioStream.write(scratchBuffer, 0, toRead)
+                                    remaining -= toRead
+                                }
                                 packets.add(
                                     EncodedAudioPacket(
-                                        data = data,
+                                        offset = offset,
+                                        size = bufferInfo.size,
                                         presentationTimeUs = bufferInfo.presentationTimeUs,
                                         flags = bufferInfo.flags
                                     )
@@ -1194,7 +1208,7 @@ class FrameExporter(private val context: Context) {
                 LogUtils.w(context, "FrameExporter", "AAC encoder produced no packets, skipping audio")
                 return null
             }
-            return EncodedAudio(format, packets)
+            return EncodedAudio(format, audioStream.toByteArray(), packets)
         } finally {
             try {
                 encoder.stop()

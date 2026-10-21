@@ -99,6 +99,7 @@ class FrameExporterTest {
         assertEquals(1_000_000L, pcmFramesToUs(48_000L, 48_000))
         assertEquals(500_000L, pcmFramesToUs(24_000L, 48_000))
         assertEquals(21_333L, pcmFramesToUs(1024L, 48_000)) // one AAC frame at 48 kHz
+        assertEquals(23_219L, pcmFramesToUs(1024L, 44_100)) // one AAC frame at 44.1 kHz
         assertEquals(0L, pcmFramesToUs(0L, 48_000))
         // Invalid sample rate must not divide by zero
         assertEquals(0L, pcmFramesToUs(100L, 0))
