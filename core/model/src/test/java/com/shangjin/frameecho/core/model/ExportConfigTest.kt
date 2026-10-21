@@ -156,4 +156,19 @@ class ExportConfigTest {
         val config = ExportConfig()
         assertEquals(false, config.motionPhoto)
     }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `customFileName with forward slash throws exception`() {
+        ExportConfig(customFileName = "../path/traversal")
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `customFileName with backslash throws exception`() {
+        ExportConfig(customFileName = "..\\path\\traversal")
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `customFileName with double dot throws exception`() {
+        ExportConfig(customFileName = "name..ext")
+    }
 }

@@ -44,6 +44,11 @@ data class ExportConfig(
         require(motionDurationAfterS <= MAX_MOTION_DURATION_S) { "Motion duration after must not exceed $MAX_MOTION_DURATION_S seconds" }
         require(maxResolution == null || maxResolution > 0) { "Max resolution must be positive" }
         require(customFileName == null || customFileName.length <= 80) { "Custom filename too long" }
+        if (customFileName != null) {
+            require(!customFileName.contains('/') && !customFileName.contains('\\') && !customFileName.contains("..")) {
+                "Custom filename must not contain path traversal characters"
+            }
+        }
     }
 }
 

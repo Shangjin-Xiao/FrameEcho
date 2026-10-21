@@ -27,3 +27,8 @@
 **Vulnerability:** Invoking `MediaFormat.containsKey()` (which requires API 29+) on older Android devices (API 26-28) throws a `NoSuchMethodError`. When parsing untrusted or maliciously crafted media files that lack expected format keys, this uncaught linkage error immediately crashes the application, presenting a local Denial of Service (DoS) vulnerability.
 **Learning:** Standard lint rules or IDE warnings might not always catch API-level violations on specific system framework classes. Broad find-and-replace strategies to fix these issues can be dangerous if they accidentally modify identically named methods on unrelated standard collections (like `Map.containsKey`).
 **Prevention:** Replace all `MediaFormat.containsKey()` checks with safe retrieval attempts wrapped in `runCatching` blocks (e.g., `runCatching { format.getInteger(key) }.getOrNull()`). Ensure modifications are strictly scoped to the `MediaFormat` class context and validated against regression on cache/state collections.
+
+## 2026-07-10 - [Path Traversal Prevention in Custom Filename Export Config]
+**Vulnerability:** Accepting custom filenames without input validation at model initialization allows path traversal sequences (such as `/`, `\`, or `..`), which can lead to file writing outside target export directories.
+**Learning:** Checking string length alone is insufficient for custom filename inputs; character restrictions must be explicitly enforced in data model constructors or `init` blocks.
+**Prevention:** Explicitly validate custom filename parameters in `init` blocks using `require` statements to reject `/`, `\`, and `..` sequences before model instances are instantiated.
