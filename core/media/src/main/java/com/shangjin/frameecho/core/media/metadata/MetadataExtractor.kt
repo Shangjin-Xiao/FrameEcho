@@ -5,6 +5,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import com.shangjin.frameecho.core.media.utils.DateTimeUtils
 import com.shangjin.frameecho.core.media.utils.ExifUtils
 import com.shangjin.frameecho.core.media.utils.LogUtils
@@ -122,27 +123,42 @@ object MetadataExtractor {
         val (latitude, longitude) = parseLocation(location)
         val altitude = parseAltitude(location)
 
-        val formatWidth = format?.let { runCatching { it.getInteger(MediaFormat.KEY_WIDTH) }.getOrNull() } ?: 0
+        val formatWidth = format?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !it.containsKey(MediaFormat.KEY_WIDTH)) null
+            else try { it.getInteger(MediaFormat.KEY_WIDTH) } catch (_: Exception) { null }
+        } ?: 0
         val width = if (formatWidth > 0) formatWidth else {
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
         }
 
-        val formatHeight = format?.let { runCatching { it.getInteger(MediaFormat.KEY_HEIGHT) }.getOrNull() } ?: 0
+        val formatHeight = format?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !it.containsKey(MediaFormat.KEY_HEIGHT)) null
+            else try { it.getInteger(MediaFormat.KEY_HEIGHT) } catch (_: Exception) { null }
+        } ?: 0
         val height = if (formatHeight > 0) formatHeight else {
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
         }
 
-        val formatRotation = format?.let { runCatching { it.getInteger(MediaFormat.KEY_ROTATION) }.getOrNull() } ?: -1
+        val formatRotation = format?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !it.containsKey(MediaFormat.KEY_ROTATION)) null
+            else try { it.getInteger(MediaFormat.KEY_ROTATION) } catch (_: Exception) { null }
+        } ?: -1
         val rotation = if (formatRotation >= 0) formatRotation else {
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
         }
 
-        val formatDuration = format?.let { runCatching { it.getLong(MediaFormat.KEY_DURATION) / 1000 }.getOrNull() } ?: 0L
+        val formatDuration = format?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !it.containsKey(MediaFormat.KEY_DURATION)) null
+            else try { it.getLong(MediaFormat.KEY_DURATION) / 1000 } catch (_: Exception) { null }
+        } ?: 0L
         val duration = if (formatDuration > 0) formatDuration else {
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0
         }
 
-        val formatBitrate = format?.let { runCatching { it.getInteger(MediaFormat.KEY_BIT_RATE) }.getOrNull()?.toLong() } ?: 0L
+        val formatBitrate = format?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !it.containsKey(MediaFormat.KEY_BIT_RATE)) null
+            else try { it.getInteger(MediaFormat.KEY_BIT_RATE).toLong() } catch (_: Exception) { null }
+        } ?: 0L
         val bitrate = if (formatBitrate > 0) formatBitrate else {
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toLongOrNull() ?: 0
         }
@@ -152,7 +168,10 @@ object MetadataExtractor {
             MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE
         )?.toFloatOrNull() ?: 0f
 
-        val formatCodec = format?.let { runCatching { it.getString(MediaFormat.KEY_MIME) }.getOrNull() }
+        val formatCodec = format?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !it.containsKey(MediaFormat.KEY_MIME)) null
+            else try { it.getString(MediaFormat.KEY_MIME) } catch (_: Exception) { null }
+        }
         val codec = formatCodec ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE)
 
         // Author/writer fields may contain device info on some camera apps
@@ -238,18 +257,24 @@ object MetadataExtractor {
 
     internal fun getStringFromKeys(format: MediaFormat, vararg keys: String): String? {
         for (key in keys) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !format.containsKey(key)) {
+                continue
+            }
             val value = try {
                 format.getString(key)
             } catch (_: Exception) {
                 null
             } ?: continue
-            if (!value.isNullOrBlank()) return value
+            if (value.isNotBlank()) return value
         }
         return null
     }
 
     internal fun getIntFromKeys(format: MediaFormat, vararg keys: String): Int? {
         for (key in keys) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !format.containsKey(key)) {
+                continue
+            }
             val value = try {
                 format.getInteger(key)
             } catch (_: Exception) {
@@ -262,6 +287,9 @@ object MetadataExtractor {
 
     internal fun getFloatFromKeys(format: MediaFormat, vararg keys: String): Float? {
         for (key in keys) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !format.containsKey(key)) {
+                continue
+            }
             val floatValue = try {
                 format.getFloat(key)
             } catch (_: Exception) {
