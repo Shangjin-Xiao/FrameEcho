@@ -51,3 +51,7 @@
 ## 2026-05-19 - 避免在循环或方法中重复分配数组常量
 **Learning:** 在频繁调用的方法或循环中直接书写 `arrayOf(...)` 或 `intArrayOf(...)`（如 CSD 键名列表、格式属性列表、旋转角度集合等）会在每次方法执行或条件检查时触发新的数组堆内存分配，增加 GC 压力。
 **Action:** 将固定不变的数组文字提升至 `companion object` 或顶层的 `private val` 常量（如 `CSD_KEYS`、`VALID_ROTATIONS`），实现对象重用并消除不必要的垃圾回收开销。
+
+## 2024-05-18 - 优化 MediaFormat Getter 避免 runCatching 分配
+**Learning:** 在频繁获取 `MediaFormat` 键值时（如在提取视频元数据或解封装音视频轨时），使用 `runCatching { format.getInteger(key) }.getOrNull()` 会为每个调用创建额外的 `Result` 封装对象，并且在 API 29 之前由于未包含该键而抛出的 `NullPointerException` 会产生高昂的异常捕获开销。
+**Action:** 实现安全的扩展方法（例如 `getIntegerSafeOrNull`），首先检查 `Build.VERSION.SDK_INT >= 29` 和 `!containsKey(key)` 进行快速拒绝，然后再通过 `try-catch` 执行常规提取。这样能消除不必要的 `Result` 分配，同时在现代设备上完全避免异常开销。

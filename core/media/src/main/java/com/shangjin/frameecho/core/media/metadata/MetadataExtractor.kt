@@ -9,6 +9,9 @@ import com.shangjin.frameecho.core.media.utils.DateTimeUtils
 import com.shangjin.frameecho.core.media.utils.ExifUtils
 import com.shangjin.frameecho.core.media.utils.LogUtils
 import com.shangjin.frameecho.core.media.utils.getIntegerSafe
+import com.shangjin.frameecho.core.media.utils.getIntegerSafeOrNull
+import com.shangjin.frameecho.core.media.utils.getLongSafeOrNull
+import com.shangjin.frameecho.core.media.utils.getStringSafeOrNull
 import com.shangjin.frameecho.core.model.VideoMetadata
 
 /**
@@ -122,27 +125,27 @@ object MetadataExtractor {
         val (latitude, longitude) = parseLocation(location)
         val altitude = parseAltitude(location)
 
-        val formatWidth = format?.let { runCatching { it.getInteger(MediaFormat.KEY_WIDTH) }.getOrNull() } ?: 0
+        val formatWidth = format?.let { it.getIntegerSafeOrNull(MediaFormat.KEY_WIDTH) } ?: 0
         val width = if (formatWidth > 0) formatWidth else {
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
         }
 
-        val formatHeight = format?.let { runCatching { it.getInteger(MediaFormat.KEY_HEIGHT) }.getOrNull() } ?: 0
+        val formatHeight = format?.let { it.getIntegerSafeOrNull(MediaFormat.KEY_HEIGHT) } ?: 0
         val height = if (formatHeight > 0) formatHeight else {
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
         }
 
-        val formatRotation = format?.let { runCatching { it.getInteger(MediaFormat.KEY_ROTATION) }.getOrNull() } ?: -1
+        val formatRotation = format?.let { it.getIntegerSafeOrNull(MediaFormat.KEY_ROTATION) } ?: -1
         val rotation = if (formatRotation >= 0) formatRotation else {
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
         }
 
-        val formatDuration = format?.let { runCatching { it.getLong(MediaFormat.KEY_DURATION) / 1000 }.getOrNull() } ?: 0L
+        val formatDuration = format?.let { (it.getLongSafeOrNull(MediaFormat.KEY_DURATION)?.div(1000)) } ?: 0L
         val duration = if (formatDuration > 0) formatDuration else {
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0
         }
 
-        val formatBitrate = format?.let { runCatching { it.getInteger(MediaFormat.KEY_BIT_RATE) }.getOrNull()?.toLong() } ?: 0L
+        val formatBitrate = format?.let { it.getIntegerSafeOrNull(MediaFormat.KEY_BIT_RATE)?.toLong() } ?: 0L
         val bitrate = if (formatBitrate > 0) formatBitrate else {
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toLongOrNull() ?: 0
         }
@@ -152,7 +155,7 @@ object MetadataExtractor {
             MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE
         )?.toFloatOrNull() ?: 0f
 
-        val formatCodec = format?.let { runCatching { it.getString(MediaFormat.KEY_MIME) }.getOrNull() }
+        val formatCodec = format?.let { it.getStringSafeOrNull(MediaFormat.KEY_MIME) }
         val codec = formatCodec ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE)
 
         // Author/writer fields may contain device info on some camera apps
