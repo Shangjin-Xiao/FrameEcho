@@ -14,6 +14,7 @@ import com.shangjin.frameecho.core.model.ColorSpaceInfo
 import com.shangjin.frameecho.core.model.VideoMetadata
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 /**
  * High-performance video frame extraction engine.
@@ -28,6 +29,13 @@ class FrameExtractor(
     private val context: Context,
     private val sdkInt: Int = android.os.Build.VERSION.SDK_INT
 ) {
+    private companion object {
+        const val MAX_THUMBNAIL_DIMENSION = 240
+        // Fits the timeline's 150 thumbnails at 120 x 240, including portrait videos.
+        const val MAX_THUMBNAIL_BATCH_PIXELS = 4_500_000L
+        const val MAX_THUMBNAIL_COUNT = 150
+    }
+
     @Volatile
     private var cachedMetadata: Pair<String, VideoMetadata>? = null
 
@@ -132,9 +140,11 @@ class FrameExtractor(
      *
      * Caller is responsible for calling [releaseBitmap] when done.
      *
+     * Thumbnails fit within 240 x 240 pixels without upscaling.
+     *
      * @param videoUri URI of the source video
      * @param timestampUs Timestamp in microseconds
-     * @param targetWidth Desired thumbnail width in pixels
+     * @param targetWidth Maximum thumbnail width in pixels
      * @return Downscaled bitmap suitable for LazyRow display, or null on failure
      */
     suspend fun extractThumbnail(
@@ -153,21 +163,23 @@ class FrameExtractor(
             MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
         )?.toIntOrNull() ?: return@useRetriever null
 
-        if (videoWidth <= 0 || videoHeight <= 0) return@useRetriever null
+        if (videoWidth <= 0 || videoHeight <= 0 || targetWidth <= 0) return@useRetriever null
 
-        val targetHeight = (targetWidth * videoHeight.toFloat() / videoWidth).toInt()
-            .coerceAtLeast(1)
+        val (width, height) = thumbnailDimensions(videoWidth, videoHeight, targetWidth)
 
-        extractThumbnailInternal(retriever, timestampUs, targetWidth, targetHeight)
+        extractThumbnailInternal(retriever, timestampUs, width, height)
     }
 
     /**
      * Extract multiple downscaled thumbnails efficiently by reusing a single retriever.
      *
+     * Thumbnails fit within 240 x 240 pixels without upscaling. Each batch is
+     * limited to 150 frames and 4.5 million retained pixels.
+     *
      * @param videoUri URI of the source video
      * @param timestampsUs List of timestamps in microseconds
-     * @param targetWidth Desired thumbnail width in pixels (must be > 0)
-     * @return List of (timestamp, bitmap) pairs
+     * @param targetWidth Maximum thumbnail width in pixels (must be > 0)
+     * @return List of (timestamp, bitmap) pairs, possibly truncated to fit the budget
      */
     suspend fun extractThumbnails(
         videoUri: Uri,
@@ -176,27 +188,46 @@ class FrameExtractor(
     ): List<Pair<Long, Bitmap>> {
         require(targetWidth > 0) { "targetWidth must be positive, was $targetWidth" }
         return useRetriever(
-        videoUri,
-        emptyList(),
-        "Failed to extract thumbnails"
-    ) { retriever ->
-        val videoWidth = retriever.extractMetadata(
-            MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
-        )?.toIntOrNull() ?: return@useRetriever emptyList()
-        val videoHeight = retriever.extractMetadata(
-            MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
-        )?.toIntOrNull() ?: return@useRetriever emptyList()
+            videoUri,
+            emptyList(),
+            "Failed to extract thumbnails"
+        ) { retriever ->
+            val videoWidth = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
+            )?.toIntOrNull() ?: return@useRetriever emptyList()
+            val videoHeight = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
+            )?.toIntOrNull() ?: return@useRetriever emptyList()
 
-        if (videoWidth <= 0 || videoHeight <= 0) return@useRetriever emptyList()
+            if (videoWidth <= 0 || videoHeight <= 0) return@useRetriever emptyList()
 
-        val targetHeight = (targetWidth * videoHeight.toFloat() / videoWidth).toInt()
-            .coerceAtLeast(1)
+            val (width, height) = thumbnailDimensions(videoWidth, videoHeight, targetWidth)
+            // Bound the batch before decoding or allocating any thumbnail bitmaps.
+            val maxCount = minOf(
+                MAX_THUMBNAIL_COUNT,
+                (MAX_THUMBNAIL_BATCH_PIXELS / (width.toLong() * height)).toInt()
+            )
 
-        timestampsUs.mapNotNull { ts ->
-            val bitmap = extractThumbnailInternal(retriever, ts, targetWidth, targetHeight)
-            if (bitmap != null) ts to bitmap else null
+            timestampsUs.asSequence().take(maxCount).mapNotNull { ts ->
+                val bitmap = extractThumbnailInternal(retriever, ts, width, height)
+                if (bitmap != null) ts to bitmap else null
+            }.toList()
         }
     }
+
+    private fun thumbnailDimensions(
+        sourceWidth: Int,
+        sourceHeight: Int,
+        maxWidth: Int,
+        maxHeight: Int = MAX_THUMBNAIL_DIMENSION
+    ): Pair<Int, Int> {
+        val scale = minOf(
+            1.0,
+            maxWidth.coerceAtMost(MAX_THUMBNAIL_DIMENSION).toDouble() / sourceWidth,
+            maxHeight.toDouble() / sourceHeight
+        )
+        return (sourceWidth * scale).roundToInt().coerceAtLeast(1) to
+            (sourceHeight * scale).roundToInt().coerceAtLeast(1)
     }
 
     /**
@@ -267,11 +298,17 @@ class FrameExtractor(
                 MediaMetadataRetriever.OPTION_CLOSEST_SYNC
             )
             fullBitmap?.let {
-                val scaled = it.scale(targetWidth, targetHeight, true)
-                if (scaled != it) {
-                    it.recycle()
+                // The decoded frame can differ from metadata (for example, rotation).
+                val (width, height) = thumbnailDimensions(it.width, it.height, targetWidth, targetHeight)
+                var scaled: Bitmap? = null
+                try {
+                    scaled = it.scale(width, height, true)
+                    scaled
+                } finally {
+                    if (scaled !== it) {
+                        it.recycle()
+                    }
                 }
-                scaled
             }
         }
     }
