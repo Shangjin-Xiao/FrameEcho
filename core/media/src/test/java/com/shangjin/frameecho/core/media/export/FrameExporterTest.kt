@@ -1,7 +1,9 @@
 package com.shangjin.frameecho.core.media.export
 
 import android.content.Context
+import android.os.Environment
 import android.util.Xml
+import com.shangjin.frameecho.core.model.ExportDirectory
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -13,6 +15,8 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.File
+import java.io.IOException
 
 class FrameExporterTest {
 
@@ -141,5 +145,62 @@ class FrameExporterTest {
         // Whitespace + null byte mixtures and trailing/leading invalid boundaries
         assertEquals("malicious", exporter.sanitizeFileName(" _\u0000..malicious.._ "))
         assertEquals("FrameEcho", exporter.sanitizeFileName("\u0000___...\t "))
+    }
+
+    @Test
+    fun `resolveLegacyOutputFile throws IOException when storage is not mounted`() {
+        mockkStatic(Environment::class)
+        try {
+            every { Environment.getExternalStorageState() } returns Environment.MEDIA_UNMOUNTED
+
+            val context = mockk<Context>()
+            val exporter = FrameExporter(context)
+
+            assertThrows(IOException::class.java) {
+                exporter.resolveLegacyOutputFile("test.jpg", ExportDirectory.PICTURES_FRAMEECHO)
+            }
+        } finally {
+            unmockkStatic(Environment::class)
+        }
+    }
+
+    @Test
+    fun `resolveLegacyOutputFile creates file within base directory when storage is mounted`() {
+        mockkStatic(Environment::class)
+        val tempDir = java.nio.file.Files.createTempDirectory("legacy_export_test").toFile()
+        try {
+            every { Environment.getExternalStorageState() } returns Environment.MEDIA_MOUNTED
+            every { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES) } returns tempDir
+
+            val context = mockk<Context>()
+            val exporter = FrameExporter(context)
+
+            val resolved = exporter.resolveLegacyOutputFile("test.jpg", ExportDirectory.PICTURES_FRAMEECHO)
+            assertEquals("test.jpg", resolved.name)
+            assertTrue(resolved.canonicalPath.startsWith(tempDir.canonicalPath))
+        } finally {
+            unmockkStatic(Environment::class)
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `resolveLegacyOutputFile detects path traversal attempt in filename`() {
+        mockkStatic(Environment::class)
+        val tempDir = java.nio.file.Files.createTempDirectory("legacy_export_traversal").toFile()
+        try {
+            every { Environment.getExternalStorageState() } returns Environment.MEDIA_MOUNTED
+            every { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES) } returns tempDir
+
+            val context = mockk<Context>()
+            val exporter = FrameExporter(context)
+
+            assertThrows(SecurityException::class.java) {
+                exporter.resolveLegacyOutputFile("../../../evil.jpg", ExportDirectory.PICTURES_FRAMEECHO)
+            }
+        } finally {
+            unmockkStatic(Environment::class)
+            tempDir.deleteRecursively()
+        }
     }
 }

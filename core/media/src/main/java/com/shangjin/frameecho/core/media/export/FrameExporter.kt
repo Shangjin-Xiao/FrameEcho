@@ -1613,10 +1613,15 @@ class FrameExporter(private val context: Context) {
     /**
      * Resolve output path for pre-Android 10 devices where RELATIVE_PATH is unavailable.
      */
-    private fun resolveLegacyOutputFile(
+    @Suppress("DEPRECATION")
+    internal fun resolveLegacyOutputFile(
         fileName: String,
         exportDirectory: ExportDirectory
     ): java.io.File {
+        val state = Environment.getExternalStorageState()
+        if (Environment.MEDIA_MOUNTED != state) {
+            throw java.io.IOException("External storage is not mounted or writable (state: $state)")
+        }
         val relativePath = exportDirectory.relativePath
         val rootSegment = relativePath.substringBefore('/')
         val childSegment = relativePath.substringAfter('/', "")
@@ -1626,15 +1631,26 @@ class FrameExporter(private val context: Context) {
             else -> Environment.DIRECTORY_PICTURES
         }
         val baseDir = Environment.getExternalStoragePublicDirectory(publicDirectory)
+            ?: throw java.io.IOException("Failed to access external public directory for $publicDirectory")
         val targetDir = if (childSegment.isNotBlank()) {
             java.io.File(baseDir, childSegment)
         } else {
             baseDir
         }
+        val baseCanonical = baseDir.canonicalPath
+        val targetCanonical = targetDir.canonicalPath
+        if (targetCanonical != baseCanonical && !targetCanonical.startsWith(baseCanonical + java.io.File.separator)) {
+            throw SecurityException("Path traversal attempt detected in target directory: $childSegment")
+        }
         if (!targetDir.exists() && !targetDir.mkdirs()) {
             throw java.io.IOException("Failed to create output directory: ${targetDir.absolutePath}")
         }
-        return java.io.File(targetDir, fileName)
+        val outputFile = java.io.File(targetDir, fileName)
+        val outputCanonical = outputFile.canonicalPath
+        if (!outputCanonical.startsWith(targetCanonical + java.io.File.separator)) {
+            throw SecurityException("Path traversal attempt detected in output file: $fileName")
+        }
+        return outputFile
     }
 
     private fun cleanupFailedOutput(uri: Uri) {
