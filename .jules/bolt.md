@@ -51,3 +51,7 @@
 ## 2026-05-19 - 避免在循环或方法中重复分配数组常量
 **Learning:** 在频繁调用的方法或循环中直接书写 `arrayOf(...)` 或 `intArrayOf(...)`（如 CSD 键名列表、格式属性列表、旋转角度集合等）会在每次方法执行或条件检查时触发新的数组堆内存分配，增加 GC 压力。
 **Action:** 将固定不变的数组文字提升至 `companion object` 或顶层的 `private val` 常量（如 `CSD_KEYS`、`VALID_ROTATIONS`），实现对象重用并消除不必要的垃圾回收开销。
+
+## 2026-10-12 - 消除 DateTimeUtils 日期解析中的异常控制流与格式化器循环
+**Learning:** 在日期时间解析中，通过循环遍历格式化器列表并在 `try-catch (DateTimeParseException)` 中使用 `continue` 进行流程控制是典型的性能反模式。即使借助了 `parseUnresolved` 做部分校验，循环匹配仍会导致多余的解析开销与 ParsePosition 实例化。通过深入分析日期字符串的结构特征（例如根据时区偏移标识是否包含冒号、是否包含毫秒小数点），可以直接精确定位唯一的匹配 `DateTimeFormatter`，从而彻底消除循环遍历与基于异常的流程控制。
+**Action:** 避免在多格式解析循环中使用异常驱动跳转；利用字符串特征（时区冒号、毫秒小数点等）直接选取唯一的 `DateTimeFormatter` 进行单次解析，消除循环遍历和冗余的列表集合。

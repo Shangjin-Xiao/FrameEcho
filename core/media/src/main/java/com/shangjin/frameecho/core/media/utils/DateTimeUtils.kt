@@ -23,7 +23,6 @@ object DateTimeUtils {
     // Offset/Z-aware input formats
     private val FMT_COMPACT_MILLIS_OFFSET = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss.SSSX", Locale.US)
     private val FMT_ISO_SECONDS_X = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssX", Locale.US)
-    private val FMT_ISO_OFFSET_NO_COLON = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US)
     private val FMT_ISO_MILLIS_OFFSET_NO_COLON = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US)
 
     // Local (no offset) input formats
@@ -33,16 +32,6 @@ object DateTimeUtils {
     private val FMT_SPACE_SEP_DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US)
     private val FMT_COMPACT_NO_T = DateTimeFormatter.ofPattern("yyyyMMddHHmmss", Locale.US)
     private val FMT_SPACE_SEP_LOCAL = DateTimeFormatter.ofPattern("yyyy MM dd", Locale.US)
-
-    private val FORMATTERS_OFFSET_COMPACT = listOf(FMT_COMPACT_MILLIS_OFFSET)
-    private val FORMATTERS_OFFSET_ISO_MILLIS = listOf(FMT_ISO_MILLIS_OFFSET_NO_COLON, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-    private val FORMATTERS_OFFSET_ISO_STANDARD = listOf(DateTimeFormatter.ISO_OFFSET_DATE_TIME, FMT_ISO_SECONDS_X, FMT_ISO_OFFSET_NO_COLON)
-
-    private val FORMATTERS_LOCAL_ISO_MILLIS = listOf(FMT_ISO_MILLIS_LOCAL)
-    private val FORMATTERS_LOCAL_ISO_STANDARD = listOf(FMT_ISO_LOCAL)
-    private val FORMATTERS_LOCAL_COMPACT = listOf(FMT_COMPACT_LOCAL)
-    private val FORMATTERS_LOCAL_SPACE_SEP = listOf(FMT_SPACE_SEP_DATE_TIME)
-    private val FORMATTERS_LOCAL_COMPACT_NO_T = listOf(FMT_COMPACT_NO_T)
 
     /**
      * Normalizes a date string to ISO 8601 format.
@@ -119,23 +108,32 @@ object DateTimeUtils {
 
         val hasColon = dateStr.contains(':')
         val hasHyphen = dateStr.contains('-')
-        val hasDot = dateStr.contains('.')
 
-        val formatters = if (hasColon || hasHyphen) {
-            if (hasDot) FORMATTERS_OFFSET_ISO_MILLIS else FORMATTERS_OFFSET_ISO_STANDARD
+        val formatter = if (hasColon || hasHyphen) {
+            val lastChar = dateStr.last()
+            if (lastChar.equals('Z', ignoreCase = true)) {
+                DateTimeFormatter.ISO_OFFSET_DATE_TIME
+            } else {
+                val len = dateStr.length
+                if (len >= 6 && (dateStr[len - 6] == '+' || dateStr[len - 6] == '-') && dateStr[len - 3] == ':') {
+                    DateTimeFormatter.ISO_OFFSET_DATE_TIME
+                } else if (dateStr.contains('.')) {
+                    FMT_ISO_MILLIS_OFFSET_NO_COLON
+                } else {
+                    FMT_ISO_SECONDS_X
+                }
+            }
         } else {
-            FORMATTERS_OFFSET_COMPACT
+            FMT_COMPACT_MILLIS_OFFSET
         }
 
-        for (formatter in formatters) {
-            val pos = java.text.ParsePosition(0)
-            val parsed = formatter.parseUnresolved(dateStr, pos)
-            if (parsed != null && pos.errorIndex < 0 && pos.index == dateStr.length) {
-                try {
-                    return OffsetDateTime.parse(dateStr, formatter)
-                } catch (_: DateTimeParseException) {
-                    continue
-                }
+        val pos = java.text.ParsePosition(0)
+        val parsed = formatter.parseUnresolved(dateStr, pos)
+        if (parsed != null && pos.errorIndex < 0 && pos.index == dateStr.length) {
+            try {
+                return OffsetDateTime.parse(dateStr, formatter)
+            } catch (_: DateTimeParseException) {
+                return null
             }
         }
         return null
@@ -145,29 +143,25 @@ object DateTimeUtils {
         val hasT = dateStr.contains('T')
         val hasSpace = dateStr.contains(' ')
 
-        // Use heuristics to select a subset of formatters, preventing performance degradation
-        // caused by exception handling in sequential parsing loops for invalid/mismatched formats.
-        val formatters = if (hasT) {
+        val formatter = if (hasT) {
             val hasDot = dateStr.contains('.')
             val hasHyphen = dateStr.contains('-')
-            if (hasDot) FORMATTERS_LOCAL_ISO_MILLIS
-            else if (hasHyphen) FORMATTERS_LOCAL_ISO_STANDARD
-            else FORMATTERS_LOCAL_COMPACT
+            if (hasDot) FMT_ISO_MILLIS_LOCAL
+            else if (hasHyphen) FMT_ISO_LOCAL
+            else FMT_COMPACT_LOCAL
         } else if (hasSpace) {
-            FORMATTERS_LOCAL_SPACE_SEP
+            FMT_SPACE_SEP_DATE_TIME
         } else {
-            FORMATTERS_LOCAL_COMPACT_NO_T
+            FMT_COMPACT_NO_T
         }
 
-        for (formatter in formatters) {
-            val pos = java.text.ParsePosition(0)
-            val parsed = formatter.parseUnresolved(dateStr, pos)
-            if (parsed != null && pos.errorIndex < 0 && pos.index == dateStr.length) {
-                try {
-                    return LocalDateTime.parse(dateStr, formatter)
-                } catch (_: DateTimeParseException) {
-                    continue
-                }
+        val pos = java.text.ParsePosition(0)
+        val parsed = formatter.parseUnresolved(dateStr, pos)
+        if (parsed != null && pos.errorIndex < 0 && pos.index == dateStr.length) {
+            try {
+                return LocalDateTime.parse(dateStr, formatter)
+            } catch (_: DateTimeParseException) {
+                return null
             }
         }
         return null
