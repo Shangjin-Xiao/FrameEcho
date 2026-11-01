@@ -1,6 +1,7 @@
 package com.shangjin.frameecho.core.media
 
 import com.shangjin.frameecho.core.media.metadata.MetadataExtractor
+import com.shangjin.frameecho.core.model.VideoMetadata
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -157,5 +158,33 @@ class MetadataExtractorTest {
         }
         val durationNs = System.nanoTime() - startTime
         println("getStringFromKeys 1k iterations took: ${durationNs / 1_000_000.0} ms")
+    }
+
+    @Test
+    fun `enrichWithTrackFormat converts track fNumber and focalLength to Double correctly`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.getString(android.media.MediaFormat.KEY_MIME) } returns "video/avc"
+        io.mockk.every { format.getFloat("f-number") } returns 1.8f
+        io.mockk.every { format.getFloat("focal-length") } returns 4.25f
+
+        val base = VideoMetadata(sourceFileName = "test.mp4")
+        val enriched = MetadataExtractor.enrichWithTrackFormat(base, format)
+
+        assertEquals(1.8, enriched.fNumber!!, 0.0001)
+        assertEquals(4.25, enriched.focalLength!!, 0.0001)
+    }
+
+    @Test
+    fun `enrichWithTrackFormat preserves base fNumber and focalLength when present`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.getString(android.media.MediaFormat.KEY_MIME) } returns "video/avc"
+        io.mockk.every { format.getFloat("f-number") } returns 2.8f
+        io.mockk.every { format.getFloat("focal-length") } returns 6.0f
+
+        val base = VideoMetadata(sourceFileName = "test.mp4", fNumber = 1.4, focalLength = 3.5)
+        val enriched = MetadataExtractor.enrichWithTrackFormat(base, format)
+
+        assertEquals(1.4, enriched.fNumber!!, 0.0001)
+        assertEquals(3.5, enriched.focalLength!!, 0.0001)
     }
 }
