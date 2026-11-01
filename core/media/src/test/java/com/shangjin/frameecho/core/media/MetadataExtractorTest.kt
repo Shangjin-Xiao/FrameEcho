@@ -111,12 +111,41 @@ class MetadataExtractorTest {
     @Test
     fun `getStringFromKeys returns first non-blank string value`() {
         val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
+        io.mockk.every { format.containsKey("key1") } returns false
+        io.mockk.every { format.containsKey("key2") } returns true
+        io.mockk.every { format.containsKey("key3") } returns true
         io.mockk.every { format.getString("key1") } throws NullPointerException("Missing key")
         io.mockk.every { format.getString("key2") } returns ""
         io.mockk.every { format.getString("key3") } returns "1/100"
 
         val result = MetadataExtractor.getStringFromKeys(format, "key1", "key2", "key3")
         assertEquals("1/100", result)
+    }
+
+    @Test
+    fun `getStringFromKeys skips keys when containsKey is false`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>()
+        io.mockk.every { format.containsKey("missingKey") } returns false
+        io.mockk.every { format.containsKey("validKey") } returns true
+        io.mockk.every { format.getString("validKey") } returns "1/200"
+
+        val result = MetadataExtractor.getStringFromKeys(format, "missingKey", "validKey", sdkInt = 29)
+        assertEquals("1/200", result)
+        io.mockk.verify(exactly = 0) { format.getString("missingKey") }
+        io.mockk.verify(exactly = 1) { format.getString("validKey") }
+    }
+
+    @Test
+    fun `getStringFromKeys falls back to try-catch when sdkInt is below Q`() {
+        val format = io.mockk.mockk<android.media.MediaFormat>()
+        io.mockk.every { format.getString("missingKey") } throws NullPointerException("Missing key")
+        io.mockk.every { format.getString("validKey") } returns "1/300"
+
+        val result = MetadataExtractor.getStringFromKeys(format, "missingKey", "validKey", sdkInt = 26)
+        assertEquals("1/300", result)
+        io.mockk.verify(exactly = 0) { format.containsKey(any()) }
+        io.mockk.verify(exactly = 1) { format.getString("missingKey") }
+        io.mockk.verify(exactly = 1) { format.getString("validKey") }
     }
 
     @Test
@@ -142,18 +171,19 @@ class MetadataExtractorTest {
     @Test
     fun `benchmark getStringFromKeys execution`() {
         val format = io.mockk.mockk<android.media.MediaFormat>(relaxed = true)
-        io.mockk.every { format.getString("invalid1") } throws NullPointerException()
-        io.mockk.every { format.getString("invalid2") } throws NullPointerException()
+        io.mockk.every { format.containsKey("invalid1") } returns false
+        io.mockk.every { format.containsKey("invalid2") } returns false
+        io.mockk.every { format.containsKey("validKey") } returns true
         io.mockk.every { format.getString("validKey") } returns "1/500"
 
         // Warmup
         repeat(100) {
-            MetadataExtractor.getStringFromKeys(format, "invalid1", "invalid2", "validKey")
+            MetadataExtractor.getStringFromKeys(format, "invalid1", "invalid2", "validKey", sdkInt = 29)
         }
 
         val startTime = System.nanoTime()
         repeat(1_000) {
-            MetadataExtractor.getStringFromKeys(format, "invalid1", "invalid2", "validKey")
+            MetadataExtractor.getStringFromKeys(format, "invalid1", "invalid2", "validKey", sdkInt = 29)
         }
         val durationNs = System.nanoTime() - startTime
         println("getStringFromKeys 1k iterations took: ${durationNs / 1_000_000.0} ms")

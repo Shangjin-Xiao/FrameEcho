@@ -51,3 +51,7 @@
 ## 2026-05-19 - 避免在循环或方法中重复分配数组常量
 **Learning:** 在频繁调用的方法或循环中直接书写 `arrayOf(...)` 或 `intArrayOf(...)`（如 CSD 键名列表、格式属性列表、旋转角度集合等）会在每次方法执行或条件检查时触发新的数组堆内存分配，增加 GC 压力。
 **Action:** 将固定不变的数组文字提升至 `companion object` 或顶层的 `private val` 常量（如 `CSD_KEYS`、`VALID_ROTATIONS`），实现对象重用并消除不必要的垃圾回收开销。
+
+## 2026-11-01 - 优化 MetadataExtractor 中 MediaFormat 键值提取的异常开销
+**Learning:** 在 `MetadataExtractor.getStringFromKeys` 中，如果键不存在于 `MediaFormat` 中，直接调用 `format.getString(key)` 会抛出 `NullPointerException` 或异常。在提取多个备选键（如曝光时间等候选键列表）时，异常用于控制流程会触发昂贵的栈回溯（stack trace unwinding）和对象分配。自 Android Q (API 29) 起，`MediaFormat` 提供了高效的 `containsKey(key)` 方法。
+**Action:** 在访问 `format.getString(key)` 前，使用 `Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !format.containsKey(key)` 快速过滤不存在的键，避免异常抛出，同时保留 `try-catch` 作为低版本及类型不匹配时的安全兜底。
