@@ -11,6 +11,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import android.media.MediaFormat
+import java.nio.ByteBuffer
 import org.junit.Before
 import org.junit.Test
 
@@ -141,5 +143,42 @@ class FrameExporterTest {
         // Whitespace + null byte mixtures and trailing/leading invalid boundaries
         assertEquals("malicious", exporter.sanitizeFileName(" _\u0000..malicious.._ "))
         assertEquals("FrameEcho", exporter.sanitizeFileName("\u0000___...\t "))
+    }
+
+    @Test
+    fun `createCleanVideoFormat should copy CSD and optional keys when present`() {
+        val context = mockk<Context>(relaxed = true)
+        val exporter = FrameExporter(context)
+
+        val original = mockk<MediaFormat>()
+        val csd0 = ByteBuffer.wrap(byteArrayOf(1, 2, 3))
+        csd0.position(3) // limit reached, verify rewind
+
+        every { original.getString(MediaFormat.KEY_MIME) } returns "video/avc"
+        every { original.getInteger(MediaFormat.KEY_WIDTH) } returns 1920
+        every { original.getInteger(MediaFormat.KEY_HEIGHT) } returns 1080
+        every { original.containsKey("csd-0") } returns true
+        every { original.getByteBuffer("csd-0") } returns csd0
+        every { original.containsKey("csd-1") } returns false
+        every { original.containsKey("csd-2") } returns false
+        every { original.getInteger(MediaFormat.KEY_FRAME_RATE) } returns 30
+        every { original.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) } throws RuntimeException("not set")
+        every { original.getLong(MediaFormat.KEY_DURATION) } returns 1_000_000L
+
+        mockkStatic(MediaFormat::class)
+        val cleanFormat = mockk<MediaFormat>(relaxed = true)
+        every { MediaFormat.createVideoFormat("video/avc", 1920, 1080) } returns cleanFormat
+
+        try {
+            val result = exporter.createCleanVideoFormat(original)
+            assertEquals(cleanFormat, result)
+            assertEquals(0, csd0.position()) // verified rewind
+            io.mockk.verify { cleanFormat.setByteBuffer("csd-0", csd0) }
+            io.mockk.verify(exactly = 0) { cleanFormat.setByteBuffer("csd-1", any()) }
+            io.mockk.verify { cleanFormat.setInteger(MediaFormat.KEY_FRAME_RATE, 30) }
+            io.mockk.verify { cleanFormat.setLong(MediaFormat.KEY_DURATION, 1_000_000L) }
+        } finally {
+            unmockkStatic(MediaFormat::class)
+        }
     }
 }

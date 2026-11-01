@@ -429,7 +429,7 @@ class FrameExporter(private val context: Context) {
      * keys and keeping only mime, dimensions, and codec-specific data (CSD) resolves
      * the issue while preserving playback compatibility.
      */
-    private fun createCleanVideoFormat(original: MediaFormat): MediaFormat {
+    internal fun createCleanVideoFormat(original: MediaFormat): MediaFormat {
         val mime = original.getString(MediaFormat.KEY_MIME)
             ?: throw java.io.IOException("Video track has no MIME type")
         val width = try { original.getInteger(MediaFormat.KEY_WIDTH) } catch (e: Exception) {
@@ -448,7 +448,14 @@ class FrameExporter(private val context: Context) {
         // position already at the limit, causing MediaMuxer to see zero-length CSD.
         for (csdKey in CSD_KEYS) {
             try {
-                val csd = runCatching { original.getByteBuffer(csdKey) }.getOrNull()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !original.containsKey(csdKey)) {
+                    continue
+                }
+                val csd = try {
+                    original.getByteBuffer(csdKey)
+                } catch (e: Exception) {
+                    null
+                }
                 if (csd != null) {
                     csd.rewind()
                     clean.setByteBuffer(csdKey, csd)

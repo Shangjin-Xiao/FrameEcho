@@ -51,3 +51,7 @@
 ## 2026-05-19 - 避免在循环或方法中重复分配数组常量
 **Learning:** 在频繁调用的方法或循环中直接书写 `arrayOf(...)` 或 `intArrayOf(...)`（如 CSD 键名列表、格式属性列表、旋转角度集合等）会在每次方法执行或条件检查时触发新的数组堆内存分配，增加 GC 压力。
 **Action:** 将固定不变的数组文字提升至 `companion object` 或顶层的 `private val` 常量（如 `CSD_KEYS`、`VALID_ROTATIONS`），实现对象重用并消除不必要的垃圾回收开销。
+
+## 2026-05-21 - 优化 MediaFormat CSD Key 提取逻辑避免异常控制流与分配
+**Learning:** 在视频格式清洗或提取 CSD 缓冲区时，若直接使用异常捕获（如 `runCatching { original.getByteBuffer(key) }`）处理缺失的键，当 CSD key 不存在时会频繁抛出并捕获异常，且每次调用 `runCatching` 都会分配额外的 `Result` 包装对象。结合项目支持的最低 SDK 版本（minSdk 26），在 API 29+ 上先使用 `original.containsKey(key)` 快速判断键是否存在，并用直接的 `try-catch` 代替 `runCatching`，可完全消除正常缺失 key 时的异常构造与包装对象分配。
+**Action:** 在访问 `MediaFormat` 的可选键（如 CSD、特定编解码器元数据）时，先使用 `Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && original.containsKey(key)` 进行前置判断，配合轻量的 `try-catch` 进行安全兜底，避免将异常处理作为常规控制流。
