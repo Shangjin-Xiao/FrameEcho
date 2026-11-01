@@ -1,6 +1,7 @@
 package com.shangjin.frameecho.core.media.export
 
 import android.annotation.SuppressLint
+import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
@@ -14,6 +15,7 @@ import android.media.MediaMuxer
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 import androidx.documentfile.provider.DocumentFile
@@ -1460,7 +1462,7 @@ class FrameExporter(private val context: Context) {
             ?: throw java.io.IOException("Failed to access custom directory — permission may have been revoked")
         val docFile = tree.createFile(config.format.mimeType, fileName)
             ?: throw java.io.IOException("Failed to create file in custom directory")
-        val uri = docFile.uri
+        val uri = validateCustomDocumentUri(docFile.uri, treeUri)
         try {
             val outputStream = context.contentResolver.openOutputStream(uri)
                 ?: throw java.io.IOException("Failed to open output stream for custom directory")
@@ -1472,7 +1474,7 @@ class FrameExporter(private val context: Context) {
             }
             return uri
         } catch (e: Exception) {
-            try { docFile.delete() } catch (deleteException: Exception) { LogUtils.w(context, "FrameExporter", "Failed to delete file after export failure", deleteException) }
+            try { DocumentsContract.deleteDocument(context.contentResolver, uri) } catch (deleteException: Exception) { LogUtils.w(context, "FrameExporter", "Failed to delete file after export failure", deleteException) }
             throw e
         }
     }
@@ -1490,7 +1492,7 @@ class FrameExporter(private val context: Context) {
             ?: throw java.io.IOException("Failed to access custom directory — permission may have been revoked")
         val docFile = tree.createFile(ExportFormat.JPEG.mimeType, fileName)
             ?: throw java.io.IOException("Failed to create file in custom directory")
-        val uri = docFile.uri
+        val uri = validateCustomDocumentUri(docFile.uri, treeUri)
         try {
             val outputStream = context.contentResolver.openOutputStream(uri)
                 ?: throw java.io.IOException("Failed to open output stream for custom directory")
@@ -1504,9 +1506,23 @@ class FrameExporter(private val context: Context) {
             }
             return uri
         } catch (e: Exception) {
-            try { docFile.delete() } catch (deleteException: Exception) { LogUtils.w(context, "FrameExporter", "Failed to delete file after export failure", deleteException) }
+            try { DocumentsContract.deleteDocument(context.contentResolver, uri) } catch (deleteException: Exception) { LogUtils.w(context, "FrameExporter", "Failed to delete file after export failure", deleteException) }
             throw e
         }
+    }
+
+    private fun validateCustomDocumentUri(uri: Uri, treeUri: Uri): Uri {
+        // A provider can return an arbitrary URI from createDocument, including file://.
+        // Validate before opening it or attempting cleanup with the app's permissions.
+        if (uri.scheme != ContentResolver.SCHEME_CONTENT ||
+            uri.authority != treeUri.authority ||
+            !DocumentsContract.isDocumentUri(context, uri) ||
+            !DocumentsContract.isTreeUri(uri) ||
+            DocumentsContract.getTreeDocumentId(uri) != DocumentsContract.getTreeDocumentId(treeUri)
+        ) {
+            throw java.io.IOException("Custom directory provider returned an invalid document URI")
+        }
+        return uri
     }
 
     /**
