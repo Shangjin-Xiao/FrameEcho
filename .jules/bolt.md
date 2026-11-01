@@ -51,3 +51,7 @@
 ## 2026-05-19 - 避免在循环或方法中重复分配数组常量
 **Learning:** 在频繁调用的方法或循环中直接书写 `arrayOf(...)` 或 `intArrayOf(...)`（如 CSD 键名列表、格式属性列表、旋转角度集合等）会在每次方法执行或条件检查时触发新的数组堆内存分配，增加 GC 压力。
 **Action:** 将固定不变的数组文字提升至 `companion object` 或顶层的 `private val` 常量（如 `CSD_KEYS`、`VALID_ROTATIONS`），实现对象重用并消除不必要的垃圾回收开销。
+
+## 2026-11-01 - 优化 MediaFormat 整型元数据键查找避免异常控制流
+**Learning:** 在 Android `MediaFormat` 中，当键不存在时调用 `getInteger(key)` 会直接抛出 `NullPointerException` 或其它异常。在提取整型元数据（例如 ISO 等备选键循环）时，如果将 `try-catch` 作为控制流使用，遇到缺失的键会频繁触发 JVM/ART 异常堆栈的构建与展开，造成巨大的 CPU 性能损耗与垃圾回收开销。自 API 29 起，`MediaFormat` 提供了 `containsKey()` 方法，可在读取前以 $O(1)$ 的时间复杂度快速判断键是否存在。
+**Action:** 在 API 29+ 上，调用 `getInteger(key)` 之前先检查 `containsKey(key)`，若不存在则直接 `continue` 跳过，同时保留底层 `try-catch` 作为针对类型不匹配或低版本（API < 29）环境的安全降级，从而彻底消除正常元数据解析过程中的异常抛出开销。

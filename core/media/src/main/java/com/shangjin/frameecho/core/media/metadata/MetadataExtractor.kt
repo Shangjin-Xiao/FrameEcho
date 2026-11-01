@@ -5,6 +5,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import com.shangjin.frameecho.core.media.utils.DateTimeUtils
 import com.shangjin.frameecho.core.media.utils.ExifUtils
 import com.shangjin.frameecho.core.media.utils.LogUtils
@@ -248,8 +249,15 @@ object MetadataExtractor {
         return null
     }
 
-    internal fun getIntFromKeys(format: MediaFormat, vararg keys: String): Int? {
+    internal fun getIntFromKeys(
+        format: MediaFormat,
+        vararg keys: String,
+        sdkInt: Int = Build.VERSION.SDK_INT
+    ): Int? {
         for (key in keys) {
+            if (sdkInt >= Build.VERSION_CODES.Q && !format.containsKey(key)) {
+                continue
+            }
             val value = try {
                 format.getInteger(key)
             } catch (_: Exception) {
