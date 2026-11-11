@@ -14,6 +14,8 @@ import android.media.MediaMetadataRetriever
 import android.media.MediaMuxer
 import android.net.Uri
 import android.os.Build
+import com.shangjin.frameecho.core.media.utils.getIntegerOrNullSafe
+import com.shangjin.frameecho.core.media.utils.getLongOrNullSafe
 import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
@@ -470,7 +472,7 @@ class FrameExporter(private val context: Context) {
         // Optional but helpful keys — copy only if present
         for (key in OPTIONAL_INT_KEYS) {
             try {
-                val intVal = runCatching { original.getInteger(key) }.getOrNull()
+                val intVal = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !original.containsKey(key)) null else original.getInteger(key) } catch (_: Exception) { null }
                 if (intVal != null) {
                     clean.setInteger(key, intVal)
                 }
@@ -481,7 +483,7 @@ class FrameExporter(private val context: Context) {
 
         // Duration
         try {
-            val duration = runCatching { original.getLong(MediaFormat.KEY_DURATION) }.getOrNull()
+            val duration = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !original.containsKey(MediaFormat.KEY_DURATION)) null else original.getLong(MediaFormat.KEY_DURATION) } catch (_: Exception) { null }
             if (duration != null) {
                 clean.setLong(MediaFormat.KEY_DURATION, duration)
             }
@@ -528,7 +530,7 @@ class FrameExporter(private val context: Context) {
                     audioTrackIndex = i
                     audioFormat = format
                 }
-                val trackMaxInputSize = runCatching { format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) }.getOrNull()
+                val trackMaxInputSize = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) null else format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) } catch (_: Exception) { null }
                 if (trackMaxInputSize != null) {
                     maxInputSize = maxOf(maxInputSize, trackMaxInputSize)
                 }
@@ -811,12 +813,8 @@ class FrameExporter(private val context: Context) {
         }
 
         // LPCM track (Sony XAVC S/HS, Canon, ...): samples are already raw PCM.
-        val sampleRate = runCatching {
-            audioFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-        }.getOrNull() ?: -1
-        val channelCount = runCatching {
-            audioFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-        }.getOrNull() ?: -1
+        val sampleRate = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !audioFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)) -1 else audioFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE) } catch (_: Exception) { -1 }
+        val channelCount = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !audioFormat.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) -1 else audioFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT) } catch (_: Exception) { -1 }
         if (sampleRate <= 0 || channelCount !in 1..2) {
             LogUtils.w(context, "FrameExporter",
                 "Unsupported PCM layout (rate=$sampleRate, ch=$channelCount), skipping audio")
@@ -825,7 +823,7 @@ class FrameExporter(private val context: Context) {
         // Only 16-bit PCM can feed the AAC encoder directly.
         // Requires KEY_PCM_ENCODING to be explicitly present and ENCODING_PCM_16BIT.
         // If KEY_PCM_ENCODING is missing or non-16BIT, fall back to MediaCodec decoding.
-        val pcmEncoding = runCatching { audioFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) }.getOrNull()
+        val pcmEncoding = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !audioFormat.containsKey(MediaFormat.KEY_PCM_ENCODING)) null else audioFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) } catch (_: Exception) { null }
         if (pcmEncoding == AudioFormat.ENCODING_PCM_16BIT) {
             extractor.seekTo(clipStartUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
             return readPcmFromExtractor(extractor, clipStartUs, endUs, sampleRate, channelCount)
@@ -927,12 +925,8 @@ class FrameExporter(private val context: Context) {
             val pcmStream = ByteArrayOutputStream(PCM_READ_BUFFER_BYTES)
             val chunk = ByteArray(AUDIO_COPY_CHUNK_BYTES)
             val bufferInfo = MediaCodec.BufferInfo()
-            var sampleRate = runCatching {
-                audioFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-            }.getOrNull() ?: -1
-            var channelCount = runCatching {
-                audioFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-            }.getOrNull() ?: -1
+            var sampleRate = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !audioFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)) -1 else audioFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE) } catch (_: Exception) { -1 }
+            var channelCount = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !audioFormat.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) -1 else audioFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT) } catch (_: Exception) { -1 }
             var basePtsUs = 0L
             var sawPcm = false
             var inputDone = false
@@ -989,20 +983,14 @@ class FrameExporter(private val context: Context) {
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         progressed = true
                         val newFormat = decoder.outputFormat
-                        val encoding = runCatching {
-                            newFormat.getInteger(MediaFormat.KEY_PCM_ENCODING)
-                        }.getOrNull()
+                        val encoding = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !newFormat.containsKey(MediaFormat.KEY_PCM_ENCODING)) null else newFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) } catch (_: Exception) { null }
                         if (encoding != null && encoding != AudioFormat.ENCODING_PCM_16BIT) {
                             LogUtils.w(context, "FrameExporter",
                                 "Decoder produced non-16-bit PCM ($encoding), skipping audio")
                             return null
                         }
-                        sampleRate = runCatching {
-                            newFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-                        }.getOrNull() ?: sampleRate
-                        channelCount = runCatching {
-                            newFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-                        }.getOrNull() ?: channelCount
+                        sampleRate = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !newFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)) sampleRate else newFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE) } catch (_: Exception) { sampleRate }
+                        channelCount = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !newFormat.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) channelCount else newFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT) } catch (_: Exception) { channelCount }
                     }
                     @Suppress("DEPRECATION")
                     MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED -> {

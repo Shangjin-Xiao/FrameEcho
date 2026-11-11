@@ -666,11 +666,11 @@ class PlayerViewModel : ViewModel() {
                     )
                 } else {
                     val savedFormat = persisted.format?.let { name ->
-                        runCatching { ExportFormat.valueOf(name) }.getOrNull()
+                        try { ExportFormat.valueOf(name) } catch (e: Exception) { null }
                     } ?: state.exportConfig.format
 
                     val savedDirectory = persisted.exportDirectory?.let { name ->
-                        runCatching { ExportDirectory.valueOf(name) }.getOrNull()
+                        try { ExportDirectory.valueOf(name) } catch (e: Exception) { null }
                     } ?: state.exportConfig.exportDirectory
 
                     val savedTreeUriStr = persisted.customExportTreeUri
