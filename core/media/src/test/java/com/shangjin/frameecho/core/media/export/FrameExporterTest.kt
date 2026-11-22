@@ -392,17 +392,18 @@ class FrameExporterTest {
                     channelCount = channelCount
                 )
 
-                // Inject 2 artificial stall cycles where 0L returns TRY_AGAIN_LATER so backpressure wait triggers
-                val decoderHarness = FakeAudioDecoderHarness(
-                    outputFormat = decoderOutFormat,
-                    decodedOutputs = decodedChunks,
-                    stallZeroTimeoutChecks = 2
-                )
                 val encoderHarness = FakeAacEncoderHarness(
                     outputFormat = aacOutFormat,
                     inputBufferCapacity = 4096,
                     emitCodecConfigPacket = true,
                     maxInFlightInputsBeforeDrain = 2
+                )
+                // Inject 2 artificial stall cycles where 0L returns TRY_AGAIN_LATER so backpressure wait triggers
+                val decoderHarness = FakeAudioDecoderHarness(
+                    outputFormat = decoderOutFormat,
+                    decodedOutputs = decodedChunks,
+                    stallZeroTimeoutChecks = 2,
+                    encoderActivityProbe = { encoderHarness.queuedInputBatches.isNotEmpty() }
                 )
 
                 val exporter = FrameExporter(
@@ -429,7 +430,7 @@ class FrameExporterTest {
                 // Encoder started BEFORE decoder reached EOS (true single-loop overlap)
                 assertTrue(
                     "Encoder must receive frames before decoder finishes all outputs for $mime",
-                    decoderHarness.encoderStartedBeforeDecoderEos { encoderHarness.queuedInputBatches.isNotEmpty() }
+                    decoderHarness.sawEncoderActivityBeforeEos
                 )
                 // Verify 0L probes dominate and CODEC_DEQUEUE_TIMEOUT_US is only used on stalled rounds
                 val blockingCalls =
@@ -1392,6 +1393,7 @@ class FrameExporterTest {
         decodedOutputs: List<Pair<Long, ByteArray>>,
         private val stallZeroTimeoutChecks: Int = 0,
         private val recordTimeouts: Boolean = true,
+        private val encoderActivityProbe: (() -> Boolean)? = null,
         private val onSampleQueued: (() -> Unit)? = null
     ) {
         val codec: MediaCodec = mockk(relaxed = true)
@@ -1399,6 +1401,8 @@ class FrameExporterTest {
         val outputTimeouts = mutableListOf<Long>()
         var stopped = false
         var released = false
+        var sawEncoderActivityBeforeEos = false
+            private set
 
         private val inputBuf = ByteBuffer.allocate(64 * 1024)
         private val pendingDecoded = ArrayDeque(decodedOutputs)
@@ -1406,10 +1410,8 @@ class FrameExporterTest {
         private var activeOutBuf: ByteBuffer? = null
         private var emittedFormatChanged = false
         private var inputEosSeen = false
+        private var outputEosEmitted = false
         private var remainingStalls = stallZeroTimeoutChecks
-        private var sawEncoderActivityBeforeEos = false
-        private var encoderActivityProbe: (() -> Boolean)? = null
-        private var batchCounter = 0
 
         init {
             if (!recordTimeouts) {
@@ -1464,7 +1466,7 @@ class FrameExporterTest {
                 val info = firstArg<MediaCodec.BufferInfo>()
                 val timeout = secondArg<Long>()
                 if (recordTimeouts) outputTimeouts.add(timeout)
-                if (encoderActivityProbe?.invoke() == true && (!inputEosSeen || readyOutputs.isNotEmpty())) {
+                if (!outputEosEmitted && encoderActivityProbe?.invoke() == true) {
                     sawEncoderActivityBeforeEos = true
                 }
                 when {
@@ -1480,6 +1482,9 @@ class FrameExporterTest {
                         } else {
                             flags
                         }
+                        if (finalFlags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                            outputEosEmitted = true
+                        }
                         activeOutBuf = ByteBuffer.wrap(pcm)
                         info.offset = 0
                         info.size = pcm.size
@@ -1488,6 +1493,7 @@ class FrameExporterTest {
                         0
                     }
                     inputEosSeen && pendingDecoded.isEmpty() -> {
+                        outputEosEmitted = true
                         activeOutBuf = ByteBuffer.allocate(0)
                         info.offset = 0
                         info.size = 0
@@ -1500,18 +1506,13 @@ class FrameExporterTest {
             }
             every { codec.getOutputBuffer(0) } answers { activeOutBuf }
             every { codec.releaseOutputBuffer(0, any<Boolean>()) } answers {
-                if (encoderActivityProbe?.invoke() == true && (pendingDecoded.isNotEmpty() || readyOutputs.isNotEmpty())) {
+                if (!outputEosEmitted && encoderActivityProbe?.invoke() == true) {
                     sawEncoderActivityBeforeEos = true
                 }
                 activeOutBuf = null
             }
             every { codec.stop() } answers { stopped = true }
             every { codec.release() } answers { released = true }
-        }
-
-        fun encoderStartedBeforeDecoderEos(probe: () -> Boolean): Boolean {
-            encoderActivityProbe = probe
-            return sawEncoderActivityBeforeEos || probe()
         }
     }
 
