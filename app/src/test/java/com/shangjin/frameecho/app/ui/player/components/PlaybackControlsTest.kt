@@ -342,9 +342,18 @@ class PlaybackControlsTest {
             playerScreenMain,
             "public static final void PlayerScreen("
         )
+        val screenMethodLines = screenMethod.lines()
+        val getPosIdx = screenMethodLines.indexOfFirst {
+            it.contains("PlayerViewModel.getPlaybackPositionMs")
+        }
         assertTrue(
-            "PlayerScreen must collect playbackPositionMs StateFlow",
-            screenMethod.contains("getPlaybackPositionMs")
+            "PlayerScreen must access playbackPositionMs StateFlow",
+            getPosIdx >= 0
+        )
+        val collectWindow = screenMethodLines.drop(getPosIdx).take(12).joinToString("\n")
+        assertTrue(
+            "PlayerScreen must collect playbackPositionMs via collectAsStateWithLifecycle",
+            collectWindow.contains("FlowExtKt.collectAsStateWithLifecycle")
         )
         assertFalse(
             "PlayerScreen root must not unbox playbackPositionState.value via Long.longValue",
