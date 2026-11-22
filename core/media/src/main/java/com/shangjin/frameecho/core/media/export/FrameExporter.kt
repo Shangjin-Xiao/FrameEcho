@@ -41,6 +41,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.OutputStream
 import java.nio.ByteBuffer
 
 /**
@@ -53,7 +54,17 @@ import java.nio.ByteBuffer
  * - Full EXIF metadata preservation
  * - MediaStore integration for gallery visibility
  */
-class FrameExporter(private val context: Context) {
+class FrameExporter internal constructor(
+    private val context: Context,
+    private val sdkInt: Int
+) {
+    constructor(context: Context) : this(context, Build.VERSION.SDK_INT)
+
+    private data class StaticSaveOutcome(
+        val uri: Uri,
+        val fileSizeBytes: Long,
+        val metadataPreserved: Boolean
+    )
 
     companion object {
         private const val XMP_NAMESPACE_URI = "http://ns.adobe.com/xap/1.0/\u0000"
@@ -136,29 +147,45 @@ class FrameExporter(private val context: Context) {
             // Generate output file
             val fileName = generateFileName(frame, config)
 
+            // Prebuild standard EXIF APP1 segment from a 28-byte minimal JPEG stub before opening
+            // the destination stream so JPEG static frames are written once with zero rewrite IPC.
+            val prebuiltApp1Segment = if (config.preserveMetadata && config.format == ExportFormat.JPEG) {
+                buildJpegExifApp1Segment(frame.metadata, resultWidth, resultHeight)
+            } else {
+                null
+            }
+
             // Save to MediaStore or custom directory (scoped storage compatible)
             val dateTakenMs = frame.metadata.dateTime?.let { DateTimeUtils.parseToMillis(it) }
-            val savedUri = if (customExportTreeUri != null) {
-                saveToCustomDirectory(finalBitmap, fileName, config, customExportTreeUri)
+            val saveOutcome = if (customExportTreeUri != null) {
+                saveStaticToCustomDirectory(
+                    bitmap = finalBitmap,
+                    fileName = fileName,
+                    config = config,
+                    treeUri = customExportTreeUri,
+                    metadata = frame.metadata,
+                    prebuiltApp1Segment = prebuiltApp1Segment
+                )
             } else {
-                saveToMediaStore(finalBitmap, fileName, config, dateTakenMs)
+                saveStaticToMediaStore(
+                    bitmap = finalBitmap,
+                    fileName = fileName,
+                    config = config,
+                    dateTakenMs = dateTakenMs,
+                    metadata = frame.metadata,
+                    prebuiltApp1Segment = prebuiltApp1Segment
+                )
             }
-            outputUri = savedUri
-
-            // Write metadata
-            var metadataPreserved = false
-            if (config.preserveMetadata) {
-                metadataPreserved = writeMetadataToUri(savedUri, frame.metadata)
-            }
+            outputUri = saveOutcome.uri
 
             ExportResult.Success(
-                outputPath = savedUri.toString(),
+                outputPath = saveOutcome.uri.toString(),
                 width = resultWidth,
                 height = resultHeight,
-                fileSizeBytes = getFileSize(savedUri),
+                fileSizeBytes = saveOutcome.fileSizeBytes,
                 format = config.format,
                 isMotionPhoto = false,
-                metadataPreserved = metadataPreserved
+                metadataPreserved = saveOutcome.metadataPreserved
             )
         } catch (e: CancellationException) {
             outputUri?.let { cleanupFailedOutput(it) }
@@ -1814,19 +1841,23 @@ class FrameExporter(private val context: Context) {
     }
 
     /**
-     * Save bitmap to MediaStore for scoped storage compatibility.
+     * Save static bitmap to MediaStore in a single streaming pass for JPEG (splicing any
+     * prebuilt EXIF APP1 segment before clearing IS_PENDING), with fallback metadata write
+     * for non-JPEG formats prior to publishing the entry.
      */
-    private fun saveToMediaStore(
+    private fun saveStaticToMediaStore(
         bitmap: Bitmap,
         fileName: String,
         config: ExportConfig,
-        dateTakenMs: Long? = null
-    ): Uri {
+        dateTakenMs: Long? = null,
+        metadata: VideoMetadata? = null,
+        prebuiltApp1Segment: ByteArray? = null
+    ): StaticSaveOutcome {
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
             put(MediaStore.Images.Media.MIME_TYPE, config.format.mimeType)
             dateTakenMs?.let { put(MediaStore.Images.Media.DATE_TAKEN, it) }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (sdkInt >= Build.VERSION_CODES.Q) {
                 put(MediaStore.Images.Media.RELATIVE_PATH, config.exportDirectory.relativePath)
                 put(MediaStore.Images.Media.IS_PENDING, 1)
             } else {
@@ -1842,21 +1873,37 @@ class FrameExporter(private val context: Context) {
         try {
             val outputStream = context.contentResolver.openOutputStream(uri)
                 ?: throw java.io.IOException("Failed to open output stream for MediaStore entry")
-            outputStream.use {
-                val compressFormat = config.format.toCompressFormat(config.quality)
+            val splicingStream = JpegApp1SplicingOutputStream(outputStream, prebuiltApp1Segment)
+            splicingStream.use {
+                val compressFormat = config.format.toCompressFormat(config.quality, sdkInt)
                 if (!bitmap.compress(compressFormat, config.quality, it)) {
                     throw java.io.IOException("Failed to compress bitmap (format: ${config.format}, config: ${bitmap.config})")
                 }
             }
 
-            // Mark as not pending
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            var finalFileSize = splicingStream.bytesWritten
+            var metadataPreserved = splicingStream.app1Injected
+
+            if (metadata != null && config.preserveMetadata && config.format != ExportFormat.JPEG) {
+                metadataPreserved = writeMetadataToUri(uri, metadata)
+                val queriedSize = getFileSize(uri)
+                if (queriedSize > 0L || finalFileSize == 0L) {
+                    finalFileSize = queriedSize
+                }
+            }
+
+            // Mark as not pending only after both image payload and EXIF metadata are persisted
+            if (sdkInt >= Build.VERSION_CODES.Q) {
                 values.clear()
                 values.put(MediaStore.Images.Media.IS_PENDING, 0)
                 context.contentResolver.update(uri, values, null, null)
             }
 
-            return uri
+            return StaticSaveOutcome(
+                uri = uri,
+                fileSizeBytes = finalFileSize,
+                metadataPreserved = metadataPreserved
+            )
         } catch (e: Exception) {
             try { context.contentResolver.delete(uri, null, null) } catch (deleteException: Exception) { LogUtils.w(context, "FrameExporter", "Failed to delete URI after export failure", deleteException) }
             throw e
@@ -1865,13 +1912,31 @@ class FrameExporter(private val context: Context) {
 
     /**
      * Save bitmap to a custom directory using SAF (DocumentFile).
+     * Retained with its exact 4-parameter signature for reflection-based security tests.
      */
+    @Suppress("unused")
     private fun saveToCustomDirectory(
         bitmap: Bitmap,
         fileName: String,
         config: ExportConfig,
         treeUri: Uri
-    ): Uri {
+    ): Uri = saveStaticToCustomDirectory(
+        bitmap = bitmap,
+        fileName = fileName,
+        config = config,
+        treeUri = treeUri,
+        metadata = null,
+        prebuiltApp1Segment = null
+    ).uri
+
+    private fun saveStaticToCustomDirectory(
+        bitmap: Bitmap,
+        fileName: String,
+        config: ExportConfig,
+        treeUri: Uri,
+        metadata: VideoMetadata?,
+        prebuiltApp1Segment: ByteArray?
+    ): StaticSaveOutcome {
         val tree = DocumentFile.fromTreeUri(context, treeUri)
             ?: throw java.io.IOException("Failed to access custom directory — permission may have been revoked")
         val docFile = tree.createFile(config.format.mimeType, fileName)
@@ -1880,13 +1945,30 @@ class FrameExporter(private val context: Context) {
         try {
             val outputStream = context.contentResolver.openOutputStream(uri)
                 ?: throw java.io.IOException("Failed to open output stream for custom directory")
-            outputStream.use {
-                val compressFormat = config.format.toCompressFormat(config.quality)
+            val splicingStream = JpegApp1SplicingOutputStream(outputStream, prebuiltApp1Segment)
+            splicingStream.use {
+                val compressFormat = config.format.toCompressFormat(config.quality, sdkInt)
                 if (!bitmap.compress(compressFormat, config.quality, it)) {
                     throw java.io.IOException("Failed to compress bitmap (format: ${config.format}, config: ${bitmap.config})")
                 }
             }
-            return uri
+
+            var finalFileSize = splicingStream.bytesWritten
+            var metadataPreserved = splicingStream.app1Injected
+
+            if (metadata != null && config.preserveMetadata && config.format != ExportFormat.JPEG) {
+                metadataPreserved = writeMetadataToUri(uri, metadata)
+                val queriedSize = getFileSize(uri)
+                if (queriedSize > 0L || finalFileSize == 0L) {
+                    finalFileSize = queriedSize
+                }
+            }
+
+            return StaticSaveOutcome(
+                uri = uri,
+                fileSizeBytes = finalFileSize,
+                metadataPreserved = metadataPreserved
+            )
         } catch (e: Exception) {
             try { DocumentsContract.deleteDocument(context.contentResolver, uri) } catch (deleteException: Exception) { LogUtils.w(context, "FrameExporter", "Failed to delete file after export failure", deleteException) }
             throw e
@@ -1940,7 +2022,7 @@ class FrameExporter(private val context: Context) {
     }
 
     /**
-     * Write metadata to an image stored via MediaStore.
+     * Write metadata to an image stored via MediaStore or SAF.
      */
     private fun writeMetadataToUri(uri: Uri, metadata: VideoMetadata): Boolean {
         return try {
@@ -1948,12 +2030,90 @@ class FrameExporter(private val context: Context) {
                 val exif = androidx.exifinterface.media.ExifInterface(pfd.fileDescriptor)
                 MetadataWriter.writeExifData(exif, metadata)
                 exif.saveAttributes()
-            }
-            true
+                true
+            } ?: false
         } catch (e: Exception) {
             LogUtils.w(context, "FrameExporter", "Failed to write metadata to URI", e)
             false
         }
+    }
+
+    /**
+     * Prebuild a complete JPEG EXIF APP1 segment (starting with 0xFF 0xE1) using AndroidX
+     * ExifInterface on a 28-byte minimal valid JPEG stub in [Context.getCacheDir].
+     */
+    internal fun buildJpegExifApp1Segment(
+        metadata: VideoMetadata,
+        width: Int,
+        height: Int
+    ): ByteArray? {
+        var stubFile: java.io.File? = null
+        return try {
+            stubFile = java.io.File.createTempFile("exif_stub_", ".jpg", context.cacheDir)
+            stubFile.writeBytes(createMinimalJpegStub(width, height))
+            val exif = androidx.exifinterface.media.ExifInterface(stubFile.absolutePath)
+            MetadataWriter.writeExifData(exif, metadata)
+            exif.saveAttributes()
+            extractApp1Segment(stubFile.readBytes())
+        } catch (e: Exception) {
+            LogUtils.w(context, "FrameExporter", "Failed to prebuild JPEG EXIF APP1 segment", e)
+            null
+        } finally {
+            stubFile?.delete()
+        }
+    }
+
+    /**
+     * Create a 28-byte minimal valid JPEG containing SOI (2B), SOF0 with target dimensions (13B),
+     * minimal SOS + 1 scan byte (11B), and EOI (2B).
+     */
+    internal fun createMinimalJpegStub(width: Int, height: Int): ByteArray {
+        val w = width.coerceIn(1, 0xFFFF)
+        val h = height.coerceIn(1, 0xFFFF)
+        return byteArrayOf(
+            // SOI (2 bytes)
+            0xFF.toByte(), 0xD8.toByte(),
+            // SOF0 (13 bytes): marker + length(11) + precision(8) + height + width + 1 component
+            0xFF.toByte(), 0xC0.toByte(),
+            0x00, 0x0B,
+            0x08,
+            ((h shr 8) and 0xFF).toByte(), (h and 0xFF).toByte(),
+            ((w shr 8) and 0xFF).toByte(), (w and 0xFF).toByte(),
+            0x01,
+            0x01, 0x11, 0x00,
+            // Minimal SOS (11 bytes): marker + length(8) + 1 component + spectral(0..63) + 1 scan byte
+            0xFF.toByte(), 0xDA.toByte(),
+            0x00, 0x08,
+            0x01,
+            0x01, 0x00,
+            0x00, 0x3F, 0x00,
+            0x00,
+            // EOI (2 bytes)
+            0xFF.toByte(), 0xD9.toByte()
+        )
+    }
+
+    /**
+     * Slice the complete 0xFF 0xE1 APP1 EXIF segment from offset 2 of an ExifInterface-saved JPEG.
+     */
+    internal fun extractApp1Segment(jpegBytes: ByteArray): ByteArray {
+        if (jpegBytes.size < 6 ||
+            (jpegBytes[0].toInt() and 0xFF) != 0xFF ||
+            (jpegBytes[1].toInt() and 0xFF) != 0xD8 ||
+            (jpegBytes[2].toInt() and 0xFF) != 0xFF ||
+            (jpegBytes[3].toInt() and 0xFF) != 0xE1
+        ) {
+            throw java.io.IOException("Missing SOI or APP1 marker in EXIF stub output")
+        }
+        val segmentLength = ((jpegBytes[4].toInt() and 0xFF) shl 8) or (jpegBytes[5].toInt() and 0xFF)
+        if (segmentLength < 2) {
+            throw java.io.IOException("Invalid APP1 segment length: $segmentLength")
+        }
+        val app1EndExclusive = 4 + segmentLength
+        if (app1EndExclusive > jpegBytes.size) {
+            throw java.io.IOException("Truncated APP1 segment: end=$app1EndExclusive, size=${jpegBytes.size}")
+        }
+        return jpegBytes.copyOfRange(2, app1EndExclusive)
     }
 
     /**
@@ -2077,6 +2237,169 @@ class FrameExporter(private val context: Context) {
             }
         } catch (e: Exception) {
             LogUtils.w(context, "FrameExporter", "Failed to cleanup output file on cancellation", e)
+        }
+    }
+}
+
+/**
+ * Lightweight streaming [OutputStream] wrapper that counts exact written bytes and splices a
+ * prebuilt JPEG `APP1` segment right after an opening `0xFF 0xD8` SOI marker without buffering
+ * the compressed image in memory.
+ */
+internal class JpegApp1SplicingOutputStream(
+    private val delegate: OutputStream,
+    private val app1Segment: ByteArray?
+) : OutputStream() {
+
+    companion object {
+        private const val STATE_AWAIT_FIRST_BYTE = 0
+        private const val STATE_AWAIT_SECOND_BYTE = 1
+        private const val STATE_PASSTHROUGH = 2
+        private val JPEG_SOI = byteArrayOf(0xFF.toByte(), 0xD8.toByte())
+    }
+
+    private var state: Int = if (app1Segment != null) STATE_AWAIT_FIRST_BYTE else STATE_PASSTHROUGH
+    private var firstByte: Int = 0
+    private var closed: Boolean = false
+
+    var bytesWritten: Long = 0L
+        private set
+
+    var app1Injected: Boolean = false
+        private set
+
+    override fun write(b: Int) {
+        when (state) {
+            STATE_PASSTHROUGH -> {
+                delegate.write(b)
+                bytesWritten += 1L
+            }
+            STATE_AWAIT_FIRST_BYTE -> {
+                val unsigned = b and 0xFF
+                if (unsigned == 0xFF) {
+                    firstByte = unsigned
+                    state = STATE_AWAIT_SECOND_BYTE
+                } else {
+                    state = STATE_PASSTHROUGH
+                    delegate.write(b)
+                    bytesWritten += 1L
+                }
+            }
+            STATE_AWAIT_SECOND_BYTE -> {
+                val unsigned = b and 0xFF
+                state = STATE_PASSTHROUGH
+                if (unsigned == 0xD8) {
+                    val app1 = app1Segment!!
+                    delegate.write(JPEG_SOI)
+                    bytesWritten += JPEG_SOI.size.toLong()
+                    delegate.write(app1)
+                    bytesWritten += app1.size.toLong()
+                    app1Injected = true
+                } else {
+                    delegate.write(firstByte)
+                    bytesWritten += 1L
+                    delegate.write(b)
+                    bytesWritten += 1L
+                }
+            }
+        }
+    }
+
+    override fun write(b: ByteArray) {
+        if (state == STATE_PASSTHROUGH) {
+            delegate.write(b)
+            bytesWritten += b.size.toLong()
+            return
+        }
+        write(b, 0, b.size)
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        if ((off or len or (b.size - (len + off)) or (off + len)) < 0) {
+            throw IndexOutOfBoundsException("off=$off, len=$len, size=${b.size}")
+        }
+        if (len == 0) return
+
+        when (state) {
+            STATE_PASSTHROUGH -> {
+                writeChunk(b, off, len)
+            }
+            STATE_AWAIT_FIRST_BYTE -> {
+                val b0 = b[off].toInt() and 0xFF
+                if (b0 != 0xFF) {
+                    state = STATE_PASSTHROUGH
+                    writeChunk(b, off, len)
+                } else if (len == 1) {
+                    firstByte = b0
+                    state = STATE_AWAIT_SECOND_BYTE
+                } else {
+                    val b1 = b[off + 1].toInt() and 0xFF
+                    state = STATE_PASSTHROUGH
+                    if (b1 == 0xD8) {
+                        val app1 = app1Segment!!
+                        delegate.write(JPEG_SOI)
+                        bytesWritten += JPEG_SOI.size.toLong()
+                        delegate.write(app1)
+                        bytesWritten += app1.size.toLong()
+                        app1Injected = true
+                        val remaining = len - 2
+                        if (remaining > 0) {
+                            delegate.write(b, off + 2, remaining)
+                            bytesWritten += remaining.toLong()
+                        }
+                    } else {
+                        writeChunk(b, off, len)
+                    }
+                }
+            }
+            STATE_AWAIT_SECOND_BYTE -> {
+                val b1 = b[off].toInt() and 0xFF
+                state = STATE_PASSTHROUGH
+                if (b1 == 0xD8) {
+                    val app1 = app1Segment!!
+                    delegate.write(JPEG_SOI)
+                    bytesWritten += JPEG_SOI.size.toLong()
+                    delegate.write(app1)
+                    bytesWritten += app1.size.toLong()
+                    app1Injected = true
+                    val remaining = len - 1
+                    if (remaining > 0) {
+                        delegate.write(b, off + 1, remaining)
+                        bytesWritten += remaining.toLong()
+                    }
+                } else {
+                    delegate.write(firstByte)
+                    bytesWritten += 1L
+                    writeChunk(b, off, len)
+                }
+            }
+        }
+    }
+
+    private fun writeChunk(b: ByteArray, off: Int, len: Int) {
+        if (off == 0 && len == b.size) {
+            delegate.write(b)
+        } else {
+            delegate.write(b, off, len)
+        }
+        bytesWritten += len.toLong()
+    }
+
+    override fun flush() {
+        delegate.flush()
+    }
+
+    override fun close() {
+        if (closed) return
+        closed = true
+        try {
+            if (state == STATE_AWAIT_SECOND_BYTE) {
+                state = STATE_PASSTHROUGH
+                delegate.write(firstByte)
+                bytesWritten += 1L
+            }
+        } finally {
+            delegate.close()
         }
     }
 }

@@ -185,6 +185,10 @@ fun PlayerScreen(
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubPreviewPositionMs by remember { mutableLongStateOf(0L) }
 
+    // Playback position collected without `by` so 250ms position polling never invalidates
+    // this root scope — only leaf composables read `.value` via lambdas.
+    val playbackPositionState = viewModel.playbackPositionMs.collectAsStateWithLifecycle()
+
     // Preview frame drawn over the surface while coarse-scrubbing. Collected without `by`
     // so this composable never reads the value — only VideoSurface does, via a lambda.
     val scrubPreviewState = viewModel.scrubPreview.collectAsStateWithLifecycle()
@@ -244,8 +248,9 @@ fun PlayerScreen(
         uiState.videoUri?.let { uri ->
             exoPlayer.setMediaItem(MediaItem.fromUri(uri))
             exoPlayer.prepare()
-            if (uiState.currentPositionMs > 0) {
-                exoPlayer.seekTo(uiState.currentPositionMs)
+            val savedPositionMs = viewModel.playbackPositionMs.value
+            if (savedPositionMs > 0L) {
+                exoPlayer.seekTo(savedPositionMs)
             }
         }
     }
@@ -491,7 +496,7 @@ fun PlayerScreen(
                     // Playback controls with fine scrubbing
                     PlaybackControls(
                         exoPlayer = exoPlayer,
-                        currentPositionMs = uiState.currentPositionMs,
+                        currentPositionMs = { playbackPositionState.value },
                         durationMs = uiState.durationMs,
                         isPlaying = uiState.isPlaying,
                         videoFrameRate = uiState.videoFrameRate,
@@ -550,7 +555,7 @@ fun PlayerScreen(
                                     val durationMs = uiState.durationMs
                                     if (durationMs > 0) {
                                         val posMs =
-                                            if (isScrubbing) scrubPreviewPositionMs else uiState.currentPositionMs
+                                            if (isScrubbing) scrubPreviewPositionMs else playbackPositionState.value
                                         (posMs.toFloat() / durationMs).coerceIn(0f, 1f)
                                     } else 0f
                                 },

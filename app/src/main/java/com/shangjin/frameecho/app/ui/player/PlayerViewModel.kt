@@ -18,6 +18,7 @@ import com.shangjin.frameecho.core.model.ExportResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +26,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Represents user-facing error types. Mapped to localized strings in the UI layer.
@@ -43,7 +49,6 @@ data class PlayerUiState(
     val isPlaying: Boolean = false,
     val isMuted: Boolean = false,
     val rememberQuickSettings: Boolean = true,
-    val currentPositionMs: Long = 0L,
     val durationMs: Long = 0L,
     val capturedFrame: CapturedFrame? = null,
     val capturedBitmap: Bitmap? = null,
@@ -62,18 +67,9 @@ data class PlayerUiState(
 ) {
     /**
      * Adaptive seek interval: ~5% of total duration, rounded to a "nice" value.
-     * Clamped to [1s, 30s].
+     * Clamped to [1s, 30s]. Precomputed once per state instance from [durationMs].
      */
-    val seekIntervalMs: Long
-        get() {
-            if (durationMs <= 0) return 1_000L
-            val raw = (durationMs * 0.05).toLong()
-            // Round to nearest nice step: 1, 2, 5, 10, 15, 20, 30
-            val nice = longArrayOf(1000, 2000, 5000, 10_000, 15_000, 20_000, 30_000)
-            return nice.minByOrNull { kotlin.math.abs(it - raw) }!!
-                .coerceIn(1_000L, 30_000L)
-        }
-
+    val seekIntervalMs: Long = PlayerViewModel.seekIntervalForDuration(durationMs)
 }
 
 /**
@@ -87,6 +83,16 @@ class PlayerViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+
+    /**
+     * Current playback position in milliseconds.
+     *
+     * Deliberately kept out of [PlayerUiState] (mirroring [scrubPreview]): 250ms playback
+     * polling and frame-step clicks update this flow at high frequency, and folding it into
+     * the main state would recompose the whole player screen every time.
+     */
+    private val _playbackPositionMs = MutableStateFlow(0L)
+    val playbackPositionMs: StateFlow<Long> = _playbackPositionMs.asStateFlow()
 
     /**
      * Preview frame shown over the video while the seek bar is being dragged.
@@ -104,7 +110,12 @@ class PlayerViewModel : ViewModel() {
 
     /** Thumbnail cache: index → Bitmap. Kept outside UiState to avoid serialization issues. */
     private val _thumbnailCache = mutableStateMapOf<Int, Bitmap>()
+    private val thumbnailSessionMutex = Mutex()
     private var batchThumbnailJob: Job? = null
+    private var activeThumbnailUri: Uri? = null
+    private var activeThumbnailDurationMs: Long = 0L
+    private var activeThumbnailCount: Int = 0
+    private var activeThumbnailAnchorIndex: Int = 0
     private var captureAndSaveJob: Job? = null
     private var activeBitmapExportRefCount: Int = 0
 
@@ -124,6 +135,33 @@ class PlayerViewModel : ViewModel() {
     companion object {
         /** Width of each thumbnail in the timeline strip (px) */
         const val THUMBNAIL_WIDTH_PX = 120
+
+        /** Fixed nice seek step candidates (ms): 1s, 2s, 5s, 10s, 15s, 20s, 30s. */
+        private val NICE_SEEK_STEPS = longArrayOf(
+            1_000L, 2_000L, 5_000L, 10_000L, 15_000L, 20_000L, 30_000L
+        )
+
+        /**
+         * Adaptive seek interval (~5% of total duration) rounded to the nearest step in
+         * [NICE_SEEK_STEPS] using primitive math (smaller step wins ties), clamped to [1s, 30s].
+         */
+        fun seekIntervalForDuration(durationMs: Long): Long {
+            if (durationMs <= 0L) return 1_000L
+            val raw = (durationMs * 0.05).toLong()
+            val steps = NICE_SEEK_STEPS
+            var bestStep = steps[0]
+            var bestDiff = kotlin.math.abs(bestStep - raw)
+            for (i in 1 until steps.size) {
+                val step = steps[i]
+                val diff = kotlin.math.abs(step - raw)
+                if (diff < bestDiff) {
+                    bestDiff = diff
+                    bestStep = step
+                }
+            }
+            return bestStep.coerceIn(1_000L, 30_000L)
+        }
+
         /**
          * Thumbnail count scales with video duration: ~1 thumbnail per second
          * for short videos, tapering off for longer ones using a square-root curve.
@@ -202,6 +240,7 @@ class PlayerViewModel : ViewModel() {
         cancelExport()
         clearThumbnailCache()
         releaseScrubPreview()
+        _playbackPositionMs.value = 0L
         _uiState.update {
             PlayerUiState(
                 isMuted = it.isMuted,
@@ -217,12 +256,22 @@ class PlayerViewModel : ViewModel() {
     }
 
     fun updatePosition(positionMs: Long) {
-        _uiState.update { it.copy(currentPositionMs = positionMs) }
+        if (_playbackPositionMs.value != positionMs) {
+            _playbackPositionMs.value = positionMs
+        }
     }
 
     fun updateDuration(durationMs: Long) {
         val safeDurationMs = durationMs.coerceAtLeast(0L)
-        if (safeDurationMs == _uiState.value.durationMs && _uiState.value.thumbnailCount > 0) return
+        val previousState = _uiState.value
+        if (safeDurationMs == previousState.durationMs && previousState.thumbnailCount > 0) return
+        if (previousState.durationMs > 0L && previousState.durationMs != safeDurationMs) {
+            // Duration changed for the current video: invalidate stale slot-to-timestamp entries.
+            clearThumbnailCache(recycleBitmaps = false)
+        } else {
+            batchThumbnailJob?.cancel()
+            batchThumbnailJob = null
+        }
         _uiState.update {
             it.copy(
                 durationMs = safeDurationMs,
@@ -287,7 +336,7 @@ class PlayerViewModel : ViewModel() {
     fun requestThumbnail(index: Int) {
         if (index !in 0 until _uiState.value.thumbnailCount) return
         if (_thumbnailCache.containsKey(index)) return
-        loadThumbnailsForFullVideo()
+        loadThumbnailsForFullVideo(anchorIndex = index)
     }
 
     /**
@@ -295,54 +344,124 @@ class PlayerViewModel : ViewModel() {
      * Thumbnails are evenly distributed across the entire video, so they
      * load once and remain stable throughout playback.
      *
-     * All missing thumbnails are extracted in a single batch call so the
-     * resource-heavy `MediaMetadataRetriever` (and its native decoder) is
-     * created and released only once instead of once per chunk.
+     * Missing slots are ordered outward from the current viewport/playback anchor
+     * and streamed in small chunks inside a single `MediaMetadataRetriever` session,
+     * so visible slots appear first while preserving single-session decoder reuse.
      */
-    private fun loadThumbnailsForFullVideo() {
-        if (batchThumbnailJob?.isActive == true) return
-
-        val uri = _uiState.value.videoUri ?: return
-        val durationMs = _uiState.value.durationMs
+    private fun loadThumbnailsForFullVideo(anchorIndex: Int? = null) {
+        val state = _uiState.value
+        val uri = state.videoUri ?: return
+        val durationMs = state.durationMs
         if (durationMs <= 0) return
+        val thumbnailCount = state.thumbnailCount
+        if (thumbnailCount <= 0) return
         val extractor = frameExtractor ?: return
 
+        val resolvedAnchor = resolveAnchorIndex(
+            thumbnailCount = thumbnailCount,
+            durationMs = durationMs,
+            currentPositionMs = _playbackPositionMs.value,
+            preferredIndex = anchorIndex
+        )
+
+        val previousJob = batchThumbnailJob
+        if (previousJob?.isActive == true) {
+            val sameTimeline = uri == activeThumbnailUri &&
+                durationMs == activeThumbnailDurationMs &&
+                thumbnailCount == activeThumbnailCount
+            val withinActiveViewportChunk =
+                abs(resolvedAnchor - activeThumbnailAnchorIndex) < FrameExtractor.DEFAULT_THUMBNAIL_CHUNK_SIZE
+            if (sameTimeline && withinActiveViewportChunk) {
+                return
+            }
+            previousJob.cancel()
+        }
+
+        activeThumbnailUri = uri
+        activeThumbnailDurationMs = durationMs
+        activeThumbnailCount = thumbnailCount
+        activeThumbnailAnchorIndex = resolvedAnchor
+
         batchThumbnailJob = viewModelScope.launch {
-            val denominator = (_uiState.value.thumbnailCount - 1).coerceAtLeast(1)
+            val callerContext = currentCoroutineContext()
+            // Wait for any canceled stream (including an in-flight native decode and
+            // retriever.release() on Dispatchers.IO) before opening a replacement decoder session.
+            previousJob?.join()
+            thumbnailSessionMutex.withLock {
+                ensureActive()
+                val denominator = (thumbnailCount - 1).coerceAtLeast(1)
 
-            val missingIndices = (0 until _uiState.value.thumbnailCount).filter {
-                !_thumbnailCache.containsKey(it)
-            }
-            if (missingIndices.isEmpty()) return@launch
-
-            ensureActive()
-
-            val indexToTimestamp = missingIndices.associateWith { index ->
-                val positionMs = (durationMs * index) / denominator
-                positionMs * 1000L
-            }
-
-            try {
-                val results = extractor.extractThumbnails(
-                    uri,
-                    indexToTimestamp.values.toList(),
-                    THUMBNAIL_WIDTH_PX
-                )
-
-                val timestampToBitmap = results.toMap()
-                indexToTimestamp.forEach { (index, timestampUs) ->
-                    timestampToBitmap[timestampUs]?.let { bitmap ->
-                        _thumbnailCache[index] = bitmap
-                    }
+                val missingIndices = (0 until thumbnailCount).filter {
+                    !_thumbnailCache.containsKey(it)
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                appContext?.let { ctx ->
-                    LogUtils.w(ctx, "PlayerViewModel", "Failed to load thumbnails", e)
+                if (missingIndices.isEmpty()) return@withLock
+
+                val orderedIndices = missingIndices.sortedBy { index ->
+                    abs(index - resolvedAnchor)
+                }
+
+                val timestampToIndices = LinkedHashMap<Long, MutableList<Int>>(orderedIndices.size)
+                for (index in orderedIndices) {
+                    val positionMs = (durationMs * index) / denominator
+                    val timestampUs = positionMs * 1000L
+                    timestampToIndices.getOrPut(timestampUs) { mutableListOf() }.add(index)
+                }
+
+                try {
+                    extractor.extractThumbnails(
+                        videoUri = uri,
+                        timestampsUs = timestampToIndices.keys.toList(),
+                        targetWidth = THUMBNAIL_WIDTH_PX,
+                        chunkSize = FrameExtractor.DEFAULT_THUMBNAIL_CHUNK_SIZE
+                    ) { chunk ->
+                        var published = false
+                        try {
+                            withContext(callerContext) {
+                                ensureActive()
+                                val batchMap = HashMap<Int, Bitmap>(chunk.size)
+                                for ((timestampUs, bitmap) in chunk) {
+                                    val indices = timestampToIndices[timestampUs]
+                                    if (indices != null) {
+                                        for (idx in indices) {
+                                            batchMap[idx] = bitmap
+                                        }
+                                    }
+                                }
+                                if (batchMap.isNotEmpty()) {
+                                    _thumbnailCache.putAll(batchMap)
+                                }
+                                published = true
+                            }
+                        } finally {
+                            if (!published) {
+                                chunk.forEach { (_, bitmap) -> extractor.releaseBitmap(bitmap) }
+                            }
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    appContext?.let { ctx ->
+                        LogUtils.w(ctx, "PlayerViewModel", "Failed to load thumbnails", e)
+                    }
                 }
             }
         }
+    }
+
+    private fun resolveAnchorIndex(
+        thumbnailCount: Int,
+        durationMs: Long,
+        currentPositionMs: Long,
+        preferredIndex: Int?
+    ): Int {
+        if (thumbnailCount <= 1) return 0
+        if (preferredIndex != null) {
+            return preferredIndex.coerceIn(0, thumbnailCount - 1)
+        }
+        if (durationMs <= 0L) return 0
+        val fraction = (currentPositionMs.toDouble() / durationMs.toDouble()).coerceIn(0.0, 1.0)
+        return ((thumbnailCount - 1) * fraction).roundToInt().coerceIn(0, thumbnailCount - 1)
     }
 
     /**
@@ -356,6 +475,10 @@ class PlayerViewModel : ViewModel() {
     private fun clearThumbnailCache(recycleBitmaps: Boolean = false) {
         batchThumbnailJob?.cancel()
         batchThumbnailJob = null
+        activeThumbnailUri = null
+        activeThumbnailDurationMs = 0L
+        activeThumbnailCount = 0
+        activeThumbnailAnchorIndex = 0
         if (recycleBitmaps) {
             _thumbnailCache.values.forEach { bitmap ->
                 if (!bitmap.isRecycled) {
@@ -504,7 +627,7 @@ class PlayerViewModel : ViewModel() {
             _uiState.update { it.copy(isCapturing = true, isExporting = true, error = null, exportResult = null) }
 
             try {
-                val timestampUs = _uiState.value.currentPositionMs * 1000L
+                val timestampUs = _playbackPositionMs.value * 1000L
                 val result = extractor.extractFrameWithInfo(uri, timestampUs)
 
                 if (result != null) {
