@@ -541,8 +541,8 @@ class FrameExporter(private val context: Context) {
         minCapacity: Int,
         maxCapacity: Int
     ): ByteBuffer {
-        val doubled = (previousCapacity.toLong() * 2L).coerceAtMost(maxCapacity.toLong()).toInt()
-        val targetCapacity = maxOf(minCapacity, doubled).coerceAtMost(maxCapacity)
+        val grown = (previousCapacity.toLong() * 4L).coerceAtMost(maxCapacity.toLong()).toInt()
+        val targetCapacity = maxOf(minCapacity, grown).coerceAtMost(maxCapacity)
         return ByteBuffer.allocateDirect(targetCapacity)
     }
 
@@ -631,38 +631,6 @@ class FrameExporter(private val context: Context) {
                 sanitizeTrackMaxInputSize(selectedVideoFormat)
                 audioFormat?.let { sanitizeTrackMaxInputSize(it) }
 
-                // Resolve the actual clip start (keyframe) and pre-scan video sample sizes
-                // up front so we can size a single reusable DirectByteBuffer and align audio PTS.
-                var maxRequiredSampleBytes = videoHintMaxInputSize
-                extractor.selectTrack(videoTrackIndex)
-                extractor.seekTo(startUs, seekMode)
-                val initialSeekedPosition = extractor.sampleTime
-                if (initialSeekedPosition >= 0) {
-                    actualStartUs = initialSeekedPosition
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    var scanCount = 0
-                    while (true) {
-                        if (++scanCount % 10 == 0) {
-                            currentCoroutineContext().ensureActive()
-                        }
-                        if (extractor.sampleTrackIndex < 0) break
-                        val sampleTime = extractor.sampleTime
-                        if (sampleTime < 0 || sampleTime > endUs) break
-                        val sampleSizeHint = extractor.sampleSize
-                        if (sampleSizeHint > MAX_SAMPLE_BUFFER_BYTES) {
-                            throw java.io.IOException(
-                                "Video sample size ($sampleSizeHint bytes) exceeds limit ($MAX_SAMPLE_BUFFER_BYTES bytes)"
-                            )
-                        }
-                        if (sampleSizeHint > maxRequiredSampleBytes) {
-                            maxRequiredSampleBytes = sampleSizeHint.toInt()
-                        }
-                        if (!extractor.advance()) break
-                    }
-                }
-                extractor.unselectTrack(videoTrackIndex)
-
                 // --- Audio preparation ---
                 // MediaMuxer only accepts AAC/AMR-NB/AMR-WB into MP4. Other codecs —
                 // notably LPCM from Sony XAVC cameras (ZV-1 etc.), but also
@@ -670,75 +638,50 @@ class FrameExporter(private val context: Context) {
                 // silently drop the sound. Transcode those tracks to AAC up front.
                 val audioMime = audioFormat?.getString(MediaFormat.KEY_MIME)
                 var encodedAudio: EncodedAudio? = null
-                var canMuxCompatibleAudio = false
-                if (audioFormat != null && audioTrackIndex >= 0) {
-                    if (!isMuxerCompatibleAudioMime(audioMime)) {
-                        extractor.selectTrack(audioTrackIndex)
-                        encodedAudio = try {
-                            transcodeAudioToAac(extractor, audioFormat, actualStartUs, endUs)
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            LogUtils.w(
-                                context,
-                                "FrameExporter",
-                                "Audio transcode failed ($audioMime), exporting without audio",
-                                e
-                            )
-                            null
-                        }
-                        extractor.unselectTrack(audioTrackIndex)
-                        encodedAudio?.let { sanitizeTrackMaxInputSize(it.format) }
-                    } else {
-                        // Pre-scan compatible passthrough audio in [actualStartUs, endUs] before
-                        // adding the track to MediaMuxer. If any sample exceeds MAX_SAMPLE_BUFFER_BYTES
-                        // or no samples exist in range, omit the audio track completely so Android 9/10
-                        // MPEG4Writer never fails on an empty track and truncated audio is never muxed.
-                        extractor.selectTrack(audioTrackIndex)
-                        extractor.seekTo(actualStartUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-                        var compatibleAudioSamples = 0
-                        var oversizedAudioSample = false
-                        var maxAudioSampleBytes = audioHintMaxInputSize
-                        var scanCount = 0
-                        while (true) {
-                            if (++scanCount % 10 == 0) {
-                                currentCoroutineContext().ensureActive()
-                            }
-                            if (extractor.sampleTrackIndex < 0) break
-                            val sampleTime = extractor.sampleTime
-                            if (sampleTime < 0 || sampleTime > endUs) break
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                                val sampleSizeHint = extractor.sampleSize
-                                if (sampleSizeHint > MAX_SAMPLE_BUFFER_BYTES) {
-                                    LogUtils.w(
-                                        context,
-                                        "FrameExporter",
-                                        "Audio sample size ($sampleSizeHint bytes) exceeds limit ($MAX_SAMPLE_BUFFER_BYTES bytes), skipping audio track"
-                                    )
-                                    oversizedAudioSample = true
-                                    break
-                                }
-                                if (sampleSizeHint > maxAudioSampleBytes) {
-                                    maxAudioSampleBytes = sampleSizeHint.toInt()
-                                }
-                            }
-                            compatibleAudioSamples++
-                            if (!extractor.advance()) break
-                        }
-                        extractor.unselectTrack(audioTrackIndex)
-                        if (!oversizedAudioSample && compatibleAudioSamples > 0) {
-                            canMuxCompatibleAudio = true
-                            maxRequiredSampleBytes = maxOf(maxRequiredSampleBytes, maxAudioSampleBytes)
-                        }
+                var canMuxCompatibleAudio = audioFormat != null &&
+                    audioTrackIndex >= 0 &&
+                    isMuxerCompatibleAudioMime(audioMime)
+
+                if (audioFormat != null && audioTrackIndex >= 0 && !canMuxCompatibleAudio) {
+                    // Resolve the actual clip start (keyframe) first so transcoded audio PTS
+                    // can be rebased against the same origin as the video samples.
+                    extractor.selectTrack(videoTrackIndex)
+                    extractor.seekTo(startUs, seekMode)
+                    val initialSeekedPosition = extractor.sampleTime
+                    if (initialSeekedPosition >= 0) {
+                        actualStartUs = initialSeekedPosition
                     }
+                    extractor.unselectTrack(videoTrackIndex)
+
+                    extractor.selectTrack(audioTrackIndex)
+                    encodedAudio = try {
+                        transcodeAudioToAac(extractor, audioFormat, actualStartUs, endUs)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        LogUtils.w(
+                            context,
+                            "FrameExporter",
+                            "Audio transcode failed ($audioMime), exporting without audio",
+                            e
+                        )
+                        null
+                    }
+                    extractor.unselectTrack(audioTrackIndex)
+                    encodedAudio?.let { sanitizeTrackMaxInputSize(it.format) }
                 }
 
-                val initialBufferCapacity = maxRequiredSampleBytes.coerceIn(
+                val initialBufferCapacity = if (canMuxCompatibleAudio) {
+                    maxOf(videoHintMaxInputSize, audioHintMaxInputSize)
+                } else {
+                    videoHintMaxInputSize
+                }.coerceIn(
                     DEFAULT_SAMPLE_BUFFER_BYTES,
                     MAX_SAMPLE_BUFFER_BYTES
                 )
                 var buffer: ByteBuffer? = ByteBuffer.allocateDirect(initialBufferCapacity)
                 val bufferInfo = MediaCodec.BufferInfo()
+                var muxableVideoFormat: MediaFormat = selectedVideoFormat
 
                 while (true) {
                     videoSamplesWritten = 0
@@ -755,7 +698,7 @@ class FrameExporter(private val context: Context) {
                         MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
                     )
                     val muxerVideoTrack: Int = try {
-                        muxer.addTrack(selectedVideoFormat)
+                        muxer.addTrack(muxableVideoFormat)
                     } catch (e: Exception) {
                         LogUtils.w(
                             context,
@@ -774,7 +717,8 @@ class FrameExporter(private val context: Context) {
                             tempFile.absolutePath,
                             MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
                         )
-                        muxer.addTrack(createCleanVideoFormat(selectedVideoFormat))
+                        muxableVideoFormat = createCleanVideoFormat(selectedVideoFormat)
+                        muxer.addTrack(muxableVideoFormat)
                     }
                     var muxerStarted = false
                     try {
@@ -821,7 +765,6 @@ class FrameExporter(private val context: Context) {
                             val sampleTime = extractor.sampleTime
                             if (sampleTime < 0 || sampleTime > endUs) break
 
-                            var currentBuffer = requireNotNull(buffer)
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                                 val sampleSizeHint = extractor.sampleSize
                                 if (sampleSizeHint > MAX_SAMPLE_BUFFER_BYTES) {
@@ -829,18 +772,18 @@ class FrameExporter(private val context: Context) {
                                         "Video sample size ($sampleSizeHint bytes) exceeds limit ($MAX_SAMPLE_BUFFER_BYTES bytes)"
                                     )
                                 }
-                                if (sampleSizeHint > 0 && sampleSizeHint > currentBuffer.capacity()) {
-                                    val prevCap = currentBuffer.capacity()
+                                val existingCapacity = requireNotNull(buffer).capacity()
+                                if (sampleSizeHint > 0 && sampleSizeHint > existingCapacity) {
                                     buffer = null
-                                    currentBuffer = allocateGrownDirectBuffer(
-                                        previousCapacity = prevCap,
+                                    buffer = allocateGrownDirectBuffer(
+                                        previousCapacity = existingCapacity,
                                         minCapacity = sampleSizeHint.toInt(),
                                         maxCapacity = MAX_SAMPLE_BUFFER_BYTES
                                     )
-                                    buffer = currentBuffer
                                 }
                             }
 
+                            val currentBuffer = requireNotNull(buffer)
                             currentBuffer.clear()
                             val sampleSize = extractor.readSampleData(currentBuffer, 0)
                             if (sampleSize < 0) break
@@ -890,7 +833,6 @@ class FrameExporter(private val context: Context) {
                                     val sampleTime = extractor.sampleTime
                                     if (sampleTime < 0 || sampleTime > endUs) break
 
-                                    var currentBuffer = requireNotNull(buffer)
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                                         val sampleSizeHint = extractor.sampleSize
                                         if (sampleSizeHint > MAX_SAMPLE_BUFFER_BYTES) {
@@ -902,18 +844,18 @@ class FrameExporter(private val context: Context) {
                                             retryWithoutAudio = true
                                             break
                                         }
-                                        if (sampleSizeHint > 0 && sampleSizeHint > currentBuffer.capacity()) {
-                                            val prevCap = currentBuffer.capacity()
+                                        val existingCapacity = requireNotNull(buffer).capacity()
+                                        if (sampleSizeHint > 0 && sampleSizeHint > existingCapacity) {
                                             buffer = null
-                                            currentBuffer = allocateGrownDirectBuffer(
-                                                previousCapacity = prevCap,
+                                            buffer = allocateGrownDirectBuffer(
+                                                previousCapacity = existingCapacity,
                                                 minCapacity = sampleSizeHint.toInt(),
                                                 maxCapacity = MAX_SAMPLE_BUFFER_BYTES
                                             )
-                                            buffer = currentBuffer
                                         }
                                     }
 
+                                    val currentBuffer = requireNotNull(buffer)
                                     currentBuffer.clear()
                                     val sampleSize = extractor.readSampleData(currentBuffer, 0)
                                     if (sampleSize < 0) break
@@ -1071,7 +1013,6 @@ class FrameExporter(private val context: Context) {
             val sampleTime = extractor.sampleTime
             if (sampleTime < 0 || sampleTime > endUs) break
 
-            var currentBuffer = requireNotNull(buffer)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 val sampleSizeHint = extractor.sampleSize
                 if (sampleSizeHint > MAX_PCM_BUFFER_BYTES ||
@@ -1084,18 +1025,18 @@ class FrameExporter(private val context: Context) {
                     )
                     return PcmAudio(ByteArray(0), sampleRate, channelCount, basePtsUs)
                 }
-                if (sampleSizeHint > 0 && sampleSizeHint > currentBuffer.capacity()) {
-                    val prevCap = currentBuffer.capacity()
+                val existingCapacity = requireNotNull(buffer).capacity()
+                if (sampleSizeHint > 0 && sampleSizeHint > existingCapacity) {
                     buffer = null
-                    currentBuffer = allocateGrownDirectBuffer(
-                        previousCapacity = prevCap,
+                    buffer = allocateGrownDirectBuffer(
+                        previousCapacity = existingCapacity,
                         minCapacity = sampleSizeHint.toInt(),
                         maxCapacity = MAX_PCM_BUFFER_BYTES
                     )
-                    buffer = currentBuffer
                 }
             }
 
+            val currentBuffer = requireNotNull(buffer)
             currentBuffer.clear()
             val sampleSize = extractor.readSampleData(currentBuffer, 0)
             if (sampleSize < 0) break

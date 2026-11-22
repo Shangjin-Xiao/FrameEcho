@@ -19,6 +19,7 @@ import com.shangjin.frameecho.core.model.ColorSpaceInfo
 import com.shangjin.frameecho.core.model.ExportConfig
 import com.shangjin.frameecho.core.model.ExportResult
 import com.shangjin.frameecho.core.model.VideoMetadata
+import io.mockk.clearAllMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkConstructor
@@ -338,11 +339,18 @@ class FrameExporterTest {
                 )
             }
 
-            // Scenario 1: Clamped 256 MiB KEY_MAX_INPUT_SIZE to 32 MiB on buffer AND on both muxer.addTrack formats
+            // Scenario 1: Clamped 256 MiB KEY_MAX_INPUT_SIZE to 32 MiB on buffer AND on both muxer.addTrack formats,
+            // with single-pass video & audio extraction (no extra pre-scan passes).
             val s1 = scenarios[0]
             assertTrue("Expected Success for ${s1.name}, got ${s1.result}", s1.result is ExportResult.Success)
             assertFalse((s1.result as ExportResult.Success).audioDropped)
             assertEquals(FrameExporter.MAX_SAMPLE_BUFFER_BYTES, s1.maxObservedBufferCapacity)
+            assertEquals(1, s1.muxerInstanceCount)
+            assertEquals(1, s1.videoSeekCount)
+            assertEquals(1, s1.audioSeekCount)
+            assertEquals(1, s1.videoAdvanceCount)
+            assertEquals(1, s1.audioAdvanceCount)
+            assertEquals(0, s1.leftoverTempClipFiles)
             assertEquals(
                 listOf(MediaFormat.MIMETYPE_VIDEO_AVC, MediaFormat.MIMETYPE_AUDIO_AAC),
                 s1.muxerAddedTrackMimes
@@ -358,16 +366,20 @@ class FrameExporterTest {
             val s2Error = s2.result as ExportResult.Error
             assertTrue("Expected IOException cause, got ${s2Error.cause}", s2Error.cause is IOException)
             assertFalse(s2Error.cause is OutOfMemoryError)
+            assertEquals(0, s2.leftoverTempClipFiles)
 
-            // Scenario 3: AAC remux oversized first sample omitted audio track before muxer.start()
+            // Scenario 3: AAC remux oversized first sample triggers write-pass video-only retry,
+            // safely absorbing empty-track stop() failure on first muxer and exporting clean video-only MP4
             val s3 = scenarios[2]
             assertTrue("Expected Success for ${s3.name}, got ${s3.result}", s3.result is ExportResult.Success)
             val s3Success = s3.result as ExportResult.Success
             assertTrue(s3Success.isMotionPhoto)
             assertTrue("Expected audioDropped=true for ${s3.name}", s3Success.audioDropped)
+            assertEquals(2, s3.muxerInstanceCount)
             assertEquals(listOf(MediaFormat.MIMETYPE_VIDEO_AVC), s3.muxerAddedTrackMimes)
             assertEquals(0, s3.muxerAudioSamplesWritten)
             assertEquals(0, s3.audioReadSampleCount)
+            assertEquals(0, s3.leftoverTempClipFiles)
 
             // Scenario 4: LPCM oversized sample skipped before allocateDirect with audioDropped = true
             val s4 = scenarios[3]
@@ -375,13 +387,15 @@ class FrameExporterTest {
             val s4Success = s4.result as ExportResult.Success
             assertTrue(s4Success.isMotionPhoto)
             assertTrue("Expected audioDropped=true for ${s4.name}", s4Success.audioDropped)
+            assertEquals(1, s4.muxerInstanceCount)
             assertEquals(listOf(MediaFormat.MIMETYPE_VIDEO_AVC), s4.muxerAddedTrackMimes)
             assertEquals(0, s4.audioReadSampleCount)
+            assertEquals(0, s4.leftoverTempClipFiles)
         }
     }
 
     @Test
-    fun `exportMotionPhoto omits compatible audio track and avoids truncated audio when later sample exceeds limit`() {
+    fun `exportMotionPhoto retries video-only and discards truncated audio when later compatible audio sample exceeds limit`() {
         withSdkInt(Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             val fortyMiB = 40L * 1024 * 1024
             val aacSamples = listOf(
@@ -404,15 +418,62 @@ class FrameExporterTest {
             val success = outcome.result as ExportResult.Success
             assertTrue(success.isMotionPhoto)
             assertTrue("Expected audioDropped=true when a later audio sample is oversized", success.audioDropped)
-            // Verify no audio track or truncated audio samples were added to MediaMuxer
+            // First muxer wrote 2 valid audio samples before hitting the 40 MiB sample;
+            // write-pass retry discarded that temp file and remuxed video-only into a second muxer.
+            assertEquals(2, outcome.muxerInstanceCount)
+            assertEquals(2, outcome.abandonedMuxerAudioSamplesWritten)
+            assertEquals(2, outcome.audioReadSampleCount)
             assertEquals(listOf(MediaFormat.MIMETYPE_VIDEO_AVC), outcome.muxerAddedTrackMimes)
             assertEquals(0, outcome.muxerAudioSamplesWritten)
-            assertEquals(0, outcome.audioReadSampleCount)
+            assertEquals(0, outcome.leftoverTempClipFiles)
+            // Verify the exported Motion Photo's MP4 tail ends with only 1 video track marker (0x00) and zero audio markers (0x01)
+            val ftypIndex = outcome.exportedFileBytes.indices.last { idx ->
+                idx + 3 < outcome.exportedFileBytes.size &&
+                    outcome.exportedFileBytes[idx] == 0x66.toByte() &&
+                    outcome.exportedFileBytes[idx + 1] == 0x74.toByte() &&
+                    outcome.exportedFileBytes[idx + 2] == 0x79.toByte() &&
+                    outcome.exportedFileBytes[idx + 3] == 0x70.toByte()
+            }
+            val mp4Markers = outcome.exportedFileBytes.copyOfRange(
+                ftypIndex + 4,
+                outcome.exportedFileBytes.size
+            )
+            org.junit.Assert.assertArrayEquals(byteArrayOf(0x00), mp4Markers)
         }
     }
 
     @Test
-    fun `exportMotionPhoto reuses bounded direct buffer across successively larger samples without exhausting direct memory`() {
+    fun `exportMotionPhoto retries video-only when compatible audio track has zero samples in clip range`() {
+        withSdkInt(Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Audio sample timestamp (4.0s) is past clip endUs (3.0s), so 0 audio samples are written in Phase 2.
+            val outOfRangeAudioSamples = listOf(
+                FakeSample(4_000_000L, 32L, ByteArray(32) { 0x44 })
+            )
+
+            val outcome = runExportScenario(
+                name = "compatible_audio_zero_samples_in_range",
+                videoMaxInputSize = 65_536,
+                audioMime = MediaFormat.MIMETYPE_AUDIO_AAC,
+                videoReportedSampleSize = 16L,
+                audioReportedSampleSize = 32L,
+                customAudioSamples = outOfRangeAudioSamples
+            )
+
+            assertFalse(outcome.triggeredOom)
+            assertTrue("Expected Success, got ${outcome.result}", outcome.result is ExportResult.Success)
+            val success = outcome.result as ExportResult.Success
+            assertTrue(success.isMotionPhoto)
+            assertTrue("Expected audioDropped=true when clip range has no audio samples", success.audioDropped)
+            assertEquals(2, outcome.muxerInstanceCount)
+            assertEquals(listOf(MediaFormat.MIMETYPE_VIDEO_AVC), outcome.muxerAddedTrackMimes)
+            assertEquals(0, outcome.muxerAudioSamplesWritten)
+            assertEquals(0, outcome.audioReadSampleCount)
+            assertEquals(0, outcome.leftoverTempClipFiles)
+        }
+    }
+
+    @Test
+    fun `exportMotionPhoto grows bounded direct buffer geometrically in a single pass without exhausting direct memory`() {
         withSdkInt(Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             val oneMiB = 1024 * 1024
             // 20 video samples + 20 AAC audio samples ramping from 1 MiB to 20 MiB:
@@ -448,7 +509,14 @@ class FrameExporterTest {
             val success = outcome.result as ExportResult.Success
             assertTrue(success.isMotionPhoto)
             assertFalse(success.audioDropped)
-            assertEquals(20 * oneMiB, outcome.maxObservedBufferCapacity)
+            // 4x geometric growth from 1 MiB reaches 32 MiB (1 -> 4 -> 16 -> 32 MiB)
+            // in a single pass without pre-scanning video or audio tracks.
+            assertEquals(FrameExporter.MAX_SAMPLE_BUFFER_BYTES, outcome.maxObservedBufferCapacity)
+            assertEquals(1, outcome.muxerInstanceCount)
+            assertEquals(1, outcome.videoSeekCount)
+            assertEquals(1, outcome.audioSeekCount)
+            assertEquals(20, outcome.videoAdvanceCount)
+            assertEquals(20, outcome.audioAdvanceCount)
             assertTrue(
                 "Expected direct memory peak < 96 MiB, got ${outcome.peakDirectBytes}",
                 outcome.peakDirectBytes < 96L * 1024 * 1024
@@ -605,9 +673,17 @@ class FrameExporterTest {
         val maxObservedBufferCapacity: Int,
         val maxObservedAudioBufferCapacity: Int,
         val audioReadSampleCount: Int,
+        val videoSeekCount: Int,
+        val audioSeekCount: Int,
+        val videoAdvanceCount: Int,
+        val audioAdvanceCount: Int,
+        val muxerInstanceCount: Int,
         val muxerAddedTrackMimes: List<String?>,
         val muxerAddedTrackMaxInputSizes: List<Int?>,
         val muxerAudioSamplesWritten: Int,
+        val abandonedMuxerAudioSamplesWritten: Int,
+        val leftoverTempClipFiles: Int,
+        val exportedFileBytes: ByteArray,
         val capturedEncoderPcmBytes: ByteArray
     )
 
@@ -672,10 +748,17 @@ class FrameExporterTest {
         mockAacEncoder: Boolean = false
     ): ScenarioOutcome {
         System.gc()
+        System.runFinalization()
+        Thread.sleep(20)
+        System.gc()
         var peakDirectBytes = directMemoryUsedBytes()
         var maxObservedBufferCapacity = 0
         var maxObservedAudioBufferCapacity = 0
         var audioReadSampleCount = 0
+        var videoSeekCount = 0
+        var audioSeekCount = 0
+        var videoAdvanceCount = 0
+        var audioAdvanceCount = 0
         val capturedEncoderPcm = ByteArrayOutputStream()
 
         fun sampleDirectMemory() {
@@ -881,7 +964,13 @@ class FrameExporterTest {
             }
         }
         every { anyConstructed<MediaExtractor>().seekTo(any(), any()) } answers {
-            cursorFor(self as MediaExtractor).sampleIndex = 0
+            val cursor = cursorFor(self as MediaExtractor)
+            if (cursor.selectedTrack == 0) {
+                videoSeekCount++
+            } else if (cursor.selectedTrack == primaryAudioTrackIndex) {
+                audioSeekCount++
+            }
+            cursor.sampleIndex = 0
         }
         every { anyConstructed<MediaExtractor>().sampleTrackIndex } answers {
             val cursor = cursorFor(self as MediaExtractor)
@@ -917,18 +1006,31 @@ class FrameExporterTest {
         }
         every { anyConstructed<MediaExtractor>().advance() } answers {
             val cursor = cursorFor(self as MediaExtractor)
+            if (cursor.selectedTrack == 0) {
+                videoAdvanceCount++
+            } else if (cursor.selectedTrack == primaryAudioTrackIndex) {
+                audioAdvanceCount++
+            }
             cursor.sampleIndex++
             cursor.currentSample() != null
         }
         every { anyConstructed<MediaExtractor>().release() } returns Unit
 
-        val muxerStates = Collections.synchronizedMap(IdentityHashMap<MediaMuxer, MuxerState>())
-        fun muxerStateFor(muxer: MediaMuxer): MuxerState =
-            muxerStates.getOrPut(muxer) { MuxerState() }
+        val allMuxerStates = Collections.synchronizedList(mutableListOf<MuxerState>())
+        var activeMuxerState: MuxerState? = null
+        fun currentMuxerState(): MuxerState {
+            var state = activeMuxerState
+            if (state == null) {
+                state = MuxerState()
+                activeMuxerState = state
+                allMuxerStates.add(state)
+            }
+            return state
+        }
         var lastStoppedMuxerState: MuxerState? = null
 
         every { anyConstructed<MediaMuxer>().addTrack(any()) } answers {
-            val state = muxerStateFor(self as MediaMuxer)
+            val state = currentMuxerState()
             val fmt = firstArg<MediaFormat>()
             val trackId = state.addedTrackMimes.size
             state.addedTrackMimes.add(fmt.getString(MediaFormat.KEY_MIME))
@@ -941,11 +1043,15 @@ class FrameExporterTest {
             state.samplesWrittenByTrack[trackId] = 0
             trackId
         }
-        every { anyConstructed<MediaMuxer>().setOrientationHint(any()) } returns Unit
-        every { anyConstructed<MediaMuxer>().start() } returns Unit
+        every { anyConstructed<MediaMuxer>().setOrientationHint(any()) } answers {
+            currentMuxerState()
+        }
+        every { anyConstructed<MediaMuxer>().start() } answers {
+            currentMuxerState()
+        }
         every { anyConstructed<MediaMuxer>().writeSampleData(any(), any(), any()) } answers {
             sampleDirectMemory()
-            val state = muxerStateFor(self as MediaMuxer)
+            val state = currentMuxerState()
             val trackId = firstArg<Int>()
             val buf = secondArg<ByteBuffer>()
             maxObservedBufferCapacity = maxOf(maxObservedBufferCapacity, buf.capacity())
@@ -954,10 +1060,11 @@ class FrameExporterTest {
                 if (clipFile.length() == 0L) {
                     clipFile.writeBytes(byteArrayOf(0, 0, 0, 8, 0x66, 0x74, 0x79, 0x70))
                 }
+                clipFile.appendBytes(byteArrayOf(trackId.toByte()))
             }
         }
         every { anyConstructed<MediaMuxer>().stop() } answers {
-            val state = muxerStateFor(self as MediaMuxer)
+            val state = currentMuxerState()
             val emptyTrack = state.samplesWrittenByTrack.entries.firstOrNull { it.value == 0 }
             if (emptyTrack != null) {
                 throw IllegalStateException(
@@ -966,7 +1073,9 @@ class FrameExporterTest {
             }
             lastStoppedMuxerState = state
         }
-        every { anyConstructed<MediaMuxer>().release() } returns Unit
+        every { anyConstructed<MediaMuxer>().release() } answers {
+            activeMuxerState = null
+        }
 
         val exporter = FrameExporter(context)
         val frame = CapturedFrame(
@@ -1006,6 +1115,7 @@ class FrameExporterTest {
         } catch (oom: OutOfMemoryError) {
             triggeredOom = true
         } finally {
+            clearAllMocks()
             unmockkAll()
             mockkStatic(Xml::class)
             every { Xml.newSerializer() } returns org.kxml2.io.KXmlSerializer()
@@ -1020,6 +1130,13 @@ class FrameExporterTest {
         } else {
             0
         }
+        val abandonedAudioWritten = allMuxerStates
+            .filter { it !== finalMuxer }
+            .sumOf { state ->
+                val idx = state.addedTrackMimes.indexOfFirst { it != null && it.startsWith("audio/") }
+                if (idx >= 0) state.samplesWrittenByTrack[idx] ?: 0 else 0
+            }
+        val leftoverTempFiles = cacheDir.listFiles()?.count { it.name.startsWith("motion_clip_") } ?: 0
 
         return ScenarioOutcome(
             name = name,
@@ -1029,9 +1146,17 @@ class FrameExporterTest {
             maxObservedBufferCapacity = maxObservedBufferCapacity,
             maxObservedAudioBufferCapacity = maxObservedAudioBufferCapacity,
             audioReadSampleCount = audioReadSampleCount,
+            videoSeekCount = videoSeekCount,
+            audioSeekCount = audioSeekCount,
+            videoAdvanceCount = videoAdvanceCount,
+            audioAdvanceCount = audioAdvanceCount,
+            muxerInstanceCount = allMuxerStates.size,
             muxerAddedTrackMimes = finalMuxer?.addedTrackMimes?.toList() ?: emptyList(),
             muxerAddedTrackMaxInputSizes = finalMuxer?.addedTrackMaxInputSizes?.toList() ?: emptyList(),
             muxerAudioSamplesWritten = muxerAudioWritten,
+            abandonedMuxerAudioSamplesWritten = abandonedAudioWritten,
+            leftoverTempClipFiles = leftoverTempFiles,
+            exportedFileBytes = outputBytes.toByteArray(),
             capturedEncoderPcmBytes = capturedEncoderPcm.toByteArray()
         )
     }
