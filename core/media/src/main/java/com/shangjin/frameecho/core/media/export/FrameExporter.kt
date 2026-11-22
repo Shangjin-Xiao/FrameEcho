@@ -1056,8 +1056,25 @@ class FrameExporter internal constructor(
                         if (hint > pcmReadBuffer.capacity()) {
                             pcmReadBuffer = ByteBuffer.allocateDirect(hint.toInt())
                         }
-                        pcmReadBuffer.clear()
-                        val sampleSize = source.readSampleData(pcmReadBuffer)
+                        var sampleSize: Int
+                        while (true) {
+                            pcmReadBuffer.clear()
+                            try {
+                                sampleSize = source.readSampleData(pcmReadBuffer)
+                                break
+                            } catch (e: Exception) {
+                                if ((e is IllegalArgumentException || e is java.nio.BufferOverflowException) &&
+                                    pcmReadBuffer.capacity() < MAX_PCM_BUFFER_BYTES
+                                ) {
+                                    val grownCapacity = (pcmReadBuffer.capacity().toLong() * 2L)
+                                        .coerceAtMost(MAX_PCM_BUFFER_BYTES.toLong())
+                                        .toInt()
+                                    pcmReadBuffer = ByteBuffer.allocateDirect(grownCapacity)
+                                } else {
+                                    throw e
+                                }
+                            }
+                        }
                         if (sampleSize < 0) {
                             sourceDone = true
                             progressed = true
