@@ -20,6 +20,8 @@ import com.shangjin.frameecho.core.model.ExportResult
 import com.shangjin.frameecho.core.model.VideoMetadata
 import io.mockk.Called
 import io.mockk.Runs
+import io.mockk.clearAllMocks
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -94,7 +96,9 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
 
     @After
     fun tearDown() {
+        clearAllMocks()
         unmockkAll()
+        System.gc()
     }
 
     @Test
@@ -208,6 +212,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
     private class RemuxHarness(
         val cacheDir: File,
         var totalMuxedBytes: Long = 0L,
+        var lastMuxerBytes: Long = 0L,
         var totalMuxedSamples: Int = 0,
         var minPtsUs: Long = Long.MAX_VALUE,
         var maxPtsUs: Long = 0L,
@@ -220,13 +225,17 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         var lastReadBufferCapacity: Int = 0,
         var lastReadBufferLimit: Int = 0,
         var lastMuxerTrackCount: Int = 0,
-        var extractorFactory: () -> MediaExtractor = { MediaExtractor() }
+        var extractorFactory: () -> MediaExtractor = { MediaExtractor() },
+        var muxerFactory: (String) -> MediaMuxer = { path ->
+            MediaMuxer(path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        }
     ) {
         val muxedSpanUs: Long
             get() = if (minPtsUs == Long.MAX_VALUE) 0L else (maxPtsUs - minPtsUs).coerceAtLeast(0L)
 
         fun buildExporter(context: Context): FrameExporter = FrameExporter(context).apply {
             extractorFactory = this@RemuxHarness.extractorFactory
+            muxerFactory = this@RemuxHarness.muxerFactory
         }
     }
 
@@ -276,7 +285,6 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         every { audioFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT) } returns 1
         every { audioFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) } returns AudioFormat.ENCODING_PCM_16BIT
 
-        mockkConstructor(MediaMuxer::class)
         mockkConstructor(MediaCodec.BufferInfo::class)
 
         fun createMockExtractor(): MediaExtractor {
@@ -353,10 +361,8 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
                 }
                 val toWrite = minOf(sample.sizeBytes, availableCapacity)
                 dst.clear()
+                dst.limit(offset + toWrite)
                 dst.position(offset)
-                if (toWrite > 0) {
-                    dst.put(ByteArray(toWrite))
-                }
                 sample.sizeBytes
             }
             every { ext.advance() } answers {
@@ -372,54 +378,76 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
                     else -> false
                 }
             }
-            every { ext.release() } just Runs
+            every { ext.release() } answers {
+                clearMocks(
+                    ext,
+                    answers = false,
+                    recordedCalls = true,
+                    childMocks = false,
+                    verificationMarks = false,
+                    exclusionRules = false
+                )
+            }
             return ext
         }
 
         harness.extractorFactory = { createMockExtractor() }
 
-        val activeMuxerTracks = mutableMapOf<Int, Int>()
-        every { anyConstructed<MediaMuxer>().addTrack(any()) } answers {
-            val trackId = activeMuxerTracks.size
-            activeMuxerTracks[trackId] = 0
-            harness.lastMuxerTrackCount = activeMuxerTracks.size
-            trackId
-        }
-        every { anyConstructed<MediaMuxer>().setOrientationHint(any()) } just Runs
-        every { anyConstructed<MediaMuxer>().start() } answers {
-            harness.muxerStartCount++
-        }
-        every { anyConstructed<MediaMuxer>().writeSampleData(any(), any(), any()) } answers {
-            val trackIndex = firstArg<Int>()
-            activeMuxerTracks.compute(trackIndex) { _, count -> (count ?: 0) + 1 }
-            val info = thirdArg<MediaCodec.BufferInfo>()
-            harness.totalMuxedBytes += info.size.toLong()
-            harness.totalMuxedSamples++
-            if (info.presentationTimeUs < harness.minPtsUs) {
-                harness.minPtsUs = info.presentationTimeUs
+        harness.muxerFactory = { path ->
+            val activeMuxerTracks = mutableMapOf<Int, Int>()
+            val clipFile = File(path)
+            val muxer = mockk<MediaMuxer>(relaxed = true)
+            every { muxer.addTrack(any()) } answers {
+                val trackId = activeMuxerTracks.size
+                activeMuxerTracks[trackId] = 0
+                harness.lastMuxerTrackCount = activeMuxerTracks.size
+                trackId
             }
-            if (info.presentationTimeUs > harness.maxPtsUs) {
-                harness.maxPtsUs = info.presentationTimeUs
+            every { muxer.setOrientationHint(any()) } just Runs
+            every { muxer.start() } answers {
+                harness.muxerStartCount++
+                harness.lastMuxerBytes = 0L
             }
-            cacheDir.listFiles()?.firstOrNull { it.name.startsWith("motion_clip_") }?.let { temp ->
-                if (temp.length() == 0L) {
-                    temp.writeBytes(byteArrayOf(0x00, 0x00, 0x00, 0x18))
+            every { muxer.writeSampleData(any(), any(), any()) } answers {
+                val trackIndex = firstArg<Int>()
+                activeMuxerTracks.compute(trackIndex) { _, count -> (count ?: 0) + 1 }
+                val info = thirdArg<MediaCodec.BufferInfo>()
+                harness.totalMuxedBytes += info.size.toLong()
+                harness.lastMuxerBytes += info.size.toLong()
+                harness.totalMuxedSamples++
+                if (info.presentationTimeUs < harness.minPtsUs) {
+                    harness.minPtsUs = info.presentationTimeUs
+                }
+                if (info.presentationTimeUs > harness.maxPtsUs) {
+                    harness.maxPtsUs = info.presentationTimeUs
+                }
+                if (clipFile.exists() && clipFile.length() == 0L) {
+                    clipFile.writeBytes(byteArrayOf(0x00, 0x00, 0x00, 0x18))
                 }
             }
-        }
-        every { anyConstructed<MediaMuxer>().stop() } answers {
-            harness.muxerStopCount++
-            if (activeMuxerTracks.isEmpty() || activeMuxerTracks.values.any { it == 0 }) {
-                throw IllegalStateException("MediaMuxer stopped with an empty track: $activeMuxerTracks")
+            every { muxer.stop() } answers {
+                harness.muxerStopCount++
+                if (activeMuxerTracks.isEmpty() || activeMuxerTracks.values.any { it == 0 }) {
+                    throw IllegalStateException("MediaMuxer stopped with an empty track: $activeMuxerTracks")
+                }
             }
-        }
-        every { anyConstructed<MediaMuxer>().release() } answers {
-            activeMuxerTracks.clear()
-            harness.muxerReleaseCount++
-            val tempExists = cacheDir.listFiles()?.any { it.name.startsWith("motion_clip_") } == true
-            if (!tempExists) {
-                harness.allTempFilesExistedAtMuxerRelease = false
+            every { muxer.release() } answers {
+                activeMuxerTracks.clear()
+                harness.muxerReleaseCount++
+                val tempExists = cacheDir.listFiles()?.any { it.name.startsWith("motion_clip_") } == true
+                if (!tempExists) {
+                    harness.allTempFilesExistedAtMuxerRelease = false
+                }
+                clearMocks(
+                    muxer,
+                    answers = false,
+                    recordedCalls = true,
+                    childMocks = false,
+                    verificationMarks = false,
+                    exclusionRules = false
+                )
             }
+            muxer
         }
 
         return harness
@@ -791,14 +819,20 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         // When motionPhoto == true, [12s..20.9s] fits in 128 MiB (tests NEXT_SYNC -> 12s).
         // When motionPhoto == false, [12s..20.9s] also exceeds 128 MiB while [14s..20.9s] fits
         // (tests fallback PREVIOUS_SYNC(clampedCenterUs) -> 14s).
-        val secondGopChunkMiB = if (motionPhoto) 10 else 40
         val videoSamples = buildList {
-            // [10s, 12s): 70 MiB -> makes [10s..20.9s] exceed 128 MiB in both modes.
-            add(FakeSample(timeUs = 10_000_000L, sizeBytes = 35 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC))
-            add(FakeSample(timeUs = 11_000_000L, sizeBytes = 35 * oneMiB, flags = 0))
-            // [12s, 14s): 20 MiB (fits with 70 MiB tail) or 80 MiB (exceeds with 70 MiB tail).
-            add(FakeSample(timeUs = 12_000_000L, sizeBytes = secondGopChunkMiB * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC))
-            add(FakeSample(timeUs = 13_000_000L, sizeBytes = secondGopChunkMiB * oneMiB, flags = 0))
+            // [10s, 12s): 75 MiB (3 * 25 MiB <= 32 MiB per sample) -> makes [10s..20.9s] exceed 128 MiB in both modes.
+            add(FakeSample(timeUs = 10_000_000L, sizeBytes = 25 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC))
+            add(FakeSample(timeUs = 10_500_000L, sizeBytes = 25 * oneMiB, flags = 0))
+            add(FakeSample(timeUs = 11_000_000L, sizeBytes = 25 * oneMiB, flags = 0))
+            // [12s, 14s): 20 MiB (fits with 70 MiB tail) or 75 MiB (exceeds with 70 MiB tail).
+            if (motionPhoto) {
+                add(FakeSample(timeUs = 12_000_000L, sizeBytes = 10 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC))
+                add(FakeSample(timeUs = 13_000_000L, sizeBytes = 10 * oneMiB, flags = 0))
+            } else {
+                add(FakeSample(timeUs = 12_000_000L, sizeBytes = 25 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC))
+                add(FakeSample(timeUs = 12_500_000L, sizeBytes = 25 * oneMiB, flags = 0))
+                add(FakeSample(timeUs = 13_000_000L, sizeBytes = 25 * oneMiB, flags = 0))
+            }
             // [14s, 20.9s]: 70 MiB <= 128 MiB, containing captured frame at 15.9s.
             add(FakeSample(timeUs = 14_000_000L, sizeBytes = 15 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC))
             add(FakeSample(timeUs = 15_900_000L, sizeBytes = 15 * oneMiB, flags = 0))
@@ -811,7 +845,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         }
         val harness = prepareMotionPhotoMocks(
             videoSamples = videoSamples,
-            maxVideoInputSize = 36 * oneMiB
+            maxVideoInputSize = 26 * oneMiB
         ) { targetUs, mode ->
             when (mode) {
                 MediaExtractor.SEEK_TO_PREVIOUS_SYNC ->
@@ -866,7 +900,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
 
         val harness = prepareMotionPhotoMocks(
             videoSamples = videoSamples,
-            // Maliciously large KEY_MAX_INPUT_SIZE (512 MiB) must be clamped to MAX_SAMPLE_BUFFER_BYTES (16 MiB).
+            // Maliciously large KEY_MAX_INPUT_SIZE (512 MiB) must be clamped to MAX_SAMPLE_BUFFER_BYTES (32 MiB).
             maxVideoInputSize = 512 * oneMiB,
             throwOnInsufficientReadBuffer = true
         ) { _, _ -> 0 }
@@ -888,9 +922,9 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         assertTrue(harness.cacheDir.listFiles().isNullOrEmpty())
 
         // Verify sliced direct ByteBuffer caps capacity() itself at remainingBudgetBytes.
-        val sixteenMiBBuffer = ByteBuffer.allocateDirect(FrameExporter.MAX_SAMPLE_BUFFER_BYTES)
+        val maxSampleBuffer = ByteBuffer.allocateDirect(FrameExporter.MAX_SAMPLE_BUFFER_BYTES)
         val slicedBuffer = exporter.ensureBoundedSampleBuffer(
-            currentBuffer = sixteenMiBBuffer,
+            currentBuffer = maxSampleBuffer,
             sampleSizeHint = -1L,
             remainingBudgetBytes = 8L * oneMiB,
             totalSamplesSoFar = 8,
@@ -927,10 +961,11 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         val totalDurationMs = 30_000L
         val captureTimestampUs = 15_900_000L // startUs = 10.9s, endUs = 20.9s
         val oneMiB = 1024 * 1024
-        // 17 MiB keyframe at 10s exceeds MAX_SAMPLE_BUFFER_BYTES (16 MiB) and is both
+        // Oversized keyframe at 10s exceeds MAX_SAMPLE_BUFFER_BYTES (32 MiB) and is both
         // PREVIOUS_SYNC and CLOSEST_SYNC for 10.9s; 12s keyframe fits all limits.
+        val oversizedSampleBytes = FrameExporter.MAX_SAMPLE_BUFFER_BYTES + oneMiB
         val videoSamples = listOf(
-            FakeSample(timeUs = 10_000_000L, sizeBytes = 17 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC),
+            FakeSample(timeUs = 10_000_000L, sizeBytes = oversizedSampleBytes, flags = MediaExtractor.SAMPLE_FLAG_SYNC),
             FakeSample(timeUs = 12_000_000L, sizeBytes = 2 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC),
             FakeSample(timeUs = 15_900_000L, sizeBytes = 2 * oneMiB, flags = 0),
             FakeSample(timeUs = 18_000_000L, sizeBytes = 2 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC)
@@ -985,9 +1020,10 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         val totalDurationMs = 30_000L
         val captureTimestampUs = 15_900_000L // startUs = 10.9s, endUs = 20.9s
         val oneMiB = 1024 * 1024
+        val oversizedSampleBytes = FrameExporter.MAX_SAMPLE_BUFFER_BYTES + oneMiB
         val videoSamples = listOf(
-            FakeSample(timeUs = 10_000_000L, sizeBytes = 17 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC),
-            FakeSample(timeUs = 14_000_000L, sizeBytes = 17 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC),
+            FakeSample(timeUs = 10_000_000L, sizeBytes = oversizedSampleBytes, flags = MediaExtractor.SAMPLE_FLAG_SYNC),
+            FakeSample(timeUs = 14_000_000L, sizeBytes = oversizedSampleBytes, flags = MediaExtractor.SAMPLE_FLAG_SYNC),
             FakeSample(timeUs = 15_900_000L, sizeBytes = 1 * oneMiB, flags = 0),
             FakeSample(timeUs = 18_000_000L, sizeBytes = 1 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC)
         )
@@ -1074,7 +1110,9 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         assertTrue((result as ExportResult.Success).audioDropped)
         assertEquals(1, harness.lastMuxerTrackCount)
         assertEquals(0, harness.audioSamplesRead)
-        assertEquals(48 * 1024L, harness.totalMuxedBytes)
+        assertEquals(48 * 1024L, harness.lastMuxerBytes)
+        assertEquals(if (audioMime == MediaFormat.MIMETYPE_AUDIO_AAC) 2 else 1, harness.muxerStartCount)
+        assertTrue(harness.allTempFilesExistedAtMuxerRelease)
         assertTrue(harness.cacheDir.listFiles().isNullOrEmpty())
     }
 
@@ -1126,7 +1164,9 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         assertTrue((result as ExportResult.Success).audioDropped)
         assertEquals(1, harness.lastMuxerTrackCount)
         assertEquals(0, harness.audioSamplesRead)
-        assertEquals(48 * 1024L, harness.totalMuxedBytes)
+        assertEquals(48 * 1024L, harness.lastMuxerBytes)
+        assertEquals(2, harness.muxerStartCount)
+        assertTrue(harness.allTempFilesExistedAtMuxerRelease)
         assertTrue(harness.cacheDir.listFiles().isNullOrEmpty())
     }
 
