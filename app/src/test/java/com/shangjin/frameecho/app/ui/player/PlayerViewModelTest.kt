@@ -20,7 +20,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -34,6 +36,7 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -498,6 +501,7 @@ class PlayerViewModelTest {
             ((durationMs * idx) / denominator) * 1000L
         }
 
+        val allowFirstChunk = CompletableDeferred<Unit>()
         val hangFirstStream = CompletableDeferred<Unit>()
         var firstStreamCancelled = false
         val capturedTimestampLists = mutableListOf<List<Long>>()
@@ -511,9 +515,10 @@ class PlayerViewModelTest {
             capturedTimestampLists.add(timestamps)
 
             if (capturedTimestampLists.size == 1) {
-                // Emit first chunk (slots 0..7) and stay active
-                onChunk(timestamps.take(chunkSize).map { ts -> ts to mockk(relaxed = true) })
                 try {
+                    allowFirstChunk.await()
+                    // Emit first chunk (slots 0..7) and stay active
+                    onChunk(timestamps.take(chunkSize).map { ts -> ts to mockk(relaxed = true) })
                     hangFirstStream.await()
                 } catch (e: CancellationException) {
                     firstStreamCancelled = true
@@ -528,9 +533,18 @@ class PlayerViewModelTest {
         viewModel.setVideoUri(uri)
         viewModel.updateDuration(durationMs)
 
-        // Nearby visible slot requests within the initial chunk window must NOT thrash/restart
+        // Nearby UN-CACHED visible slot requests within the initial chunk window must reach
+        // loadThumbnailsForFullVideo's viewport guard without cancelling or restarting stream 1
+        assertNull(viewModel.getThumbnail(7))
         viewModel.requestThumbnail(7)
+        assertFalse(firstStreamCancelled)
         assertEquals(1, capturedTimestampLists.size)
+
+        // Now let the first chunk (slots 0..7) populate the cache while stream 1 stays active
+        allowFirstChunk.complete(Unit)
+        for (i in 0 until 8) {
+            assertNotNull(viewModel.getThumbnail(i))
+        }
 
         // User scrolls timeline to distant slot 120 while stream 1 is still active
         val distantAnchor = 120
@@ -550,6 +564,74 @@ class PlayerViewModelTest {
         val distances = restartedIndices.map { abs(it - distantAnchor) }
         assertEquals(distances.sorted(), distances)
         assertNotNull(viewModel.getThumbnail(distantAnchor))
+    }
+
+    @Test
+    fun `distant viewport jump waits for in-flight canceled stream teardown before starting replacement session`() {
+        val standardDispatcher = StandardTestDispatcher()
+        Dispatchers.setMain(standardDispatcher)
+        runTest(standardDispatcher) {
+            val localViewModel = PlayerViewModel()
+            val localExtractor = mockk<FrameExtractor>(relaxed = true)
+            localViewModel.setDependenciesForTesting(localExtractor, frameExporter)
+
+            val uri = mockk<Uri>()
+            val durationMs = 900_000L
+            val inFlightNativeDecodeEntered = CompletableDeferred<Unit>()
+            val allowInFlightDecodeToFinish = CompletableDeferred<Unit>()
+            var activeDecoderSessions = 0
+            var maxConcurrentDecoderSessions = 0
+            val startedSessionFirstTimestamps = mutableListOf<Long>()
+
+            coEvery {
+                localExtractor.extractThumbnails(uri, any(), any(), any(), any())
+            } coAnswers {
+                val timestamps = secondArg<List<Long>>()
+                val chunkSize = arg<Int>(3)
+                val onChunk = arg<suspend (List<Pair<Long, Bitmap>>) -> Unit>(4)
+
+                activeDecoderSessions += 1
+                maxConcurrentDecoderSessions = maxOf(maxConcurrentDecoderSessions, activeDecoderSessions)
+                startedSessionFirstTimestamps.add(timestamps.first())
+                try {
+                    if (startedSessionFirstTimestamps.size == 1) {
+                        onChunk(timestamps.take(chunkSize).map { ts -> ts to mockk(relaxed = true) })
+                        inFlightNativeDecodeEntered.complete(Unit)
+                        // Simulate non-interruptible native frame decode + retriever.release()
+                        withContext(NonCancellable) {
+                            allowInFlightDecodeToFinish.await()
+                        }
+                        currentCoroutineContext().ensureActive()
+                    } else {
+                        onChunk(timestamps.take(chunkSize).map { ts -> ts to mockk(relaxed = true) })
+                    }
+                } finally {
+                    activeDecoderSessions -= 1
+                }
+            }
+
+            localViewModel.setVideoUri(uri)
+            localViewModel.updateDuration(durationMs)
+            runCurrent()
+            inFlightNativeDecodeEntered.await()
+
+            val distantAnchor = 120
+            localViewModel.requestThumbnail(distantAnchor)
+            runCurrent()
+
+            // Replacement stream must wait until the canceled stream exits extractThumbnails
+            assertEquals(1, startedSessionFirstTimestamps.size)
+            assertEquals(1, activeDecoderSessions)
+            assertNull(localViewModel.getThumbnail(distantAnchor))
+
+            allowInFlightDecodeToFinish.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(2, startedSessionFirstTimestamps.size)
+            assertEquals(0, activeDecoderSessions)
+            assertEquals(1, maxConcurrentDecoderSessions)
+            assertNotNull(localViewModel.getThumbnail(distantAnchor))
+        }
     }
 
     @Test

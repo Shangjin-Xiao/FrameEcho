@@ -26,6 +26,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -108,6 +110,7 @@ class PlayerViewModel : ViewModel() {
 
     /** Thumbnail cache: index → Bitmap. Kept outside UiState to avoid serialization issues. */
     private val _thumbnailCache = mutableStateMapOf<Int, Bitmap>()
+    private val thumbnailSessionMutex = Mutex()
     private var batchThumbnailJob: Job? = null
     private var activeThumbnailUri: Uri? = null
     private var activeThumbnailDurationMs: Long = 0L
@@ -351,62 +354,66 @@ class PlayerViewModel : ViewModel() {
 
         batchThumbnailJob = viewModelScope.launch {
             val callerContext = currentCoroutineContext()
-            val denominator = (thumbnailCount - 1).coerceAtLeast(1)
+            // Wait for any canceled stream (including an in-flight native decode and
+            // retriever.release() on Dispatchers.IO) before opening a replacement decoder session.
+            previousJob?.join()
+            thumbnailSessionMutex.withLock {
+                ensureActive()
+                val denominator = (thumbnailCount - 1).coerceAtLeast(1)
 
-            val missingIndices = (0 until thumbnailCount).filter {
-                !_thumbnailCache.containsKey(it)
-            }
-            if (missingIndices.isEmpty()) return@launch
+                val missingIndices = (0 until thumbnailCount).filter {
+                    !_thumbnailCache.containsKey(it)
+                }
+                if (missingIndices.isEmpty()) return@withLock
 
-            ensureActive()
+                val orderedIndices = missingIndices.sortedBy { index ->
+                    abs(index - resolvedAnchor)
+                }
 
-            val orderedIndices = missingIndices.sortedBy { index ->
-                abs(index - resolvedAnchor)
-            }
+                val timestampToIndices = LinkedHashMap<Long, MutableList<Int>>(orderedIndices.size)
+                for (index in orderedIndices) {
+                    val positionMs = (durationMs * index) / denominator
+                    val timestampUs = positionMs * 1000L
+                    timestampToIndices.getOrPut(timestampUs) { mutableListOf() }.add(index)
+                }
 
-            val timestampToIndices = LinkedHashMap<Long, MutableList<Int>>(orderedIndices.size)
-            for (index in orderedIndices) {
-                val positionMs = (durationMs * index) / denominator
-                val timestampUs = positionMs * 1000L
-                timestampToIndices.getOrPut(timestampUs) { mutableListOf() }.add(index)
-            }
-
-            try {
-                extractor.extractThumbnails(
-                    videoUri = uri,
-                    timestampsUs = timestampToIndices.keys.toList(),
-                    targetWidth = THUMBNAIL_WIDTH_PX,
-                    chunkSize = FrameExtractor.DEFAULT_THUMBNAIL_CHUNK_SIZE
-                ) { chunk ->
-                    var published = false
-                    try {
-                        withContext(callerContext) {
-                            ensureActive()
-                            val batchMap = HashMap<Int, Bitmap>(chunk.size)
-                            for ((timestampUs, bitmap) in chunk) {
-                                val indices = timestampToIndices[timestampUs]
-                                if (indices != null) {
-                                    for (idx in indices) {
-                                        batchMap[idx] = bitmap
+                try {
+                    extractor.extractThumbnails(
+                        videoUri = uri,
+                        timestampsUs = timestampToIndices.keys.toList(),
+                        targetWidth = THUMBNAIL_WIDTH_PX,
+                        chunkSize = FrameExtractor.DEFAULT_THUMBNAIL_CHUNK_SIZE
+                    ) { chunk ->
+                        var published = false
+                        try {
+                            withContext(callerContext) {
+                                ensureActive()
+                                val batchMap = HashMap<Int, Bitmap>(chunk.size)
+                                for ((timestampUs, bitmap) in chunk) {
+                                    val indices = timestampToIndices[timestampUs]
+                                    if (indices != null) {
+                                        for (idx in indices) {
+                                            batchMap[idx] = bitmap
+                                        }
                                     }
                                 }
+                                if (batchMap.isNotEmpty()) {
+                                    _thumbnailCache.putAll(batchMap)
+                                }
+                                published = true
                             }
-                            if (batchMap.isNotEmpty()) {
-                                _thumbnailCache.putAll(batchMap)
+                        } finally {
+                            if (!published) {
+                                chunk.forEach { (_, bitmap) -> extractor.releaseBitmap(bitmap) }
                             }
-                            published = true
-                        }
-                    } finally {
-                        if (!published) {
-                            chunk.forEach { (_, bitmap) -> extractor.releaseBitmap(bitmap) }
                         }
                     }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                appContext?.let { ctx ->
-                    LogUtils.w(ctx, "PlayerViewModel", "Failed to load thumbnails", e)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    appContext?.let { ctx ->
+                        LogUtils.w(ctx, "PlayerViewModel", "Failed to load thumbnails", e)
+                    }
                 }
             }
         }
