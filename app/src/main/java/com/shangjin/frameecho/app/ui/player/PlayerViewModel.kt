@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shangjin.frameecho.app.intent.InboundVideoError
 import com.shangjin.frameecho.core.media.extraction.FrameExtractor
 import com.shangjin.frameecho.core.media.extraction.ScrubPreviewExtractor
 import com.shangjin.frameecho.core.media.export.FrameExporter
@@ -38,6 +39,8 @@ import kotlin.math.roundToInt
 sealed class PlayerError {
     data object CaptureFailed : PlayerError()
     data object PermissionDenied : PlayerError()
+    data object UnsupportedVideoFormat : PlayerError()
+    data object ExternalVideoAccessFailed : PlayerError()
     data class ExportFailed(val detail: String? = null) : PlayerError()
 }
 
@@ -63,7 +66,15 @@ data class PlayerUiState(
     /** Custom export directory URI from SAF picker */
     val customExportTreeUri: Uri? = null,
     /** Video frame rate (fps) — used for frame-precise seeking in fine scrub mode */
-    val videoFrameRate: Float = 0f
+    val videoFrameRate: Float = 0f,
+    /** True when the active video was opened directly from an external system Intent */
+    val isExternalSession: Boolean = false,
+    /** Staged external video URI when an Intent arrives during an ongoing capture/export */
+    val pendingExternalVideoUri: Uri? = null,
+    /** True when user opted to switch to [pendingExternalVideoUri] automatically after export ends */
+    val deferPendingExternalSwitchUntilExportEnds: Boolean = false,
+    /** Monotonic session identifier incremented on each fresh video load */
+    val videoSessionId: Long = 0L
 ) {
     /**
      * Adaptive seek interval: ~5% of total duration, rounded to a "nice" value.
@@ -204,6 +215,84 @@ class PlayerViewModel : ViewModel() {
     }
 
     fun setVideoUri(uri: Uri) {
+        loadVideoInternal(uri = uri, fromExternalIntent = false)
+    }
+
+    /**
+     * Handle a validated video URI arriving from an external `ACTION_VIEW` or `ACTION_SEND` Intent.
+     *
+     * If a capture or export operation is currently in progress, stages [uri] in
+     * [PlayerUiState.pendingExternalVideoUri] instead of cancelling the ongoing export.
+     */
+    fun onExternalVideoReceived(uri: Uri) {
+        if (isCapturingOrExporting()) {
+            _uiState.update {
+                it.copy(
+                    pendingExternalVideoUri = uri,
+                    deferPendingExternalSwitchUntilExportEnds = false,
+                    showExportSettings = false
+                )
+            }
+            return
+        }
+        loadVideoInternal(uri = uri, fromExternalIntent = true)
+    }
+
+    /**
+     * User confirmed replacing the current video immediately, cancelling any ongoing export.
+     */
+    fun confirmReplaceWithExternalVideo() {
+        val pendingUri = _uiState.value.pendingExternalVideoUri ?: return
+        loadVideoInternal(uri = pendingUri, fromExternalIntent = true)
+    }
+
+    /**
+     * User opted to let the ongoing export finish first and then automatically load the staged
+     * external video.
+     */
+    fun switchToExternalVideoAfterExport() {
+        val pendingUri = _uiState.value.pendingExternalVideoUri ?: return
+        if (!isCapturingOrExporting()) {
+            loadVideoInternal(
+                uri = pendingUri,
+                fromExternalIntent = true,
+                preserveExportResult = true
+            )
+        } else {
+            _uiState.update {
+                it.copy(deferPendingExternalSwitchUntilExportEnds = true)
+            }
+        }
+    }
+
+    /**
+     * User dismissed the external video replacement prompt, keeping the current video and export.
+     */
+    fun dismissPendingExternalVideo() {
+        _uiState.update {
+            it.copy(
+                pendingExternalVideoUri = null,
+                deferPendingExternalSwitchUntilExportEnds = false
+            )
+        }
+    }
+
+    /**
+     * Surface an inbound Intent validation error via the player's snackbar error state.
+     */
+    fun onExternalVideoError(error: InboundVideoError) {
+        val mappedError = when (error) {
+            InboundVideoError.UNSUPPORTED_FORMAT -> PlayerError.UnsupportedVideoFormat
+            InboundVideoError.ACCESS_FAILED -> PlayerError.ExternalVideoAccessFailed
+        }
+        _uiState.update { it.copy(error = mappedError) }
+    }
+
+    private fun loadVideoInternal(
+        uri: Uri,
+        fromExternalIntent: Boolean,
+        preserveExportResult: Boolean = false
+    ) {
         // Capture reference BEFORE updating state so we can recycle safely
         // after the StateFlow no longer exposes the old bitmap.
         val oldBitmap = _uiState.value.capturedBitmap
@@ -212,22 +301,31 @@ class PlayerViewModel : ViewModel() {
         clearThumbnailCache()
         // The preview session is bound to a single URI — tear it down before switching.
         releaseScrubPreview()
+        _playbackPositionMs.value = 0L
 
         _uiState.update {
             it.copy(
                 videoUri = uri,
+                isPlaying = false,
+                durationMs = 0L,
                 capturedBitmap = null,
                 capturedFrame = null,
+                exportResult = if (preserveExportResult) it.exportResult else null,
+                showExportSettings = false,
                 error = null,
                 thumbnailCount = 0,
-                videoFrameRate = 0f
+                videoFrameRate = 0f,
+                isExternalSession = fromExternalIntent,
+                pendingExternalVideoUri = null,
+                deferPendingExternalSwitchUntilExportEnds = false,
+                videoSessionId = it.videoSessionId + 1L
             )
         }
 
         // Recycle only when not exporting — the export coroutine may still
         // reference the bitmap on Dispatchers.IO.
-        if (canRecycleImmediately) {
-            oldBitmap?.recycle()
+        if (canRecycleImmediately && oldBitmap?.isRecycled == false) {
+            oldBitmap.recycle()
         }
     }
 
@@ -250,8 +348,8 @@ class PlayerViewModel : ViewModel() {
             )
         }
         // Recycle after state update so no observer can read a recycled bitmap.
-        if (canRecycleImmediately) {
-            oldBitmap?.recycle()
+        if (canRecycleImmediately && oldBitmap?.isRecycled == false) {
+            oldBitmap.recycle()
         }
     }
 
@@ -703,6 +801,16 @@ class PlayerViewModel : ViewModel() {
                 }
             } finally {
                 captureAndSaveJob = null
+                val postExportState = _uiState.value
+                if (postExportState.deferPendingExternalSwitchUntilExportEnds &&
+                    postExportState.pendingExternalVideoUri != null
+                ) {
+                    loadVideoInternal(
+                        uri = postExportState.pendingExternalVideoUri,
+                        fromExternalIntent = true,
+                        preserveExportResult = true
+                    )
+                }
             }
         }
     }
@@ -775,6 +883,11 @@ class PlayerViewModel : ViewModel() {
         return _uiState.value.isExporting ||
             captureAndSaveJob?.isActive == true ||
             isBitmapInUseByExport()
+    }
+
+    private fun isCapturingOrExporting(): Boolean {
+        val state = _uiState.value
+        return state.isCapturing || isAnyExportRunning()
     }
 
     private fun applyPersistedQuickSettings(context: Context) {

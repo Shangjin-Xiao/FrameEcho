@@ -74,6 +74,15 @@
     <string name="error_capture_failed">フレームをキャプチャできません。ビデオの別の位置でお試しください。</string>
     <string name="error_export_failed">エクスポートに失敗しました。もう一度お試しください。</string>
     <string name="error_permission_denied">動画へのアクセス権限が失効しました。動画をもう一度選択してください。</string>
+    <string name="error_unsupported_video_format">サポートされていない動画形式です。有効な動画ファイルを選択してください。</string>
+    <string name="error_external_video_access_failed">外部動画ファイルにアクセスできません。権限を確認するか、別の動画を選択してください。</string>
+
+    <!-- エクスポート中の外部動画切り替え確認 -->
+    <string name="external_video_export_busy_title">エクスポート中</string>
+    <string name="external_video_export_busy_message">現在フレームをエクスポートしています。今すぐ切り替えると進行中のエクスポートが中断されます。完了後に切り替えるか、今すぐ切り替えるか、現在の動画を維持しますか？</string>
+    <string name="external_video_switch_now">今すぐ切替</string>
+    <string name="external_video_switch_after_export">完了後に切替</string>
+    <string name="external_video_keep_current">切り替えない</string>
 
     <!-- UX: snackbar actions -->
     <string name="snackbar_action_view">表示</string>

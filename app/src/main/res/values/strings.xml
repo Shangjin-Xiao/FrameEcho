@@ -74,6 +74,15 @@
     <string name="error_capture_failed">Unable to capture frame. Try a different position in the video.</string>
     <string name="error_export_failed">Export failed. Please try again.</string>
     <string name="error_permission_denied">Video access permission was revoked. Please re-select the video.</string>
+    <string name="error_unsupported_video_format">Unsupported video format. Please select a valid video file.</string>
+    <string name="error_external_video_access_failed">Unable to open the external video. Please check file permissions or select another video.</string>
+
+    <!-- External video switch while exporting -->
+    <string name="external_video_export_busy_title">Export in Progress</string>
+    <string name="external_video_export_busy_message">A frame is currently being exported. Switching now will cancel the ongoing export. Would you like to switch after the export finishes, switch immediately, or keep the current video?</string>
+    <string name="external_video_switch_now">Switch Now</string>
+    <string name="external_video_switch_after_export">After Export</string>
+    <string name="external_video_keep_current">Keep Current</string>
 
     <!-- UX: snackbar actions -->
     <string name="snackbar_action_view">View</string>
