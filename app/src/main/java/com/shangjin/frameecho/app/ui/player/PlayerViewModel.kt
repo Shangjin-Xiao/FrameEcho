@@ -109,6 +109,10 @@ class PlayerViewModel : ViewModel() {
     /** Thumbnail cache: index → Bitmap. Kept outside UiState to avoid serialization issues. */
     private val _thumbnailCache = mutableStateMapOf<Int, Bitmap>()
     private var batchThumbnailJob: Job? = null
+    private var activeThumbnailUri: Uri? = null
+    private var activeThumbnailDurationMs: Long = 0L
+    private var activeThumbnailCount: Int = 0
+    private var activeThumbnailAnchorIndex: Int = 0
     private var captureAndSaveJob: Job? = null
     private var activeBitmapExportRefCount: Int = 0
 
@@ -226,7 +230,15 @@ class PlayerViewModel : ViewModel() {
 
     fun updateDuration(durationMs: Long) {
         val safeDurationMs = durationMs.coerceAtLeast(0L)
-        if (safeDurationMs == _uiState.value.durationMs && _uiState.value.thumbnailCount > 0) return
+        val previousState = _uiState.value
+        if (safeDurationMs == previousState.durationMs && previousState.thumbnailCount > 0) return
+        if (previousState.durationMs > 0L && previousState.durationMs != safeDurationMs) {
+            // Duration changed for the current video: invalidate stale slot-to-timestamp entries.
+            clearThumbnailCache(recycleBitmaps = false)
+        } else {
+            batchThumbnailJob?.cancel()
+            batchThumbnailJob = null
+        }
         _uiState.update {
             it.copy(
                 durationMs = safeDurationMs,
@@ -304,8 +316,6 @@ class PlayerViewModel : ViewModel() {
      * so visible slots appear first while preserving single-session decoder reuse.
      */
     private fun loadThumbnailsForFullVideo(anchorIndex: Int? = null) {
-        if (batchThumbnailJob?.isActive == true) return
-
         val state = _uiState.value
         val uri = state.videoUri ?: return
         val durationMs = state.durationMs
@@ -320,6 +330,24 @@ class PlayerViewModel : ViewModel() {
             currentPositionMs = state.currentPositionMs,
             preferredIndex = anchorIndex
         )
+
+        val previousJob = batchThumbnailJob
+        if (previousJob?.isActive == true) {
+            val sameTimeline = uri == activeThumbnailUri &&
+                durationMs == activeThumbnailDurationMs &&
+                thumbnailCount == activeThumbnailCount
+            val withinActiveViewportChunk =
+                abs(resolvedAnchor - activeThumbnailAnchorIndex) < FrameExtractor.DEFAULT_THUMBNAIL_CHUNK_SIZE
+            if (sameTimeline && withinActiveViewportChunk) {
+                return
+            }
+            previousJob.cancel()
+        }
+
+        activeThumbnailUri = uri
+        activeThumbnailDurationMs = durationMs
+        activeThumbnailCount = thumbnailCount
+        activeThumbnailAnchorIndex = resolvedAnchor
 
         batchThumbnailJob = viewModelScope.launch {
             val callerContext = currentCoroutineContext()
@@ -410,6 +438,10 @@ class PlayerViewModel : ViewModel() {
     private fun clearThumbnailCache(recycleBitmaps: Boolean = false) {
         batchThumbnailJob?.cancel()
         batchThumbnailJob = null
+        activeThumbnailUri = null
+        activeThumbnailDurationMs = 0L
+        activeThumbnailCount = 0
+        activeThumbnailAnchorIndex = 0
         if (recycleBitmaps) {
             _thumbnailCache.values.forEach { bitmap ->
                 if (!bitmap.isRecycled) {

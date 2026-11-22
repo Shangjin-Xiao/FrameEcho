@@ -13,14 +13,13 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -32,6 +31,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -68,16 +68,24 @@ class PlayerViewModelTest {
         val uri = mockk<Uri>()
         val bitmap = mockk<Bitmap>(relaxed = true)
         val timestampUs = 0L
+        val requestedTimestampsPerCall = mutableListOf<List<Long>>()
 
         coEvery {
             frameExtractor.extractThumbnails(any(), any(), any(), any(), any())
         } coAnswers {
-            val onChunk = arg<suspend (List<Pair<Long, Bitmap>>) -> Unit>(4)
-            onChunk(listOf(timestampUs to bitmap))
+            val timestamps = secondArg<List<Long>>()
+            requestedTimestampsPerCall.add(timestamps)
+            // Keep the initial updateDuration-triggered extraction from populating slot 0,
+            // so requestThumbnail(0) genuinely exercises the on-demand request path.
+            if (requestedTimestampsPerCall.size >= 2) {
+                val onChunk = arg<suspend (List<Pair<Long, Bitmap>>) -> Unit>(4)
+                onChunk(listOf(timestampUs to bitmap))
+            }
         }
 
         viewModel.setVideoUri(uri)
-        viewModel.updateDuration(10000L) // Trigger loadThumbnailsForWindow
+        viewModel.updateDuration(10000L)
+        assertNull(viewModel.getThumbnail(0))
 
         // Act
         viewModel.requestThumbnail(0)
@@ -85,12 +93,13 @@ class PlayerViewModelTest {
         // Assert
         val cachedBitmap = viewModel.getThumbnail(0)
         assertNotNull(cachedBitmap)
-        // Note: multiple thumbnails might be loaded in batch, index 0 corresponds to 0us
+        assertEquals(2, requestedTimestampsPerCall.size)
+        assertEquals(0L, requestedTimestampsPerCall.last().first())
 
-        coVerify {
+        coVerify(exactly = 2) {
             frameExtractor.extractThumbnails(
                 uri,
-                any(), // list containing 0L
+                any(),
                 PlayerViewModel.THUMBNAIL_WIDTH_PX,
                 any(),
                 any()
@@ -300,14 +309,19 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun `progressive 8-frame chunking cuts first viewport latency over 90 percent and reduces state map writes from 150 to 19`() {
+    fun `progressive 8-frame chunking cuts simulated virtual-time first viewport cache latency over 90 percent and reduces state map writes from 150 to 19`() {
         val standardDispatcher = StandardTestDispatcher()
         Dispatchers.setMain(standardDispatcher)
         runTest(standardDispatcher) {
             val durationMs = 900_000L // 15 min -> 150 thumbnails
             val perFrameDecodeDelayMs = 20L
             val totalFrames = PlayerViewModel.thumbnailCountForDuration(durationMs)
+            val maxSimulatedWaitMs = totalFrames * perFrameDecodeDelayMs * 2
             assertEquals(150, totalFrames)
+
+            // Note: Measures deterministic virtual-time cache readiness under a simulated fixed
+            // 20ms per-frame decode delay (not physical device codec/GPU rendering time) and
+            // exact Compose SnapshotStateMap write counts.
 
             // 1. Baseline simulation: monolithic 150-frame decode + per-key SnapshotStateMap writes
             val baselineMap: SnapshotStateMap<Int, Bitmap> = mutableStateMapOf()
@@ -330,13 +344,19 @@ class PlayerViewModelTest {
                         baselineMap[idx] = bmp
                     }
                 }
-                while (baselineFirstViewportReadyMs < 0L) {
+                while (baselineFirstViewportReadyMs < 0L &&
+                    currentTime - baselineStartMs < maxSimulatedWaitMs
+                ) {
                     advanceTimeBy(perFrameDecodeDelayMs)
                     runCurrent()
                     if ((0 until 8).all { baselineMap[it] != null }) {
                         baselineFirstViewportReadyMs = currentTime - baselineStartMs
                     }
                 }
+                assertTrue(
+                    "Baseline viewport slots 0..7 were not populated within ${maxSimulatedWaitMs}ms",
+                    baselineFirstViewportReadyMs >= 0L
+                )
                 baselineJob.join()
             } finally {
                 baselineObserver.dispose()
@@ -382,13 +402,19 @@ class PlayerViewModelTest {
                 benchViewModel.updateDuration(durationMs)
                 runCurrent()
 
-                while (progressiveFirstViewportReadyMs < 0L) {
+                while (progressiveFirstViewportReadyMs < 0L &&
+                    currentTime - progressiveStartMs < maxSimulatedWaitMs
+                ) {
                     advanceTimeBy(perFrameDecodeDelayMs)
                     runCurrent()
                     if ((0 until 8).all { benchViewModel.getThumbnail(it) != null }) {
                         progressiveFirstViewportReadyMs = currentTime - progressiveStartMs
                     }
                 }
+                assertTrue(
+                    "Progressive viewport slots 0..7 were not populated within ${maxSimulatedWaitMs}ms",
+                    progressiveFirstViewportReadyMs >= 0L
+                )
                 advanceUntilIdle()
             } finally {
                 progressiveObserver.dispose()
@@ -419,6 +445,7 @@ class PlayerViewModelTest {
     @Test
     fun `unpublished chunk bitmaps in flight on background thread are released via releaseBitmap when cancelled`() {
         val standardDispatcher = StandardTestDispatcher()
+        val workerDispatcher = StandardTestDispatcher(standardDispatcher.scheduler)
         Dispatchers.setMain(standardDispatcher)
         runTest(standardDispatcher) {
             val localViewModel = PlayerViewModel()
@@ -427,23 +454,20 @@ class PlayerViewModelTest {
 
             val uri = mockk<Uri>()
             val unpublishedBitmaps = List(8) { mockk<Bitmap>(relaxed = true) }
-            val chunkReadyOnIo = CountDownLatch(1)
-            val proceedToPublish = CountDownLatch(1)
-            val ioFinished = CountDownLatch(1)
+            val chunkReadyOnWorker = CompletableDeferred<Unit>()
+            val proceedToPublish = CompletableDeferred<Unit>()
 
             coEvery {
                 localExtractor.extractThumbnails(uri, any(), any(), any(), any())
             } coAnswers {
                 val timestamps = secondArg<List<Long>>()
                 val onChunk = arg<suspend (List<Pair<Long, Bitmap>>) -> Unit>(4)
-                kotlinx.coroutines.withContext(Dispatchers.IO) {
-                    try {
-                        chunkReadyOnIo.countDown()
-                        proceedToPublish.await(5, TimeUnit.SECONDS)
-                        onChunk(timestamps.take(8).zip(unpublishedBitmaps))
-                    } finally {
-                        ioFinished.countDown()
+                withContext(workerDispatcher) {
+                    chunkReadyOnWorker.complete(Unit)
+                    withContext(NonCancellable) {
+                        proceedToPublish.await()
                     }
+                    onChunk(timestamps.take(8).zip(unpublishedBitmaps))
                 }
             }
 
@@ -451,17 +475,123 @@ class PlayerViewModelTest {
             localViewModel.updateDuration(900_000L)
             runCurrent()
 
-            assertTrue(chunkReadyOnIo.await(5, TimeUnit.SECONDS))
-            // Cancel on Main before the IO thread delivers the chunk to Main
+            chunkReadyOnWorker.await()
+            // Cancel on Main before the worker delivers the chunk back to Main
             localViewModel.clearVideoUri()
-            proceedToPublish.countDown()
-            assertTrue(ioFinished.await(5, TimeUnit.SECONDS))
-            runCurrent()
+            proceedToPublish.complete(Unit)
+            advanceUntilIdle()
 
             assertNull(localViewModel.getThumbnail(0))
             unpublishedBitmaps.forEach { bmp ->
                 verify(exactly = 1) { localExtractor.releaseBitmap(bmp) }
             }
+        }
+    }
+
+    @Test
+    fun `requestThumbnail at distant slot during active stream restarts anchored at new viewport while preserving cached chunks`() = runTest {
+        val uri = mockk<Uri>()
+        val durationMs = 900_000L // 150 slots
+        val totalCount = PlayerViewModel.thumbnailCountForDuration(durationMs)
+        val denominator = (totalCount - 1).coerceAtLeast(1)
+        val timestampToIndex = (0 until totalCount).associateBy { idx ->
+            ((durationMs * idx) / denominator) * 1000L
+        }
+
+        val hangFirstStream = CompletableDeferred<Unit>()
+        var firstStreamCancelled = false
+        val capturedTimestampLists = mutableListOf<List<Long>>()
+
+        coEvery {
+            frameExtractor.extractThumbnails(uri, any(), any(), any(), any())
+        } coAnswers {
+            val timestamps = secondArg<List<Long>>()
+            val chunkSize = arg<Int>(3)
+            val onChunk = arg<suspend (List<Pair<Long, Bitmap>>) -> Unit>(4)
+            capturedTimestampLists.add(timestamps)
+
+            if (capturedTimestampLists.size == 1) {
+                // Emit first chunk (slots 0..7) and stay active
+                onChunk(timestamps.take(chunkSize).map { ts -> ts to mockk(relaxed = true) })
+                try {
+                    hangFirstStream.await()
+                } catch (e: CancellationException) {
+                    firstStreamCancelled = true
+                    throw e
+                }
+            } else {
+                // Emit first chunk around the new distant anchor
+                onChunk(timestamps.take(chunkSize).map { ts -> ts to mockk(relaxed = true) })
+            }
+        }
+
+        viewModel.setVideoUri(uri)
+        viewModel.updateDuration(durationMs)
+
+        // Nearby visible slot requests within the initial chunk window must NOT thrash/restart
+        viewModel.requestThumbnail(7)
+        assertEquals(1, capturedTimestampLists.size)
+
+        // User scrolls timeline to distant slot 120 while stream 1 is still active
+        val distantAnchor = 120
+        viewModel.requestThumbnail(distantAnchor)
+
+        assertTrue("Expected initial stream to be cancelled on distant viewport jump", firstStreamCancelled)
+        assertEquals(2, capturedTimestampLists.size)
+
+        // Previously cached slots 0..7 are preserved and NOT re-requested
+        for (i in 0 until 8) {
+            assertNotNull(viewModel.getThumbnail(i))
+        }
+        val restartedIndices = capturedTimestampLists[1].map { timestampToIndex.getValue(it) }
+        assertEquals(142, restartedIndices.size)
+        assertTrue((0 until 8).none { it in restartedIndices })
+        assertEquals(distantAnchor, restartedIndices.first())
+        val distances = restartedIndices.map { abs(it - distantAnchor) }
+        assertEquals(distances.sorted(), distances)
+        assertNotNull(viewModel.getThumbnail(distantAnchor))
+    }
+
+    @Test
+    fun `updateDuration during active stream cancels stale extraction and restarts with updated timeline size`() = runTest {
+        val uri = mockk<Uri>()
+        val hangInitialStream = CompletableDeferred<Unit>()
+        var initialStreamCancelled = false
+        val requestedCounts = mutableListOf<Int>()
+
+        coEvery {
+            frameExtractor.extractThumbnails(uri, any(), any(), any(), any())
+        } coAnswers {
+            val timestamps = secondArg<List<Long>>()
+            val onChunk = arg<suspend (List<Pair<Long, Bitmap>>) -> Unit>(4)
+            requestedCounts.add(timestamps.size)
+            if (requestedCounts.size == 1) {
+                onChunk(timestamps.take(4).map { ts -> ts to mockk(relaxed = true) })
+                try {
+                    hangInitialStream.await()
+                } catch (e: CancellationException) {
+                    initialStreamCancelled = true
+                    throw e
+                }
+            } else {
+                onChunk(timestamps.map { ts -> ts to mockk(relaxed = true) })
+            }
+        }
+
+        viewModel.setVideoUri(uri)
+        viewModel.updateDuration(10_000L) // 15 thumbnails
+        assertEquals(listOf(PlayerViewModel.thumbnailCountForDuration(10_000L)), requestedCounts)
+
+        // Duration updates to 120_000L (54 thumbnails) while initial stream is still active
+        val updatedDurationMs = 120_000L
+        val expectedNewCount = PlayerViewModel.thumbnailCountForDuration(updatedDurationMs)
+        viewModel.updateDuration(updatedDurationMs)
+
+        assertTrue("Expected stale duration stream to be cancelled", initialStreamCancelled)
+        assertEquals(2, requestedCounts.size)
+        assertEquals(expectedNewCount, requestedCounts.last())
+        for (i in 0 until expectedNewCount) {
+            assertNotNull("Expected slot $i populated for updated duration", viewModel.getThumbnail(i))
         }
     }
 }

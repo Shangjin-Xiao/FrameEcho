@@ -10,9 +10,8 @@ import io.mockk.mockkConstructor
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import io.mockk.verify
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -313,17 +312,16 @@ class FrameExtractorTest {
         stubRetriever(1920, 1080)
         val decodedBitmaps = mutableListOf<Bitmap>()
         val emittedBitmaps = mutableListOf<Bitmap>()
-        val frame11Entered = CountDownLatch(1)
-        val allowFrame11Return = CountDownLatch(1)
         var decodeCalls = 0
+        lateinit var job: Job
 
         every {
             anyConstructed<MediaMetadataRetriever>().getScaledFrameAtTime(any(), any(), any(), any())
         } answers {
             decodeCalls += 1
             if (decodeCalls == 11) {
-                frame11Entered.countDown()
-                allowFrame11Return.await(5, TimeUnit.SECONDS)
+                // Deterministically cancel after 10 completed frames while the 11th decode is in flight
+                job.cancel()
             }
             mockk<Bitmap>().also { bmp ->
                 every { bmp.isRecycled } returns false
@@ -335,16 +333,13 @@ class FrameExtractorTest {
         }
 
         val timestamps = (0L until 30L).map { it * 1_000L }
-        val job: Job = launch(Dispatchers.Default) {
+        job = launch(Dispatchers.Default, start = CoroutineStart.LAZY) {
             frameExtractor.extractThumbnails(videoUri, timestamps, 120, chunkSize = 8) { chunk ->
                 emittedBitmaps.addAll(chunk.map { it.second })
             }
         }
 
-        assertTrue(frame11Entered.await(5, TimeUnit.SECONDS))
-        // Cancel after 10 completed frames while the 11th frame decode is in flight
-        job.cancel()
-        allowFrame11Return.countDown()
+        job.start()
         job.join()
 
         // At most 1 in-flight decode after frame 10 (frame 11), zero subsequent decodes
@@ -362,6 +357,85 @@ class FrameExtractorTest {
         }
         verify(exactly = 1) { anyConstructed<MediaMetadataRetriever>().setDataSource(context, videoUri) }
         verify(exactly = 1) { anyConstructed<MediaMetadataRetriever>().release() }
+    }
+
+    @Test
+    fun `legacy 3-arg extractThumbnails opens video for empty timestamps and propagates SecurityException`() = runBlocking {
+        mockkStatic(android.util.Log::class)
+        every { android.util.Log.e(any(), any(), any()) } returns 0
+        every { android.util.Log.e(any(), any()) } returns 0
+        every {
+            anyConstructed<MediaMetadataRetriever>().setDataSource(any<Context>(), any<Uri>())
+        } throws SecurityException("Permission denied")
+        every { anyConstructed<MediaMetadataRetriever>().release() } returns Unit
+
+        try {
+            frameExtractor.extractThumbnails(videoUri, emptyList(), 120)
+            fail("Expected SecurityException for empty timestamps on legacy 3-arg overload")
+        } catch (_: SecurityException) {
+            // Expected
+        }
+
+        verify(exactly = 1) { anyConstructed<MediaMetadataRetriever>().setDataSource(context, videoUri) }
+        verify(exactly = 1) { anyConstructed<MediaMetadataRetriever>().release() }
+    }
+
+    @Test
+    fun `progressive extractThumbnails propagates decode and callback exceptions instead of reporting partial success`() = runBlocking {
+        mockkStatic(android.util.Log::class)
+        every { android.util.Log.e(any(), any(), any()) } returns 0
+        every { android.util.Log.e(any(), any()) } returns 0
+
+        // 1. Decode exception mid-stream recycles uncommitted pendingChunk bitmaps and rethrows
+        stubRetriever(1920, 1080)
+        val decodedBitmaps = mutableListOf<Bitmap>()
+        val emittedBitmaps = mutableListOf<Bitmap>()
+        var decodeCalls = 0
+        every {
+            anyConstructed<MediaMetadataRetriever>().getScaledFrameAtTime(any(), any(), any(), any())
+        } answers {
+            decodeCalls += 1
+            if (decodeCalls == 11) {
+                throw IllegalStateException("Decoder codec error")
+            }
+            mockk<Bitmap>().also { bmp ->
+                every { bmp.isRecycled } returns false
+                every { bmp.recycle() } returns Unit
+                decodedBitmaps.add(bmp)
+            }
+        }
+
+        val timestamps = (0L until 20L).map { it * 1_000L }
+        try {
+            frameExtractor.extractThumbnails(videoUri, timestamps, 120, chunkSize = 8) { chunk ->
+                emittedBitmaps.addAll(chunk.map { it.second })
+            }
+            fail("Expected IllegalStateException from frame decode")
+        } catch (e: IllegalStateException) {
+            assertEquals("Decoder codec error", e.message)
+        }
+
+        assertEquals(8, emittedBitmaps.size)
+        emittedBitmaps.forEach { bmp -> verify(exactly = 0) { bmp.recycle() } }
+        val uncommitted = decodedBitmaps.drop(8)
+        assertEquals(2, uncommitted.size)
+        uncommitted.forEach { bmp -> verify(exactly = 1) { bmp.recycle() } }
+
+        // 2. Callback exception from onChunk also propagates instead of returning Unit
+        every {
+            anyConstructed<MediaMetadataRetriever>().getScaledFrameAtTime(any(), any(), any(), any())
+        } answers { mockk<Bitmap>(relaxed = true) }
+
+        try {
+            frameExtractor.extractThumbnails(videoUri, timestamps, 120, chunkSize = 8) {
+                throw IllegalArgumentException("Consumer failed")
+            }
+            fail("Expected IllegalArgumentException from onChunk")
+        } catch (e: IllegalArgumentException) {
+            assertEquals("Consumer failed", e.message)
+        }
+
+        verify(exactly = 2) { anyConstructed<MediaMetadataRetriever>().release() }
     }
 
     @Test

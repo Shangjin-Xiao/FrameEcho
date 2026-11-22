@@ -191,16 +191,48 @@ class FrameExtractor(
         targetWidth: Int
     ): List<Pair<Long, Bitmap>> {
         require(targetWidth > 0) { "targetWidth must be positive, was $targetWidth" }
-        val results = mutableListOf<Pair<Long, Bitmap>>()
-        extractThumbnails(
-            videoUri = videoUri,
-            timestampsUs = timestampsUs,
-            targetWidth = targetWidth,
-            chunkSize = MAX_THUMBNAIL_COUNT
-        ) { chunk ->
-            results.addAll(chunk)
+        currentCoroutineContext().ensureActive()
+        return useRetriever(
+            videoUri,
+            emptyList(),
+            "Failed to extract thumbnails"
+        ) { retriever ->
+            val videoWidth = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
+            )?.toIntOrNull() ?: return@useRetriever emptyList()
+            val videoHeight = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
+            )?.toIntOrNull() ?: return@useRetriever emptyList()
+
+            if (videoWidth <= 0 || videoHeight <= 0) return@useRetriever emptyList()
+
+            val (width, height) = thumbnailDimensions(videoWidth, videoHeight, targetWidth)
+            // Bound the batch before decoding or allocating any thumbnail bitmaps.
+            val maxCount = minOf(
+                MAX_THUMBNAIL_COUNT,
+                (MAX_THUMBNAIL_BATCH_PIXELS / (width.toLong() * height)).toInt()
+            )
+            if (maxCount <= 0) return@useRetriever emptyList()
+
+            val limit = minOf(timestampsUs.size, maxCount)
+            val results = ArrayList<Pair<Long, Bitmap>>(limit)
+            try {
+                for (i in 0 until limit) {
+                    currentCoroutineContext().ensureActive()
+                    val ts = timestampsUs[i]
+                    val bitmap = extractThumbnailInternal(retriever, ts, width, height)
+                    if (bitmap != null) {
+                        results.add(ts to bitmap)
+                    }
+                    currentCoroutineContext().ensureActive()
+                }
+                results
+            } catch (t: Throwable) {
+                results.forEach { (_, bitmap) -> releaseBitmap(bitmap) }
+                results.clear()
+                throw t
+            }
         }
-        return results
     }
 
     /**
@@ -208,15 +240,23 @@ class FrameExtractor(
      * [MediaMetadataRetriever] session.
      *
      * Thumbnails fit within 240 x 240 pixels without upscaling. Total decoded frames per session
-     * remain bounded by 150 frames and 4.5 million retained pixels. Checks coroutine cancellation
-     * before and after each frame decode and recycles any bitmaps in an uncommitted chunk if
-     * cancelled before [onChunk] is invoked.
+     * remain bounded by 150 frames and 4.5 million retained pixels. Returns immediately without
+     * opening a decoder session when [timestampsUs] is empty.
+     *
+     * Checks coroutine cancellation before and after each frame decode and recycles any bitmaps in
+     * an uncommitted chunk if cancelled or failing before [onChunk] is invoked. Once [onChunk] is
+     * invoked for a batch, ownership of all [Bitmap] instances in that chunk transfers to the
+     * callback: if [onChunk] suspends and is cancelled or throws before publishing/retaining them,
+     * [onChunk] is responsible for recycling those bitmaps via [releaseBitmap]. Any exception
+     * thrown while opening the video, decoding frames, or executing [onChunk] is propagated to the
+     * caller after releasing the underlying [MediaMetadataRetriever].
      *
      * @param videoUri URI of the source video
      * @param timestampsUs Ordered list of timestamps in microseconds
      * @param targetWidth Maximum thumbnail width in pixels (must be > 0)
      * @param chunkSize Number of decoded frames per emitted batch (must be > 0, defaults to 8)
-     * @param onChunk Suspend callback invoked as soon as each chunk (or final remainder) is ready
+     * @param onChunk Suspend callback invoked as soon as each chunk (or final remainder) is ready;
+     *   takes ownership of the emitted [Bitmap] instances upon invocation
      */
     suspend fun extractThumbnails(
         videoUri: Uri,
@@ -231,9 +271,10 @@ class FrameExtractor(
         if (timestampsUs.isEmpty()) return
 
         useRetriever(
-            videoUri,
-            Unit,
-            "Failed to extract thumbnails"
+            videoUri = videoUri,
+            defaultValue = Unit,
+            errorMessage = "Failed to extract thumbnails",
+            rethrowExceptions = true
         ) { retriever ->
             val videoWidth = retriever.extractMetadata(
                 MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
@@ -305,6 +346,7 @@ class FrameExtractor(
         videoUri: Uri,
         defaultValue: T,
         errorMessage: String,
+        rethrowExceptions: Boolean = false,
         block: suspend (MediaMetadataRetriever) -> T
     ): T = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
@@ -320,6 +362,7 @@ class FrameExtractor(
             throw e
         } catch (e: Exception) {
             LogUtils.e(context, "FrameExtractor", errorMessage, e)
+            if (rethrowExceptions) throw e
             defaultValue
         } finally {
             try {
