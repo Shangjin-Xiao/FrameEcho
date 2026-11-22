@@ -66,6 +66,12 @@ class FrameExporter(private val context: Context) {
         private const val PCM_READ_BUFFER_BYTES = 256 * 1024
         private const val MAX_PCM_BUFFER_BYTES = 15 * 1024 * 1024
 
+        // Motion photo remux bounds to prevent sparse-keyframe lookback or
+        // sample/chunk amplification from writing unbounded data (CWE-770).
+        internal const val MAX_KEYFRAME_LOOKBACK_US = 10_000_000L
+        internal const val MAX_MUXED_CLIP_BYTES = 128L * 1024 * 1024
+        internal const val MAX_MUXED_SAMPLES = 6_000
+
         private val CSD_KEYS = arrayOf("csd-0", "csd-1", "csd-2")
         private val OPTIONAL_INT_KEYS = arrayOf(
             MediaFormat.KEY_FRAME_RATE,
@@ -394,8 +400,9 @@ class FrameExporter(private val context: Context) {
         }
         val safeEndUs = maxOf(startUs + 1L, endUs)
 
+        var failedBudgetStartUs: Long? = null
         val previousSyncResult = try {
-            extractVideoClipOnce(
+            extractVideoClipOnceInternal(
                 videoUri = videoUri,
                 startUs = startUs,
                 endUs = safeEndUs,
@@ -405,6 +412,15 @@ class FrameExporter(private val context: Context) {
             )
         } catch (e: CancellationException) {
             throw e
+        } catch (e: RemuxBudgetExceededException) {
+            failedBudgetStartUs = e.clipStartUs
+            LogUtils.w(
+                context,
+                "FrameExporter",
+                "PREVIOUS_SYNC exceeded remux budget, will retry if closer keyframe exists",
+                e
+            )
+            null
         } catch (e: Exception) {
             LogUtils.w(context, "FrameExporter", "PREVIOUS_SYNC extraction failed, will retry", e)
             null
@@ -415,13 +431,14 @@ class FrameExporter(private val context: Context) {
         }
         previousSyncResult?.file?.delete()
 
-        return extractVideoClipOnce(
+        return extractVideoClipOnceInternal(
             videoUri = videoUri,
             startUs = startUs,
             endUs = safeEndUs,
             muteAudio = muteAudio,
             seekMode = MediaExtractor.SEEK_TO_CLOSEST_SYNC,
-            rotation = rotation
+            rotation = rotation,
+            minStartUsExclusive = failedBudgetStartUs
         )
     }
 
@@ -494,6 +511,39 @@ class FrameExporter(private val context: Context) {
         return clean
     }
 
+    private class RemuxBudgetExceededException(
+        val clipStartUs: Long,
+        message: String
+    ) : java.io.IOException(message)
+
+    private fun resolveAndValidateClipStartUs(
+        seekedPosition: Long,
+        startUs: Long,
+        endUs: Long,
+        minStartUsExclusive: Long? = null
+    ): Long {
+        if (startUs < 0L || endUs < startUs) {
+            throw java.io.IOException("Invalid motion clip range [$startUs, $endUs]")
+        }
+        val actualStartUs = if (seekedPosition >= 0L) seekedPosition else startUs
+        val maxDurationUs = (ExportConfig.MAX_MOTION_DURATION_S * 1_000_000).toLong()
+        val maxClipSpanUs = maxDurationUs * 2 + MAX_KEYFRAME_LOOKBACK_US
+        if (seekedPosition > endUs ||
+            startUs - actualStartUs > MAX_KEYFRAME_LOOKBACK_US ||
+            endUs - actualStartUs > maxClipSpanUs
+        ) {
+            throw java.io.IOException(
+                "Keyframe seek span out of bounds (seeked=$seekedPosition, start=$startUs, end=$endUs)"
+            )
+        }
+        if (minStartUsExclusive != null && actualStartUs <= minStartUsExclusive) {
+            throw java.io.IOException(
+                "Closest sync did not advance past budget-exceeded start ($actualStartUs <= $minStartUsExclusive)"
+            )
+        }
+        return actualStartUs
+    }
+
     private suspend fun extractVideoClipOnce(
         videoUri: Uri,
         startUs: Long,
@@ -501,6 +551,24 @@ class FrameExporter(private val context: Context) {
         muteAudio: Boolean,
         seekMode: Int,
         rotation: Int = 0
+    ): VideoClipResult = extractVideoClipOnceInternal(
+        videoUri = videoUri,
+        startUs = startUs,
+        endUs = endUs,
+        muteAudio = muteAudio,
+        seekMode = seekMode,
+        rotation = rotation,
+        minStartUsExclusive = null
+    )
+
+    private suspend fun extractVideoClipOnceInternal(
+        videoUri: Uri,
+        startUs: Long,
+        endUs: Long,
+        muteAudio: Boolean,
+        seekMode: Int,
+        rotation: Int = 0,
+        minStartUsExclusive: Long? = null
     ): VideoClipResult {
         var tempFile = java.io.File.createTempFile("motion_clip_", ".mp4", context.cacheDir)
         var success = false
@@ -555,9 +623,12 @@ class FrameExporter(private val context: Context) {
                 extractor.selectTrack(videoTrackIndex)
                 extractor.seekTo(startUs, seekMode)
                 val seekedPosition = extractor.sampleTime
-                if (seekedPosition >= 0) {
-                    actualStartUs = seekedPosition
-                }
+                actualStartUs = resolveAndValidateClipStartUs(
+                    seekedPosition = seekedPosition,
+                    startUs = startUs,
+                    endUs = endUs,
+                    minStartUsExclusive = minStartUsExclusive
+                )
                 extractor.unselectTrack(videoTrackIndex)
 
                 extractor.selectTrack(audioTrackIndex)
@@ -578,44 +649,49 @@ class FrameExporter(private val context: Context) {
             // Try addTrack on the real muxer first; if it fails, recreate
             // with a cleaned format. This avoids creating a separate test
             // file + muxer on every export (saves I/O on the majority of devices).
-            var muxer = MediaMuxer(
-                tempFile.absolutePath,
-                MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
-            )
-            val muxerVideoTrack: Int = try {
-                muxer.addTrack(videoFormat)
-            } catch (e: Exception) {
-                LogUtils.w(context, "FrameExporter",
-                    "addTrack failed with original format (${videoFormat.getString(MediaFormat.KEY_MIME)}), using clean format", e)
-                // Release the failed muxer and recreate with clean format
-                try {
-                    muxer.release()
-                } catch (releaseException: Exception) {
-                    LogUtils.w(context, "FrameExporter", "Failed to release failed muxer", releaseException)
-                }
-                tempFile.delete()
-                tempFile = java.io.File.createTempFile("motion_clip_", ".mp4", context.cacheDir)
+            var muxer: MediaMuxer? = null
+            var muxerStarted = false
+            try {
                 muxer = MediaMuxer(
                     tempFile.absolutePath,
                     MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
                 )
-                muxer.addTrack(createCleanVideoFormat(videoFormat))
-            }
-            var muxerStarted = false
-            try {
+                val muxerVideoTrack: Int = try {
+                    muxer.addTrack(videoFormat)
+                } catch (e: Exception) {
+                    LogUtils.w(context, "FrameExporter",
+                        "addTrack failed with original format (${videoFormat.getString(MediaFormat.KEY_MIME)}), using clean format", e)
+                    // Release the failed muxer and recreate with clean format
+                    try {
+                        muxer.release()
+                    } catch (releaseException: Exception) {
+                        LogUtils.w(context, "FrameExporter", "Failed to release failed muxer", releaseException)
+                    }
+                    muxer = null
+                    tempFile.delete()
+                    tempFile = java.io.File.createTempFile("motion_clip_", ".mp4", context.cacheDir)
+                    val cleanMuxer = MediaMuxer(
+                        tempFile.absolutePath,
+                        MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
+                    )
+                    muxer = cleanMuxer
+                    cleanMuxer.addTrack(createCleanVideoFormat(videoFormat))
+                }
+
+                val activeMuxer = muxer
                 if (rotation in VALID_ROTATIONS) {
-                    muxer.setOrientationHint(rotation)
+                    activeMuxer.setOrientationHint(rotation)
                 }
 
                 val muxerAudioTrack = when {
                     encodedAudio != null -> try {
-                        muxer.addTrack(encodedAudio.format)
+                        activeMuxer.addTrack(encodedAudio.format)
                     } catch (e: Exception) {
                         LogUtils.w(context, "FrameExporter", "addTrack failed for transcoded AAC, skipping audio", e)
                         -1
                     }
                     audioFormat != null && isMuxerCompatibleAudioMime(audioMime) -> try {
-                        muxer.addTrack(audioFormat)
+                        activeMuxer.addTrack(audioFormat)
                     } catch (e: Exception) {
                         LogUtils.w(context, "FrameExporter", "addTrack failed for audio, skipping audio", e)
                         -1
@@ -623,7 +699,7 @@ class FrameExporter(private val context: Context) {
                     else -> -1
                 }
 
-                muxer.start()
+                activeMuxer.start()
                 muxerStarted = true
 
                 // --- Phase 1: Extract video samples (single-track seek for accuracy) ---
@@ -631,14 +707,32 @@ class FrameExporter(private val context: Context) {
                 extractor.seekTo(startUs, seekMode)
 
                 val seekedPosition = extractor.sampleTime
-                if (seekedPosition >= 0) {
-                    actualStartUs = seekedPosition
-                }
+                actualStartUs = resolveAndValidateClipStartUs(
+                    seekedPosition = seekedPosition,
+                    startUs = startUs,
+                    endUs = endUs,
+                    minStartUsExclusive = minStartUsExclusive
+                )
 
                 var buffer = ByteBuffer.allocateDirect(maxInputSize)
                 val bufferInfo = MediaCodec.BufferInfo()
 
                 var sampleCount = 0
+                var totalMuxedBytes = 0L
+                var totalMuxedSamples = 0
+
+                fun recordMuxedSampleOrThrow(sampleBytes: Int) {
+                    totalMuxedBytes += sampleBytes.toLong()
+                    totalMuxedSamples++
+                    if (totalMuxedBytes > MAX_MUXED_CLIP_BYTES || totalMuxedSamples > MAX_MUXED_SAMPLES) {
+                        throw RemuxBudgetExceededException(
+                            clipStartUs = actualStartUs,
+                            message = "Motion clip exceeded remux budget " +
+                                "(bytes=$totalMuxedBytes/$MAX_MUXED_CLIP_BYTES, samples=$totalMuxedSamples/$MAX_MUXED_SAMPLES)"
+                        )
+                    }
+                }
+
                 while (true) {
                     if (++sampleCount % 10 == 0) {
                         currentCoroutineContext().ensureActive()
@@ -663,12 +757,14 @@ class FrameExporter(private val context: Context) {
                     val sampleSize = extractor.readSampleData(buffer, 0)
                     if (sampleSize < 0) break
 
+                    recordMuxedSampleOrThrow(sampleSize)
+
                     bufferInfo.offset = 0
                     bufferInfo.size = sampleSize
                     bufferInfo.presentationTimeUs = (sampleTime - actualStartUs).coerceAtLeast(0L)
                     bufferInfo.flags = convertSampleToCodecFlags(extractor.sampleFlags)
 
-                    muxer.writeSampleData(muxerVideoTrack, buffer, bufferInfo)
+                    activeMuxer.writeSampleData(muxerVideoTrack, buffer, bufferInfo)
                     videoSamplesWritten++
 
                     extractor.advance()
@@ -683,11 +779,13 @@ class FrameExporter(private val context: Context) {
                             if (++sampleCount % 10 == 0) {
                                 currentCoroutineContext().ensureActive()
                             }
+                            recordMuxedSampleOrThrow(packet.data.size)
+
                             bufferInfo.offset = 0
                             bufferInfo.size = packet.data.size
                             bufferInfo.presentationTimeUs = packet.presentationTimeUs
                             bufferInfo.flags = packet.flags
-                            muxer.writeSampleData(
+                            activeMuxer.writeSampleData(
                                 muxerAudioTrack,
                                 ByteBuffer.wrap(packet.data),
                                 bufferInfo
@@ -723,12 +821,14 @@ class FrameExporter(private val context: Context) {
                             val sampleSize = extractor.readSampleData(buffer, 0)
                             if (sampleSize < 0) break
 
+                            recordMuxedSampleOrThrow(sampleSize)
+
                             bufferInfo.offset = 0
                             bufferInfo.size = sampleSize
                             bufferInfo.presentationTimeUs = (sampleTime - actualStartUs).coerceAtLeast(0L)
                             bufferInfo.flags = convertSampleToCodecFlags(extractor.sampleFlags)
 
-                            muxer.writeSampleData(muxerAudioTrack, buffer, bufferInfo)
+                            activeMuxer.writeSampleData(muxerAudioTrack, buffer, bufferInfo)
                             audioSamplesWritten++
                             extractor.advance()
                         }
@@ -736,13 +836,21 @@ class FrameExporter(private val context: Context) {
                 }
 
                 if (muxerStarted && videoSamplesWritten > 0) {
-                    muxer.stop()
+                    muxerStarted = false
+                    activeMuxer.stop()
                 } else if (muxerStarted) {
-                    try { muxer.stop() } catch (_: Exception) { }
+                    muxerStarted = false
+                    try { activeMuxer.stop() } catch (_: Exception) { }
                 }
             } finally {
+                if (muxerStarted) {
+                    try {
+                        muxer?.stop()
+                    } catch (_: Exception) {
+                    }
+                }
                 try {
-                    muxer.release()
+                    muxer?.release()
                 } catch (e: Exception) {
                     LogUtils.w(context, "FrameExporter", "Failed to release muxer", e)
                 }
