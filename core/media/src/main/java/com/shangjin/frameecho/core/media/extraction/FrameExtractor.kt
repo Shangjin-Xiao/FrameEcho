@@ -12,7 +12,10 @@ import com.shangjin.frameecho.core.media.utils.LogUtils
 import com.shangjin.frameecho.core.model.CapturedFrame
 import com.shangjin.frameecho.core.model.ColorSpaceInfo
 import com.shangjin.frameecho.core.model.VideoMetadata
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
@@ -29,11 +32,12 @@ class FrameExtractor(
     private val context: Context,
     private val sdkInt: Int = android.os.Build.VERSION.SDK_INT
 ) {
-    private companion object {
-        const val MAX_THUMBNAIL_DIMENSION = 240
+    companion object {
+        const val DEFAULT_THUMBNAIL_CHUNK_SIZE = 8
+        private const val MAX_THUMBNAIL_DIMENSION = 240
         // Fits the timeline's 150 thumbnails at 120 x 240, including portrait videos.
-        const val MAX_THUMBNAIL_BATCH_PIXELS = 4_500_000L
-        const val MAX_THUMBNAIL_COUNT = 150
+        private const val MAX_THUMBNAIL_BATCH_PIXELS = 4_500_000L
+        private const val MAX_THUMBNAIL_COUNT = 150
     }
 
     @Volatile
@@ -187,6 +191,7 @@ class FrameExtractor(
         targetWidth: Int
     ): List<Pair<Long, Bitmap>> {
         require(targetWidth > 0) { "targetWidth must be positive, was $targetWidth" }
+        currentCoroutineContext().ensureActive()
         return useRetriever(
             videoUri,
             emptyList(),
@@ -207,11 +212,115 @@ class FrameExtractor(
                 MAX_THUMBNAIL_COUNT,
                 (MAX_THUMBNAIL_BATCH_PIXELS / (width.toLong() * height)).toInt()
             )
+            if (maxCount <= 0) return@useRetriever emptyList()
 
-            timestampsUs.asSequence().take(maxCount).mapNotNull { ts ->
-                val bitmap = extractThumbnailInternal(retriever, ts, width, height)
-                if (bitmap != null) ts to bitmap else null
-            }.toList()
+            val limit = minOf(timestampsUs.size, maxCount)
+            val results = ArrayList<Pair<Long, Bitmap>>(limit)
+            try {
+                for (i in 0 until limit) {
+                    currentCoroutineContext().ensureActive()
+                    val ts = timestampsUs[i]
+                    val bitmap = extractThumbnailInternal(retriever, ts, width, height)
+                    if (bitmap != null) {
+                        results.add(ts to bitmap)
+                    }
+                    currentCoroutineContext().ensureActive()
+                }
+                results
+            } catch (t: Throwable) {
+                results.forEach { (_, bitmap) -> releaseBitmap(bitmap) }
+                results.clear()
+                throw t
+            }
+        }
+    }
+
+    /**
+     * Stream downscaled thumbnails progressively in fixed-size chunks while reusing a single
+     * [MediaMetadataRetriever] session.
+     *
+     * Thumbnails fit within 240 x 240 pixels without upscaling. Total decoded frames per session
+     * remain bounded by 150 frames and 4.5 million retained pixels. Returns immediately without
+     * opening a decoder session when [timestampsUs] is empty.
+     *
+     * Checks coroutine cancellation before and after each frame decode and recycles any bitmaps in
+     * an uncommitted chunk if cancelled or failing before [onChunk] is invoked. Once [onChunk] is
+     * invoked for a batch, ownership of all [Bitmap] instances in that chunk transfers to the
+     * callback: if [onChunk] suspends and is cancelled or throws before publishing/retaining them,
+     * [onChunk] is responsible for recycling those bitmaps via [releaseBitmap]. Any exception
+     * thrown while opening the video, decoding frames, or executing [onChunk] is propagated to the
+     * caller after releasing the underlying [MediaMetadataRetriever].
+     *
+     * @param videoUri URI of the source video
+     * @param timestampsUs Ordered list of timestamps in microseconds
+     * @param targetWidth Maximum thumbnail width in pixels (must be > 0)
+     * @param chunkSize Number of decoded frames per emitted batch (must be > 0, defaults to 8)
+     * @param onChunk Suspend callback invoked as soon as each chunk (or final remainder) is ready;
+     *   takes ownership of the emitted [Bitmap] instances upon invocation
+     */
+    suspend fun extractThumbnails(
+        videoUri: Uri,
+        timestampsUs: List<Long>,
+        targetWidth: Int,
+        chunkSize: Int = DEFAULT_THUMBNAIL_CHUNK_SIZE,
+        onChunk: suspend (List<Pair<Long, Bitmap>>) -> Unit
+    ) {
+        require(targetWidth > 0) { "targetWidth must be positive, was $targetWidth" }
+        require(chunkSize > 0) { "chunkSize must be positive, was $chunkSize" }
+        currentCoroutineContext().ensureActive()
+        if (timestampsUs.isEmpty()) return
+
+        useRetriever(
+            videoUri = videoUri,
+            defaultValue = Unit,
+            errorMessage = "Failed to extract thumbnails",
+            rethrowExceptions = true
+        ) { retriever ->
+            val videoWidth = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
+            )?.toIntOrNull() ?: return@useRetriever
+            val videoHeight = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
+            )?.toIntOrNull() ?: return@useRetriever
+
+            if (videoWidth <= 0 || videoHeight <= 0) return@useRetriever
+
+            val (width, height) = thumbnailDimensions(videoWidth, videoHeight, targetWidth)
+            // Bound the batch before decoding or allocating any thumbnail bitmaps.
+            val maxCount = minOf(
+                MAX_THUMBNAIL_COUNT,
+                (MAX_THUMBNAIL_BATCH_PIXELS / (width.toLong() * height)).toInt()
+            )
+            if (maxCount <= 0) return@useRetriever
+
+            val limit = minOf(timestampsUs.size, maxCount)
+            val pendingChunk = ArrayList<Pair<Long, Bitmap>>(minOf(chunkSize, limit))
+            try {
+                for (i in 0 until limit) {
+                    currentCoroutineContext().ensureActive()
+                    val ts = timestampsUs[i]
+                    val bitmap = extractThumbnailInternal(retriever, ts, width, height)
+                    if (bitmap != null) {
+                        pendingChunk.add(ts to bitmap)
+                    }
+                    currentCoroutineContext().ensureActive()
+                    if (pendingChunk.size >= chunkSize) {
+                        val chunk = pendingChunk.toList()
+                        pendingChunk.clear()
+                        onChunk(chunk)
+                    }
+                }
+                if (pendingChunk.isNotEmpty()) {
+                    currentCoroutineContext().ensureActive()
+                    val chunk = pendingChunk.toList()
+                    pendingChunk.clear()
+                    onChunk(chunk)
+                }
+            } catch (t: Throwable) {
+                pendingChunk.forEach { (_, bitmap) -> releaseBitmap(bitmap) }
+                pendingChunk.clear()
+                throw t
+            }
         }
     }
 
@@ -237,12 +346,15 @@ class FrameExtractor(
         videoUri: Uri,
         defaultValue: T,
         errorMessage: String,
-        block: (MediaMetadataRetriever) -> T
+        rethrowExceptions: Boolean = false,
+        block: suspend (MediaMetadataRetriever) -> T
     ): T = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
         try {
             retriever.setDataSource(context, videoUri)
             block(retriever)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: SecurityException) {
             // Propagate permission failures so the UI can show a specific
             // message instead of a generic "capture failed".
@@ -250,6 +362,7 @@ class FrameExtractor(
             throw e
         } catch (e: Exception) {
             LogUtils.e(context, "FrameExtractor", errorMessage, e)
+            if (rethrowExceptions) throw e
             defaultValue
         } finally {
             try {
