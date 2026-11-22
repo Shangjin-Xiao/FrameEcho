@@ -64,7 +64,9 @@ class FrameExporter(private val context: Context) {
         private const val MAX_CODEC_IDLE_ROUNDS = 600
         private const val AUDIO_COPY_CHUNK_BYTES = 64 * 1024
         private const val PCM_READ_BUFFER_BYTES = 256 * 1024
-        private const val MAX_PCM_BUFFER_BYTES = 15 * 1024 * 1024
+        internal const val MAX_PCM_BUFFER_BYTES = 15 * 1024 * 1024
+        internal const val DEFAULT_SAMPLE_BUFFER_BYTES = 1024 * 1024
+        internal const val MAX_SAMPLE_BUFFER_BYTES = 32 * 1024 * 1024
 
         private val CSD_KEYS = arrayOf("csd-0", "csd-1", "csd-2")
         private val OPTIONAL_INT_KEYS = arrayOf(
@@ -474,7 +476,13 @@ class FrameExporter(private val context: Context) {
             try {
                 val intVal = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !original.containsKey(key)) null else original.getInteger(key) } catch (_: Exception) { null }
                 if (intVal != null) {
-                    clean.setInteger(key, intVal)
+                    if (key == MediaFormat.KEY_MAX_INPUT_SIZE) {
+                        if (intVal > 0) {
+                            clean.setInteger(key, intVal.coerceAtMost(MAX_SAMPLE_BUFFER_BYTES))
+                        }
+                    } else {
+                        clean.setInteger(key, intVal)
+                    }
                 }
             } catch (e: Exception) {
                 LogUtils.w(context, "FrameExporter", "Failed to copy optional int key: $key", e)
@@ -518,23 +526,33 @@ class FrameExporter(private val context: Context) {
             var videoTrackIndex = -1
             var videoFormat: MediaFormat? = null
             var audioFormat: MediaFormat? = null
-            var maxInputSize = 1024 * 1024
+            var maxInputSize = DEFAULT_SAMPLE_BUFFER_BYTES
 
             for (i in 0 until extractor.trackCount) {
                 val format = extractor.getTrackFormat(i)
                 val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
-                if (mime.startsWith("video/") && videoTrackIndex == -1) {
+                val isSelectedTrack = if (mime.startsWith("video/") && videoTrackIndex == -1) {
                     videoTrackIndex = i
                     videoFormat = format
+                    true
                 } else if (mime.startsWith("audio/") && !muteAudio && audioTrackIndex == -1) {
                     audioTrackIndex = i
                     audioFormat = format
+                    true
+                } else {
+                    false
                 }
-                val trackMaxInputSize = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) null else format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) } catch (_: Exception) { null }
-                if (trackMaxInputSize != null) {
-                    maxInputSize = maxOf(maxInputSize, trackMaxInputSize)
+                if (isSelectedTrack) {
+                    val trackMaxInputSize = try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) null else format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) } catch (_: Exception) { null }
+                    if (trackMaxInputSize != null && trackMaxInputSize > 0) {
+                        maxInputSize = maxOf(
+                            maxInputSize,
+                            trackMaxInputSize.coerceIn(DEFAULT_SAMPLE_BUFFER_BYTES, MAX_SAMPLE_BUFFER_BYTES)
+                        )
+                    }
                 }
             }
+            maxInputSize = maxInputSize.coerceIn(DEFAULT_SAMPLE_BUFFER_BYTES, MAX_SAMPLE_BUFFER_BYTES)
 
             if (videoTrackIndex == -1 || videoFormat == null) {
                 throw java.io.IOException(
@@ -651,10 +669,12 @@ class FrameExporter(private val context: Context) {
 
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                         val sampleSizeHint = extractor.sampleSize
-                        if (sampleSizeHint > 0 &&
-                            sampleSizeHint <= Int.MAX_VALUE &&
-                            sampleSizeHint.toInt() > buffer.capacity()
-                        ) {
+                        if (sampleSizeHint > MAX_SAMPLE_BUFFER_BYTES) {
+                            throw java.io.IOException(
+                                "Video sample size ($sampleSizeHint bytes) exceeds limit ($MAX_SAMPLE_BUFFER_BYTES bytes)"
+                            )
+                        }
+                        if (sampleSizeHint > 0 && sampleSizeHint > buffer.capacity()) {
                             buffer = ByteBuffer.allocateDirect(sampleSizeHint.toInt())
                         }
                     }
@@ -711,10 +731,15 @@ class FrameExporter(private val context: Context) {
 
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                                 val sampleSizeHint = extractor.sampleSize
-                                if (sampleSizeHint > 0 &&
-                                    sampleSizeHint <= Int.MAX_VALUE &&
-                                    sampleSizeHint.toInt() > buffer.capacity()
-                                ) {
+                                if (sampleSizeHint > MAX_SAMPLE_BUFFER_BYTES) {
+                                    LogUtils.w(
+                                        context,
+                                        "FrameExporter",
+                                        "Audio sample size ($sampleSizeHint bytes) exceeds limit ($MAX_SAMPLE_BUFFER_BYTES bytes), skipping audio track"
+                                    )
+                                    break
+                                }
+                                if (sampleSizeHint > 0 && sampleSizeHint > buffer.capacity()) {
                                     buffer = ByteBuffer.allocateDirect(sampleSizeHint.toInt())
                                 }
                             }
@@ -859,10 +884,17 @@ class FrameExporter(private val context: Context) {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 val sampleSizeHint = extractor.sampleSize
-                if (sampleSizeHint > 0 &&
-                    sampleSizeHint <= Int.MAX_VALUE &&
-                    sampleSizeHint.toInt() > buffer.capacity()
+                if (sampleSizeHint > MAX_PCM_BUFFER_BYTES ||
+                    (sampleSizeHint > 0 && pcmStream.size().toLong() + sampleSizeHint > MAX_PCM_BUFFER_BYTES)
                 ) {
+                    LogUtils.w(
+                        context,
+                        "FrameExporter",
+                        "PCM sample size ($sampleSizeHint bytes, buffered=${pcmStream.size()}) exceeds limit ($MAX_PCM_BUFFER_BYTES bytes), aborting read"
+                    )
+                    return PcmAudio(ByteArray(0), sampleRate, channelCount, basePtsUs)
+                }
+                if (sampleSizeHint > 0 && sampleSizeHint > buffer.capacity()) {
                     buffer = ByteBuffer.allocateDirect(sampleSizeHint.toInt())
                 }
             }
