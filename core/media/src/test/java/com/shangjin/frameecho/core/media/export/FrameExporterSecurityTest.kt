@@ -211,10 +211,13 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         var totalMuxedSamples: Int = 0,
         var minPtsUs: Long = Long.MAX_VALUE,
         var maxPtsUs: Long = 0L,
+        var muxerStartCount: Int = 0,
         var muxerReleaseCount: Int = 0,
         var muxerStopCount: Int = 0,
         var allTempFilesExistedAtMuxerRelease: Boolean = true,
-        var audioSamplesRead: Int = 0
+        var audioSamplesRead: Int = 0,
+        var maxReadBufferCapacity: Int = 0,
+        var lastReadBufferLimit: Int = 0
     ) {
         val muxedSpanUs: Long
             get() = if (minPtsUs == Long.MAX_VALUE) 0L else (maxPtsUs - minPtsUs).coerceAtLeast(0L)
@@ -224,6 +227,9 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         videoSamples: List<FakeSample>,
         audioSamples: List<FakeSample> = emptyList(),
         audioMime: String = MediaFormat.MIMETYPE_AUDIO_AAC,
+        maxVideoInputSize: Int = 64 * 1024,
+        throwOnInsufficientReadBuffer: Boolean = false,
+        onAudioSeek: ((targetUs: Long, mode: Int) -> Int)? = null,
         onVideoSeek: (targetUs: Long, mode: Int) -> Int
     ): RemuxHarness {
         val cacheDir = temporaryFolder.newFolder()
@@ -252,7 +258,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
 
         val videoFormat = mockk<MediaFormat>(relaxed = true)
         every { videoFormat.getString(MediaFormat.KEY_MIME) } returns "video/avc"
-        every { videoFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) } returns 64 * 1024
+        every { videoFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) } returns maxVideoInputSize
 
         val audioFormat = mockk<MediaFormat>(relaxed = true)
         every { audioFormat.getString(MediaFormat.KEY_MIME) } returns audioMime
@@ -287,8 +293,12 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             if (selectedTrack == 0) {
                 videoIndex = onVideoSeek(targetUs, mode)
             } else if (selectedTrack == 1) {
-                val idx = audioSamples.indexOfFirst { it.timeUs >= targetUs }
-                audioIndex = if (idx >= 0) idx else audioSamples.size
+                if (onAudioSeek != null) {
+                    audioIndex = onAudioSeek(targetUs, mode)
+                } else {
+                    val idx = audioSamples.indexOfFirst { it.timeUs >= targetUs }
+                    audioIndex = if (idx >= 0) idx else audioSamples.size
+                }
             }
         }
         every { anyConstructed<MediaExtractor>().sampleTrackIndex } answers {
@@ -314,13 +324,24 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         }
         every { anyConstructed<MediaExtractor>().readSampleData(any(), any()) } answers {
             val dst = firstArg<ByteBuffer>()
+            if (dst.capacity() > harness.maxReadBufferCapacity) {
+                harness.maxReadBufferCapacity = dst.capacity()
+            }
+            harness.lastReadBufferLimit = dst.limit()
             val sample = when (selectedTrack) {
                 0 -> videoSamples.getOrNull(videoIndex)
                 1 -> audioSamples.getOrNull(audioIndex)?.also { harness.audioSamplesRead++ }
                 else -> null
             } ?: return@answers -1
+            if (throwOnInsufficientReadBuffer && sample.sizeBytes > dst.remaining()) {
+                throw IllegalArgumentException(
+                    "Sample (${sample.sizeBytes}) exceeds buffer remaining (${dst.remaining()})"
+                )
+            }
             val toWrite = minOf(sample.sizeBytes, dst.remaining())
-            dst.put(ByteArray(toWrite))
+            if (toWrite > 0) {
+                dst.put(ByteArray(toWrite))
+            }
             sample.sizeBytes
         }
         every { anyConstructed<MediaExtractor>().advance() } answers {
@@ -341,7 +362,9 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         var nextMuxerTrack = 0
         every { anyConstructed<MediaMuxer>().addTrack(any()) } answers { nextMuxerTrack++ }
         every { anyConstructed<MediaMuxer>().setOrientationHint(any()) } just Runs
-        every { anyConstructed<MediaMuxer>().start() } just Runs
+        every { anyConstructed<MediaMuxer>().start() } answers {
+            harness.muxerStartCount++
+        }
         every { anyConstructed<MediaMuxer>().writeSampleData(any(), any(), any()) } answers {
             val info = thirdArg<MediaCodec.BufferInfo>()
             harness.totalMuxedBytes += info.size.toLong()
@@ -420,6 +443,8 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         )
 
         assertTrue("Expected ExportResult.Error but got $result", result is ExportResult.Error)
+        assertEquals(0, harness.muxerStartCount)
+        assertEquals(0, harness.muxerStopCount)
         assertEquals(0L, harness.totalMuxedBytes)
         assertEquals(0, harness.totalMuxedSamples)
         assertEquals(0, harness.audioSamplesRead)
@@ -664,9 +689,273 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         )
 
         assertTrue("Expected ExportResult.Error but got $result", result is ExportResult.Error)
+        val errorMessage = (result as ExportResult.Error).message
+        assertTrue(
+            "Expected explicit seek bounds rejection but got: $errorMessage",
+            errorMessage.contains("Keyframe seek span out of bounds")
+        )
+        assertEquals(0, harness.muxerStartCount)
+        assertEquals(0, harness.muxerStopCount)
         assertEquals(0L, harness.totalMuxedBytes)
         assertEquals(0, harness.audioSamplesRead)
         assertTrue(harness.allTempFilesExistedAtMuxerRelease)
+        assertTrue(harness.cacheDir.listFiles().isNullOrEmpty())
+        verify { resolver wasNot Called }
+    }
+
+    @Test
+    fun `reject retry keyframe landing after captured frame even when within endUs`() = runBlocking {
+        val totalDurationMs = 600_000L
+        val captureTimestampUs = 500_000_000L // clip window [498.5s, 501.5s], center = 500.0s
+        val videoSamples = listOf(
+            FakeSample(timeUs = 0L, sizeBytes = 16 * 1024, flags = MediaExtractor.SAMPLE_FLAG_SYNC),
+            // Sync frame is inside endUs (500.5s <= 501.5s) but AFTER the captured moment (500.0s).
+            FakeSample(timeUs = 500_500_000L, sizeBytes = 16 * 1024, flags = MediaExtractor.SAMPLE_FLAG_SYNC),
+            FakeSample(timeUs = 501_000_000L, sizeBytes = 16 * 1024, flags = 0)
+        )
+        val harness = prepareMotionPhotoMocks(
+            videoSamples = videoSamples
+        ) { targetUs, mode ->
+            when (mode) {
+                MediaExtractor.SEEK_TO_PREVIOUS_SYNC ->
+                    videoSamples.indexOfLast {
+                        (it.flags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0 && it.timeUs <= targetUs
+                    }
+                else -> 1
+            }
+        }
+
+        val exporter = FrameExporter(context)
+        val result = exporter.exportMotionPhoto(
+            videoUri = mockk(relaxed = true),
+            bitmap = bitmap,
+            frame = buildFrame(timestampUs = captureTimestampUs, durationMs = totalDurationMs),
+            config = ExportConfig(motionPhoto = true, preserveMetadata = false),
+            customExportTreeUri = treeUri
+        )
+
+        assertTrue("Expected ExportResult.Error but got $result", result is ExportResult.Error)
+        assertTrue(
+            (result as ExportResult.Error).message.contains("Keyframe seek span out of bounds")
+        )
+        assertEquals(0, harness.muxerStartCount)
+        assertEquals(0L, harness.totalMuxedBytes)
+        assertTrue(harness.cacheDir.listFiles().isNullOrEmpty())
+        verify { resolver wasNot Called }
+    }
+
+    @Test
+    fun `advance to later keyframe before captured frame when CLOSEST_SYNC stays on budget-exceeded keyframe`() = runBlocking {
+        val totalDurationMs = 30_000L
+        val captureTimestampUs = 15_900_000L // startUs = 10.9s, endUs = 20.9s
+        val oneMiB = 1024 * 1024
+        // 2s GOP keyframes at 10s, 12s, 14s, 16s:
+        // 10s is closer to 10.9s (0.9s) than 12s is (1.1s), so CLOSEST_SYNC(10.9s) lands back on 10s.
+        // When motionPhoto == true, [12s..20.9s] fits in 128 MiB (tests NEXT_SYNC -> 12s).
+        // When motionPhoto == false, [12s..20.9s] also exceeds 128 MiB while [14s..20.9s] fits
+        // (tests fallback PREVIOUS_SYNC(clampedCenterUs) -> 14s).
+        val secondGopChunkMiB = if (motionPhoto) 10 else 40
+        val videoSamples = buildList {
+            // [10s, 12s): 70 MiB -> makes [10s..20.9s] exceed 128 MiB in both modes.
+            add(FakeSample(timeUs = 10_000_000L, sizeBytes = 35 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC))
+            add(FakeSample(timeUs = 11_000_000L, sizeBytes = 35 * oneMiB, flags = 0))
+            // [12s, 14s): 20 MiB (fits with 70 MiB tail) or 80 MiB (exceeds with 70 MiB tail).
+            add(FakeSample(timeUs = 12_000_000L, sizeBytes = secondGopChunkMiB * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC))
+            add(FakeSample(timeUs = 13_000_000L, sizeBytes = secondGopChunkMiB * oneMiB, flags = 0))
+            // [14s, 20.9s]: 70 MiB <= 128 MiB, containing captured frame at 15.9s.
+            add(FakeSample(timeUs = 14_000_000L, sizeBytes = 15 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC))
+            add(FakeSample(timeUs = 15_900_000L, sizeBytes = 15 * oneMiB, flags = 0))
+            add(FakeSample(timeUs = 16_000_000L, sizeBytes = 15 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC))
+            add(FakeSample(timeUs = 18_000_000L, sizeBytes = 15 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC))
+            add(FakeSample(timeUs = 20_000_000L, sizeBytes = 10 * oneMiB, flags = MediaExtractor.SAMPLE_FLAG_SYNC))
+        }
+        val syncIndices = videoSamples.indices.filter {
+            (videoSamples[it].flags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0
+        }
+        val harness = prepareMotionPhotoMocks(
+            videoSamples = videoSamples,
+            maxVideoInputSize = 36 * oneMiB
+        ) { targetUs, mode ->
+            when (mode) {
+                MediaExtractor.SEEK_TO_PREVIOUS_SYNC ->
+                    syncIndices.lastOrNull { videoSamples[it].timeUs <= targetUs } ?: -1
+                MediaExtractor.SEEK_TO_NEXT_SYNC ->
+                    syncIndices.firstOrNull { videoSamples[it].timeUs >= targetUs } ?: videoSamples.size
+                else ->
+                    syncIndices.minByOrNull { kotlin.math.abs(videoSamples[it].timeUs - targetUs) } ?: -1
+            }
+        }
+        val output = ByteArrayOutputStream()
+        every { resolver.openOutputStream(createdUri) } returns output
+        every { resolver.openFileDescriptor(createdUri, "r") } returns null
+
+        val exporter = FrameExporter(context)
+        val result = exporter.exportMotionPhoto(
+            videoUri = mockk(relaxed = true),
+            bitmap = bitmap,
+            frame = buildFrame(timestampUs = captureTimestampUs, durationMs = totalDurationMs),
+            config = ExportConfig(
+                motionPhoto = true,
+                preserveMetadata = false,
+                motionDurationBeforeS = 5.0f,
+                motionDurationAfterS = 5.0f
+            ),
+            customExportTreeUri = treeUri
+        )
+
+        assertTrue("Expected ExportResult.Success but got $result", result is ExportResult.Success)
+        val writtenPayload = String(output.toByteArray(), Charsets.ISO_8859_1)
+        val expectedPresentationUs = if (motionPhoto) 3_900_000L else 1_900_000L
+        assertTrue(
+            "Expected presentation timestamp $expectedPresentationUs in XMP metadata",
+            writtenPayload.contains(expectedPresentationUs.toString())
+        )
+        assertTrue(harness.cacheDir.listFiles().isNullOrEmpty())
+    }
+
+    @Test
+    fun `bound sample buffer allocation and read limit against MAX_SAMPLE_BUFFER_BYTES and remaining budget`(): Unit = runBlocking {
+        val totalDurationMs = 3_000L
+        val captureTimestampUs = 1_500_000L
+        val oneMiB = 1024 * 1024
+        // 8 * 15 MiB = 120 MiB leaving 8 MiB budget; 9th sample is 12 MiB (> 8 MiB remaining).
+        val videoSamples = List(8) { idx ->
+            FakeSample(
+                timeUs = idx * 200_000L,
+                sizeBytes = 15 * oneMiB,
+                flags = if (idx == 0) MediaExtractor.SAMPLE_FLAG_SYNC else 0
+            )
+        } + FakeSample(timeUs = 1_600_000L, sizeBytes = 12 * oneMiB, flags = 0)
+
+        val harness = prepareMotionPhotoMocks(
+            videoSamples = videoSamples,
+            // Maliciously large KEY_MAX_INPUT_SIZE (512 MiB) must be clamped to MAX_SAMPLE_BUFFER_BYTES (16 MiB).
+            maxVideoInputSize = 512 * oneMiB,
+            throwOnInsufficientReadBuffer = true
+        ) { _, _ -> 0 }
+
+        val exporter = FrameExporter(context)
+        val result = exporter.exportMotionPhoto(
+            videoUri = mockk(relaxed = true),
+            bitmap = bitmap,
+            frame = buildFrame(timestampUs = captureTimestampUs, durationMs = totalDurationMs),
+            config = ExportConfig(motionPhoto = true, preserveMetadata = false),
+            customExportTreeUri = treeUri
+        )
+
+        assertTrue("Expected ExportResult.Error but got $result", result is ExportResult.Error)
+        assertEquals(FrameExporter.MAX_SAMPLE_BUFFER_BYTES, harness.maxReadBufferCapacity)
+        assertEquals(8 * oneMiB, harness.lastReadBufferLimit)
+        assertEquals(120L * oneMiB, harness.totalMuxedBytes)
+        assertTrue(harness.cacheDir.listFiles().isNullOrEmpty())
+
+        // Also directly verify API 28+ sampleSizeHint checks in ensureBoundedSampleBuffer.
+        val baseBuffer = ByteBuffer.allocateDirect(oneMiB)
+        assertThrows(FrameExporter.RemuxBudgetExceededException::class.java) {
+            exporter.ensureBoundedSampleBuffer(
+                currentBuffer = baseBuffer,
+                sampleSizeHint = 12L * oneMiB,
+                remainingBudgetBytes = 8L * oneMiB,
+                totalSamplesSoFar = 8,
+                clipStartUs = 0L
+            )
+        }
+        assertThrows(IOException::class.java) {
+            exporter.ensureBoundedSampleBuffer(
+                currentBuffer = baseBuffer,
+                sampleSizeHint = FrameExporter.MAX_SAMPLE_BUFFER_BYTES.toLong() + 1L,
+                remainingBudgetBytes = FrameExporter.MAX_MUXED_CLIP_BYTES,
+                totalSamplesSoFar = 0,
+                clipStartUs = 0L
+            )
+        }
+    }
+
+    @Test
+    fun `skip sparse audio track instead of scanning from distant sync point`() = runBlocking {
+        val totalDurationMs = 600_000L
+        val captureTimestampUs = 599_000_000L
+        val videoSamples = listOf(
+            FakeSample(timeUs = 598_000_000L, sizeBytes = 32 * 1024, flags = MediaExtractor.SAMPLE_FLAG_SYNC),
+            FakeSample(timeUs = 599_000_000L, sizeBytes = 16 * 1024, flags = 0)
+        )
+        val audioSamples = List(3_000) { idx ->
+            FakeSample(
+                timeUs = idx * 200_000L,
+                sizeBytes = 2 * 1024,
+                flags = if (idx == 0) MediaExtractor.SAMPLE_FLAG_SYNC else 0
+            )
+        }
+        val audioMime = if (motionPhoto) MediaFormat.MIMETYPE_AUDIO_AAC else MediaFormat.MIMETYPE_AUDIO_RAW
+        val harness = prepareMotionPhotoMocks(
+            videoSamples = videoSamples,
+            audioSamples = audioSamples,
+            audioMime = audioMime,
+            onAudioSeek = { _, mode ->
+                // Audio track only has a sync sample at 0 us (stss = [1]).
+                if (mode == MediaExtractor.SEEK_TO_NEXT_SYNC) audioSamples.size else 0
+            }
+        ) { _, _ -> 0 }
+        val output = ByteArrayOutputStream()
+        every { resolver.openOutputStream(createdUri) } returns output
+        every { resolver.openFileDescriptor(createdUri, "r") } returns null
+
+        val exporter = FrameExporter(context)
+        val result = exporter.exportMotionPhoto(
+            videoUri = mockk(relaxed = true),
+            bitmap = bitmap,
+            frame = buildFrame(timestampUs = captureTimestampUs, durationMs = totalDurationMs),
+            config = ExportConfig(motionPhoto = true, preserveMetadata = false),
+            customExportTreeUri = treeUri
+        )
+
+        assertTrue("Expected ExportResult.Success without scanning sparse audio, got $result", result is ExportResult.Success)
+        assertEquals(0, harness.audioSamplesRead)
+        assertEquals(48 * 1024L, harness.totalMuxedBytes)
+        assertTrue(harness.cacheDir.listFiles().isNullOrEmpty())
+    }
+
+    @Test
+    fun `abort audio pre-transcode when zero-byte source samples exceed MAX_AUDIO_SOURCE_SAMPLES`() = runBlocking {
+        val totalDurationMs = 3_000L
+        val captureTimestampUs = 1_500_000L
+        val videoSamples = listOf(
+            FakeSample(timeUs = 0L, sizeBytes = 16 * 1024, flags = MediaExtractor.SAMPLE_FLAG_SYNC),
+            FakeSample(timeUs = 1_500_000L, sizeBytes = 16 * 1024, flags = 0)
+        )
+        // 7,000 zero-byte samples inside [0s, 2.1s] never trip MAX_PCM_BUFFER_BYTES, testing sample count bound.
+        val zeroBytePcmSamples = List(7_000) { idx ->
+            FakeSample(
+                timeUs = idx * 300L,
+                sizeBytes = 0,
+                flags = MediaExtractor.SAMPLE_FLAG_SYNC
+            )
+        }
+        val harness = prepareMotionPhotoMocks(
+            videoSamples = videoSamples,
+            audioSamples = zeroBytePcmSamples,
+            audioMime = MediaFormat.MIMETYPE_AUDIO_RAW
+        ) { targetUs, mode ->
+            when (mode) {
+                MediaExtractor.SEEK_TO_NEXT_SYNC ->
+                    if (targetUs > 0L) videoSamples.size else 0
+                else -> 0
+            }
+        }
+
+        val exporter = FrameExporter(context)
+        val result = exporter.exportMotionPhoto(
+            videoUri = mockk(relaxed = true),
+            bitmap = bitmap,
+            frame = buildFrame(timestampUs = captureTimestampUs, durationMs = totalDurationMs),
+            config = ExportConfig(motionPhoto = true, preserveMetadata = false),
+            customExportTreeUri = treeUri
+        )
+
+        assertTrue("Expected ExportResult.Error but got $result", result is ExportResult.Error)
+        assertEquals(FrameExporter.MAX_AUDIO_SOURCE_SAMPLES, harness.audioSamplesRead)
+        assertEquals(0, harness.muxerStartCount)
+        assertEquals(0L, harness.totalMuxedBytes)
         assertTrue(harness.cacheDir.listFiles().isNullOrEmpty())
         verify { resolver wasNot Called }
     }
