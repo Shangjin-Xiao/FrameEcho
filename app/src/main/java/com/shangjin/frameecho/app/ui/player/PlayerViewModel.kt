@@ -18,6 +18,7 @@ import com.shangjin.frameecho.core.model.ExportResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +26,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Represents user-facing error types. Mapped to localized strings in the UI layer.
@@ -287,7 +291,7 @@ class PlayerViewModel : ViewModel() {
     fun requestThumbnail(index: Int) {
         if (index !in 0 until _uiState.value.thumbnailCount) return
         if (_thumbnailCache.containsKey(index)) return
-        loadThumbnailsForFullVideo()
+        loadThumbnailsForFullVideo(anchorIndex = index)
     }
 
     /**
@@ -295,44 +299,79 @@ class PlayerViewModel : ViewModel() {
      * Thumbnails are evenly distributed across the entire video, so they
      * load once and remain stable throughout playback.
      *
-     * All missing thumbnails are extracted in a single batch call so the
-     * resource-heavy `MediaMetadataRetriever` (and its native decoder) is
-     * created and released only once instead of once per chunk.
+     * Missing slots are ordered outward from the current viewport/playback anchor
+     * and streamed in small chunks inside a single `MediaMetadataRetriever` session,
+     * so visible slots appear first while preserving single-session decoder reuse.
      */
-    private fun loadThumbnailsForFullVideo() {
+    private fun loadThumbnailsForFullVideo(anchorIndex: Int? = null) {
         if (batchThumbnailJob?.isActive == true) return
 
-        val uri = _uiState.value.videoUri ?: return
-        val durationMs = _uiState.value.durationMs
+        val state = _uiState.value
+        val uri = state.videoUri ?: return
+        val durationMs = state.durationMs
         if (durationMs <= 0) return
+        val thumbnailCount = state.thumbnailCount
+        if (thumbnailCount <= 0) return
         val extractor = frameExtractor ?: return
 
-        batchThumbnailJob = viewModelScope.launch {
-            val denominator = (_uiState.value.thumbnailCount - 1).coerceAtLeast(1)
+        val resolvedAnchor = resolveAnchorIndex(
+            thumbnailCount = thumbnailCount,
+            durationMs = durationMs,
+            currentPositionMs = state.currentPositionMs,
+            preferredIndex = anchorIndex
+        )
 
-            val missingIndices = (0 until _uiState.value.thumbnailCount).filter {
+        batchThumbnailJob = viewModelScope.launch {
+            val callerContext = currentCoroutineContext()
+            val denominator = (thumbnailCount - 1).coerceAtLeast(1)
+
+            val missingIndices = (0 until thumbnailCount).filter {
                 !_thumbnailCache.containsKey(it)
             }
             if (missingIndices.isEmpty()) return@launch
 
             ensureActive()
 
-            val indexToTimestamp = missingIndices.associateWith { index ->
+            val orderedIndices = missingIndices.sortedBy { index ->
+                abs(index - resolvedAnchor)
+            }
+
+            val timestampToIndices = LinkedHashMap<Long, MutableList<Int>>(orderedIndices.size)
+            for (index in orderedIndices) {
                 val positionMs = (durationMs * index) / denominator
-                positionMs * 1000L
+                val timestampUs = positionMs * 1000L
+                timestampToIndices.getOrPut(timestampUs) { mutableListOf() }.add(index)
             }
 
             try {
-                val results = extractor.extractThumbnails(
-                    uri,
-                    indexToTimestamp.values.toList(),
-                    THUMBNAIL_WIDTH_PX
-                )
-
-                val timestampToBitmap = results.toMap()
-                indexToTimestamp.forEach { (index, timestampUs) ->
-                    timestampToBitmap[timestampUs]?.let { bitmap ->
-                        _thumbnailCache[index] = bitmap
+                extractor.extractThumbnails(
+                    videoUri = uri,
+                    timestampsUs = timestampToIndices.keys.toList(),
+                    targetWidth = THUMBNAIL_WIDTH_PX,
+                    chunkSize = FrameExtractor.DEFAULT_THUMBNAIL_CHUNK_SIZE
+                ) { chunk ->
+                    var published = false
+                    try {
+                        withContext(callerContext) {
+                            ensureActive()
+                            val batchMap = HashMap<Int, Bitmap>(chunk.size)
+                            for ((timestampUs, bitmap) in chunk) {
+                                val indices = timestampToIndices[timestampUs]
+                                if (indices != null) {
+                                    for (idx in indices) {
+                                        batchMap[idx] = bitmap
+                                    }
+                                }
+                            }
+                            if (batchMap.isNotEmpty()) {
+                                _thumbnailCache.putAll(batchMap)
+                            }
+                            published = true
+                        }
+                    } finally {
+                        if (!published) {
+                            chunk.forEach { (_, bitmap) -> extractor.releaseBitmap(bitmap) }
+                        }
                     }
                 }
             } catch (e: CancellationException) {
@@ -343,6 +382,21 @@ class PlayerViewModel : ViewModel() {
                 }
             }
         }
+    }
+
+    private fun resolveAnchorIndex(
+        thumbnailCount: Int,
+        durationMs: Long,
+        currentPositionMs: Long,
+        preferredIndex: Int?
+    ): Int {
+        if (thumbnailCount <= 1) return 0
+        if (preferredIndex != null) {
+            return preferredIndex.coerceIn(0, thumbnailCount - 1)
+        }
+        if (durationMs <= 0L) return 0
+        val fraction = (currentPositionMs.toDouble() / durationMs.toDouble()).coerceIn(0.0, 1.0)
+        return ((thumbnailCount - 1) * fraction).roundToInt().coerceIn(0, thumbnailCount - 1)
     }
 
     /**

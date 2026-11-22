@@ -10,11 +10,18 @@ import io.mockk.mockkConstructor
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import io.mockk.verify
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 
@@ -244,5 +251,136 @@ class FrameExtractorTest {
         frameExtractor.releaseBitmap(bitmap)
 
         verify(exactly = 0) { bitmap.recycle() }
+    }
+
+    @Test
+    fun `progressive extractThumbnails emits 8-frame chunks in single retriever session`() = runBlocking {
+        stubRetriever(1920, 1080)
+        every {
+            anyConstructed<MediaMetadataRetriever>().getScaledFrameAtTime(any(), any(), any(), any())
+        } answers { mockk<Bitmap>(relaxed = true) }
+
+        val timestamps = (0L until 20L).map { it * 1_000L }
+        val emittedChunks = mutableListOf<List<Pair<Long, Bitmap>>>()
+
+        frameExtractor.extractThumbnails(videoUri, timestamps, 120) { chunk ->
+            emittedChunks.add(chunk)
+        }
+
+        assertEquals(listOf(8, 8, 4), emittedChunks.map { it.size })
+        assertEquals(timestamps, emittedChunks.flatten().map { it.first })
+        verify(exactly = 1) { anyConstructed<MediaMetadataRetriever>().setDataSource(context, videoUri) }
+        verify(exactly = 20) { anyConstructed<MediaMetadataRetriever>().getScaledFrameAtTime(any(), any(), any(), any()) }
+        verify(exactly = 1) { anyConstructed<MediaMetadataRetriever>().release() }
+    }
+
+    @Test
+    fun `progressive extractThumbnails preserves pixel budget and 150 frame cap`() = runBlocking {
+        stubRetriever(240, 240)
+        val fullBitmap = mockk<Bitmap>(relaxed = true)
+        every { fullBitmap.width } returns 240
+        every { fullBitmap.height } returns 240
+        every { anyConstructed<MediaMetadataRetriever>().getFrameAtTime(any(), any()) } returns fullBitmap
+        every { Bitmap.createScaledBitmap(any(), any(), any(), any()) } answers { mockk<Bitmap>(relaxed = true) }
+        every {
+            anyConstructed<MediaMetadataRetriever>().getScaledFrameAtTime(any(), any(), any(), any())
+        } answers { mockk<Bitmap>(relaxed = true) }
+        val timestamps = (0L until 1000L).toList()
+
+        for (sdkInt in listOf(26, 27)) {
+            val chunks = mutableListOf<List<Pair<Long, Bitmap>>>()
+            FrameExtractor(context, sdkInt).extractThumbnails(videoUri, timestamps, 240) { chunk ->
+                chunks.add(chunk)
+            }
+            val flattened = chunks.flatten()
+            assertEquals(78, flattened.size)
+            assertEquals(List(9) { 8 } + listOf(6), chunks.map { it.size })
+            assertEquals(timestamps.take(78), flattened.map { it.first })
+            assertTrue(flattened.size * 240L * 240L <= 4_500_000L)
+        }
+
+        stubRetriever(120, 240)
+        val capChunks = mutableListOf<List<Pair<Long, Bitmap>>>()
+        frameExtractor.extractThumbnails(videoUri, timestamps, 120) { chunk ->
+            capChunks.add(chunk)
+        }
+        assertEquals(150, capChunks.flatten().size)
+        assertEquals(List(18) { 8 } + listOf(6), capChunks.map { it.size })
+    }
+
+    @Test
+    fun `progressive extractThumbnails stops on cancellation and recycles only unemitted chunk bitmaps`() = runBlocking {
+        stubRetriever(1920, 1080)
+        val decodedBitmaps = mutableListOf<Bitmap>()
+        val emittedBitmaps = mutableListOf<Bitmap>()
+        val frame11Entered = CountDownLatch(1)
+        val allowFrame11Return = CountDownLatch(1)
+        var decodeCalls = 0
+
+        every {
+            anyConstructed<MediaMetadataRetriever>().getScaledFrameAtTime(any(), any(), any(), any())
+        } answers {
+            decodeCalls += 1
+            if (decodeCalls == 11) {
+                frame11Entered.countDown()
+                allowFrame11Return.await(5, TimeUnit.SECONDS)
+            }
+            mockk<Bitmap>().also { bmp ->
+                every { bmp.isRecycled } returns false
+                every { bmp.recycle() } returns Unit
+                synchronized(decodedBitmaps) {
+                    decodedBitmaps.add(bmp)
+                }
+            }
+        }
+
+        val timestamps = (0L until 30L).map { it * 1_000L }
+        val job: Job = launch(Dispatchers.Default) {
+            frameExtractor.extractThumbnails(videoUri, timestamps, 120, chunkSize = 8) { chunk ->
+                emittedBitmaps.addAll(chunk.map { it.second })
+            }
+        }
+
+        assertTrue(frame11Entered.await(5, TimeUnit.SECONDS))
+        // Cancel after 10 completed frames while the 11th frame decode is in flight
+        job.cancel()
+        allowFrame11Return.countDown()
+        job.join()
+
+        // At most 1 in-flight decode after frame 10 (frame 11), zero subsequent decodes
+        assertEquals(11, decodeCalls)
+        // First 8-frame chunk was already emitted and must NOT be recycled
+        assertEquals(8, emittedBitmaps.size)
+        emittedBitmaps.forEach { bmp ->
+            verify(exactly = 0) { bmp.recycle() }
+        }
+        // Frames 9, 10, 11 belong to the uncommitted second chunk and MUST be recycled
+        val unemittedBitmaps = decodedBitmaps.drop(8)
+        assertEquals(3, unemittedBitmaps.size)
+        unemittedBitmaps.forEach { bmp ->
+            verify(exactly = 1) { bmp.recycle() }
+        }
+        verify(exactly = 1) { anyConstructed<MediaMetadataRetriever>().setDataSource(context, videoUri) }
+        verify(exactly = 1) { anyConstructed<MediaMetadataRetriever>().release() }
+    }
+
+    @Test
+    fun `progressive extractThumbnails rethrows SecurityException and releases retriever`() = runBlocking {
+        mockkStatic(android.util.Log::class)
+        every { android.util.Log.e(any(), any(), any()) } returns 0
+        every { android.util.Log.e(any(), any()) } returns 0
+        every {
+            anyConstructed<MediaMetadataRetriever>().setDataSource(any<Context>(), any<Uri>())
+        } throws SecurityException("Permission denied")
+        every { anyConstructed<MediaMetadataRetriever>().release() } returns Unit
+
+        try {
+            frameExtractor.extractThumbnails(videoUri, listOf(0L), 120) { }
+            fail("Expected SecurityException")
+        } catch (_: SecurityException) {
+            // Expected
+        }
+
+        verify(exactly = 1) { anyConstructed<MediaMetadataRetriever>().release() }
     }
 }
