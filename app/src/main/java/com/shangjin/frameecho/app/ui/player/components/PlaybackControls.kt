@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -88,7 +89,7 @@ private const val SETTLE_REFINE_DELAY_MS = 90L
 @Composable
 fun PlaybackControls(
     exoPlayer: ExoPlayer,
-    currentPositionMs: Long,
+    currentPositionMs: () -> Long,
     durationMs: Long,
     isPlaying: Boolean,
     videoFrameRate: Float,
@@ -114,9 +115,6 @@ fun PlaybackControls(
     modifier: Modifier = Modifier
 ) {
     val hapticFeedback = LocalHapticFeedback.current
-    val colorScheme = MaterialTheme.colorScheme
-    val onTertiaryContainer70 = colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
-    val onPrimaryContainer70 = colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
     val fineScrubThresholdPx = with(LocalDensity.current) { 24.dp.toPx() }
 
     // Slider user-dragging state
@@ -157,9 +155,25 @@ fun PlaybackControls(
         }
     }
 
-    val previewPositionMs = sliderTargetPositionMs ?: currentPositionMs
+    val formattedDuration = remember(durationMs) {
+        FileUtils.formatDuration(durationMs)
+    }
+
     // Track last frame boundary for haptic feedback on frame crossings
     var lastFrameBoundaryMs by remember { mutableLongStateOf(0L) }
+
+    // Keep latest references for gesture/slider callbacks so position ticks never recreate closures
+    val currentPositionProvider by rememberUpdatedState(currentPositionMs)
+    val currentDurationMs by rememberUpdatedState(durationMs)
+    val currentFrameDurationMs by rememberUpdatedState(frameDurationMs)
+    val currentFineScrubSensitivity by rememberUpdatedState(fineScrubSensitivity)
+    val currentIsExporting by rememberUpdatedState(isExporting)
+    val currentOnUpdatePosition by rememberUpdatedState(onUpdatePosition)
+    val currentOnDragStarted by rememberUpdatedState(onDragStarted)
+    val currentOnDragEnded by rememberUpdatedState(onDragEnded)
+    val currentOnScrubStateChanged by rememberUpdatedState(onScrubStateChanged)
+    val currentIsScrubPreviewLive by rememberUpdatedState(isScrubPreviewLive)
+    val currentOnExactSeekIssued by rememberUpdatedState(onExactSeekIssued)
 
     // Seek pipeline. Issuing an exact seek per pointer event is what makes a drag feel
     // laggy: each one decodes from the preceding keyframe up to the target, so the picture
@@ -185,10 +199,10 @@ fun PlaybackControls(
                     // decoder is already next to the target and exact costs almost nothing.
                     exoPlayer.setSeekParameters(SeekParameters.EXACT)
                     exoPlayer.seekTo(target)
-                    onExactSeekIssued()
+                    currentOnExactSeekIssued()
                     return@collectLatest
                 }
-                if (!isScrubPreviewLive() &&
+                if (!currentIsScrubPreviewLive() &&
                     abs(target - lastCoarseSeekMs) >= COARSE_SEEK_MIN_DELTA_MS
                 ) {
                     lastCoarseSeekMs = target
@@ -198,8 +212,95 @@ fun PlaybackControls(
                 delay(SETTLE_REFINE_DELAY_MS)
                 exoPlayer.setSeekParameters(SeekParameters.EXACT)
                 exoPlayer.seekTo(target)
-                onExactSeekIssued()
+                currentOnExactSeekIssued()
             }
+    }
+
+    val onSliderValueChange = remember(exoPlayer, hapticFeedback) {
+        { fraction: Float ->
+            val clampedFraction = fraction.coerceIn(0f, 1f)
+            localSliderFraction = clampedFraction
+            val activeDurationMs = currentDurationMs
+            val activeFrameDurationMs = currentFrameDurationMs
+            if (!isSliderDragging) {
+                wasPlayingBeforeSliderDrag = exoPlayer.isPlaying
+                if (wasPlayingBeforeSliderDrag) {
+                    exoPlayer.pause()
+                }
+                // Scrubbing mode: Media3 1.8+ optimization. Every flag is spelled
+                // out rather than relying on the library defaults, so a future
+                // Media3 release can't quietly turn one of them off. Fractional
+                // seek tolerance is deliberately left unset — setting it would
+                // override the SeekParameters the seek pipeline above chooses.
+                val scrubbingParams = ScrubbingModeParameters.Builder()
+                    .setDisabledTrackTypes(
+                        setOf(C.TRACK_TYPE_AUDIO, C.TRACK_TYPE_METADATA)
+                    )
+                    .setShouldIncreaseCodecOperatingRate(true)
+                    .setShouldEnableDynamicScheduling(true)
+                    .setAllowSkippingMediaCodecFlush(true)
+                    .setAllowSkippingKeyFrameReset(true)
+                    .setUseDecodeOnlyFlag(true)
+                    .build()
+                exoPlayer.setScrubbingModeParameters(scrubbingParams)
+                exoPlayer.setScrubbingModeEnabled(true)
+                val startPositionMs = currentPositionProvider()
+                sliderDragStartFraction = clampedFraction
+                sliderDragStartPositionMs = startPositionMs
+                fineScrubOffsetMs = 0L
+                sliderTargetPositionMs = null
+                lastFrameBoundaryMs = if (activeFrameDurationMs > 0L) {
+                    (startPositionMs / activeFrameDurationMs) * activeFrameDurationMs
+                } else startPositionMs
+                currentOnDragStarted()
+            }
+            isSliderDragging = true
+            val newPosition = calculateScrubPosition(
+                isFineScrubbing = isFineScrubbing,
+                clampedFraction = clampedFraction,
+                sliderDragStartFraction = sliderDragStartFraction,
+                durationMs = activeDurationMs,
+                fineScrubSensitivity = currentFineScrubSensitivity,
+                frameDurationMs = activeFrameDurationMs,
+                sliderDragStartPositionMs = sliderDragStartPositionMs
+            )
+
+            // Haptic feedback on frame boundary crossing during fine scrub
+            if (isFineScrubbing && activeFrameDurationMs > 0L) {
+                val currentFrameBoundary = (newPosition / activeFrameDurationMs) * activeFrameDurationMs
+                if (currentFrameBoundary != lastFrameBoundaryMs) {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    lastFrameBoundaryMs = currentFrameBoundary
+                }
+            }
+
+            fineScrubOffsetMs = newPosition - sliderDragStartPositionMs
+            // The seek itself is driven by the pipeline above, off the gesture thread.
+            sliderTargetPositionMs = newPosition
+            currentOnScrubStateChanged(true, newPosition, isFineScrubbing)
+        }
+    }
+
+    val onSliderValueChangeFinished = remember(exoPlayer) {
+        {
+            val finalPosition = sliderTargetPositionMs ?: currentPositionProvider()
+            // Restore exact seeking and disable scrubbing mode
+            exoPlayer.setSeekParameters(SeekParameters.EXACT)
+            exoPlayer.setScrubbingModeEnabled(false)
+            currentOnUpdatePosition(finalPosition)
+            exoPlayer.seekTo(finalPosition)
+            currentOnExactSeekIssued()
+            isSliderDragging = false
+            isFineScrubbing = false
+            fineScrubOffsetMs = 0L
+            sliderTargetPositionMs = null
+            currentOnScrubStateChanged(false, finalPosition, false)
+            currentOnDragEnded()
+            if (wasPlayingBeforeSliderDrag && !currentIsExporting) {
+                exoPlayer.play()
+            }
+            wasPlayingBeforeSliderDrag = false
+        }
     }
 
     Surface(
@@ -223,27 +324,29 @@ fun PlaybackControls(
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull() ?: break
                                 val verticalOffset = startY - change.position.y
+                                val activeDurationMs = currentDurationMs
+                                val activeFrameDurationMs = currentFrameDurationMs
                                 if (!isFineScrubbing && verticalOffset > fineScrubThresholdPx) {
                                     isFineScrubbing = true
                                     hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                                     // Anchor from current target so thumb doesn't jump
-                                    val anchorMs = sliderTargetPositionMs ?: currentPositionMs
-                                    sliderDragStartFraction = if (durationMs > 0) {
-                                        anchorMs.toFloat() / durationMs.toFloat()
+                                    val anchorMs = sliderTargetPositionMs ?: currentPositionProvider()
+                                    sliderDragStartFraction = if (activeDurationMs > 0L) {
+                                        anchorMs.toFloat() / activeDurationMs.toFloat()
                                     } else 0f
                                     sliderDragStartPositionMs = anchorMs
                                     fineScrubOffsetMs = 0L
                                     // Initialize frame boundary tracking
-                                    lastFrameBoundaryMs = if (frameDurationMs > 0L) {
-                                        (anchorMs / frameDurationMs) * frameDurationMs
+                                    lastFrameBoundaryMs = if (activeFrameDurationMs > 0L) {
+                                        (anchorMs / activeFrameDurationMs) * activeFrameDurationMs
                                     } else anchorMs
                                 } else if (isFineScrubbing && verticalOffset < fineScrubThresholdPx / 2) {
                                     isFineScrubbing = false
                                     hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     // Re-anchor normal drag from current position
-                                    val currentTarget = sliderTargetPositionMs ?: currentPositionMs
-                                    localSliderFraction = if (durationMs > 0) {
-                                        currentTarget.toFloat() / durationMs.toFloat()
+                                    val currentTarget = sliderTargetPositionMs ?: currentPositionProvider()
+                                    localSliderFraction = if (activeDurationMs > 0L) {
+                                        currentTarget.toFloat() / activeDurationMs.toFloat()
                                     } else 0f
                                 }
                                 if (event.changes.none { it.pressed }) {
@@ -256,112 +359,15 @@ fun PlaybackControls(
                         }
                     }
             ) {
-                // Compute the slider display fraction: always reflect the actual target position
-                val displayFraction = when {
-                    isSliderDragging && isFineScrubbing -> {
-                        // In fine-scrub mode, compute fraction from target position
-                        val target = sliderTargetPositionMs ?: currentPositionMs
-                        if (durationMs > 0) target.toFloat() / durationMs.toFloat() else 0f
-                    }
-                    isSliderDragging -> localSliderFraction
-                    durationMs > 0L -> currentPositionMs.toFloat() / durationMs.toFloat()
-                    else -> 0f
-                }
-
-                Slider(
-                    value = displayFraction,
-                    onValueChange = { fraction ->
-                        val clampedFraction = fraction.coerceIn(0f, 1f)
-                        localSliderFraction = clampedFraction
-                        if (!isSliderDragging) {
-                            wasPlayingBeforeSliderDrag = exoPlayer.isPlaying
-                            if (wasPlayingBeforeSliderDrag) {
-                                exoPlayer.pause()
-                            }
-                            // Scrubbing mode: Media3 1.8+ optimization. Every flag is spelled
-                            // out rather than relying on the library defaults, so a future
-                            // Media3 release can't quietly turn one of them off. Fractional
-                            // seek tolerance is deliberately left unset — setting it would
-                            // override the SeekParameters the seek pipeline above chooses.
-                            val scrubbingParams = ScrubbingModeParameters.Builder()
-                                .setDisabledTrackTypes(
-                                    setOf(C.TRACK_TYPE_AUDIO, C.TRACK_TYPE_METADATA)
-                                )
-                                .setShouldIncreaseCodecOperatingRate(true)
-                                .setShouldEnableDynamicScheduling(true)
-                                .setAllowSkippingMediaCodecFlush(true)
-                                .setAllowSkippingKeyFrameReset(true)
-                                .setUseDecodeOnlyFlag(true)
-                                .build()
-                            exoPlayer.setScrubbingModeParameters(scrubbingParams)
-                            exoPlayer.setScrubbingModeEnabled(true)
-                            sliderDragStartFraction = clampedFraction
-                            sliderDragStartPositionMs = currentPositionMs
-                            fineScrubOffsetMs = 0L
-                            sliderTargetPositionMs = null
-                            lastFrameBoundaryMs = if (frameDurationMs > 0L) {
-                                (currentPositionMs / frameDurationMs) * frameDurationMs
-                            } else currentPositionMs
-                            onDragStarted()
-                        }
-                        isSliderDragging = true
-                        val newPosition = calculateScrubPosition(
-                            isFineScrubbing = isFineScrubbing,
-                            clampedFraction = clampedFraction,
-                            sliderDragStartFraction = sliderDragStartFraction,
-                            durationMs = durationMs,
-                            fineScrubSensitivity = fineScrubSensitivity,
-                            frameDurationMs = frameDurationMs,
-                            sliderDragStartPositionMs = sliderDragStartPositionMs
-                        )
-
-                        // Haptic feedback on frame boundary crossing during fine scrub
-                        if (isFineScrubbing && frameDurationMs > 0L) {
-                            val currentFrameBoundary = (newPosition / frameDurationMs) * frameDurationMs
-                            if (currentFrameBoundary != lastFrameBoundaryMs) {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                lastFrameBoundaryMs = currentFrameBoundary
-                            }
-                        }
-
-                        fineScrubOffsetMs = newPosition - sliderDragStartPositionMs
-                        // The seek itself is driven by the pipeline above, off the gesture thread.
-                        sliderTargetPositionMs = newPosition
-                        onScrubStateChanged(true, newPosition, isFineScrubbing)
-                    },
-                    onValueChangeFinished = {
-                        val finalPosition = sliderTargetPositionMs ?: currentPositionMs
-                        // Restore exact seeking and disable scrubbing mode
-                        exoPlayer.setSeekParameters(SeekParameters.EXACT)
-                        exoPlayer.setScrubbingModeEnabled(false)
-                        onUpdatePosition(finalPosition)
-                        exoPlayer.seekTo(finalPosition)
-                        onExactSeekIssued()
-                        isSliderDragging = false
-                        isFineScrubbing = false
-                        fineScrubOffsetMs = 0L
-                        sliderTargetPositionMs = null
-                        onScrubStateChanged(false, finalPosition, false)
-                        onDragEnded()
-                        if (wasPlayingBeforeSliderDrag && !isExporting) {
-                            exoPlayer.play()
-                        }
-                        wasPlayingBeforeSliderDrag = false
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = SliderDefaults.colors(
-                        thumbColor = if (isFineScrubbing) {
-                            MaterialTheme.colorScheme.tertiary
-                        } else {
-                            MaterialTheme.colorScheme.primary
-                        },
-                        activeTrackColor = if (isFineScrubbing) {
-                            MaterialTheme.colorScheme.tertiary
-                        } else {
-                            MaterialTheme.colorScheme.primary
-                        },
-                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
+                PlaybackSeekSlider(
+                    currentPositionMs = currentPositionMs,
+                    durationMs = durationMs,
+                    isSliderDragging = isSliderDragging,
+                    isFineScrubbing = isFineScrubbing,
+                    sliderTargetPositionMs = sliderTargetPositionMs,
+                    localSliderFraction = localSliderFraction,
+                    onValueChange = onSliderValueChange,
+                    onValueChangeFinished = onSliderValueChangeFinished
                 )
 
                 // Scrubbing indicator with fine-scrub info
@@ -369,12 +375,16 @@ fun PlaybackControls(
                     visible = isSliderDragging,
                     modifier = Modifier.align(Alignment.TopCenter)
                 ) {
+                    val colorScheme = MaterialTheme.colorScheme
+                    val onTertiaryContainer70 = colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                    val onPrimaryContainer70 = colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    val previewPositionMs = sliderTargetPositionMs ?: currentPositionMs()
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = if (isFineScrubbing) {
-                            MaterialTheme.colorScheme.tertiaryContainer
+                            colorScheme.tertiaryContainer
                         } else {
-                            MaterialTheme.colorScheme.primaryContainer
+                            colorScheme.primaryContainer
                         },
                         modifier = Modifier.padding(bottom = 4.dp)
                     ) {
@@ -408,9 +418,9 @@ fun PlaybackControls(
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (isFineScrubbing) {
-                                    MaterialTheme.colorScheme.onTertiaryContainer
+                                    colorScheme.onTertiaryContainer
                                 } else {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                    colorScheme.onPrimaryContainer
                                 }
                             )
                             Text(
@@ -439,14 +449,11 @@ fun PlaybackControls(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (isSliderDragging || isFineScrubbing) {
-                        FileUtils.formatDurationWithMillis(previewPositionMs)
-                    } else {
-                        FileUtils.formatDuration(currentPositionMs)
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                CurrentPositionText(
+                    currentPositionMs = currentPositionMs,
+                    isSliderDragging = isSliderDragging,
+                    isFineScrubbing = isFineScrubbing,
+                    sliderTargetPositionMs = sliderTargetPositionMs
                 )
 
                 // Play controls: prev frame, replay 5s, play/pause, forward 5s, next frame
@@ -563,13 +570,103 @@ fun PlaybackControls(
                 }
 
                 Text(
-                    text = FileUtils.formatDuration(durationMs),
+                    text = formattedDuration,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
+}
+
+/**
+ * Leaf composable for the seek slider so 250ms playback position updates only recompose
+ * the slider itself without invalidating [PlaybackControls] or its button subtrees.
+ */
+@Composable
+private fun PlaybackSeekSlider(
+    currentPositionMs: () -> Long,
+    durationMs: Long,
+    isSliderDragging: Boolean,
+    isFineScrubbing: Boolean,
+    sliderTargetPositionMs: Long?,
+    localSliderFraction: Float,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit
+) {
+    // Compute the slider display fraction: always reflect the actual target position
+    val displayFraction = calculateSliderDisplayFraction(
+        currentPositionMs = currentPositionMs,
+        durationMs = durationMs,
+        isSliderDragging = isSliderDragging,
+        isFineScrubbing = isFineScrubbing,
+        sliderTargetPositionMs = sliderTargetPositionMs,
+        localSliderFraction = localSliderFraction
+    )
+
+    Slider(
+        value = displayFraction,
+        onValueChange = onValueChange,
+        onValueChangeFinished = onValueChangeFinished,
+        modifier = Modifier.fillMaxWidth(),
+        colors = SliderDefaults.colors(
+            thumbColor = if (isFineScrubbing) {
+                MaterialTheme.colorScheme.tertiary
+            } else {
+                MaterialTheme.colorScheme.primary
+            },
+            activeTrackColor = if (isFineScrubbing) {
+                MaterialTheme.colorScheme.tertiary
+            } else {
+                MaterialTheme.colorScheme.primary
+            },
+            inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    )
+}
+
+/**
+ * Leaf composable for the current playback timestamp label so 250ms position ticks
+ * only recompose this text leaf rather than the surrounding row and control buttons.
+ */
+@Composable
+private fun CurrentPositionText(
+    currentPositionMs: () -> Long,
+    isSliderDragging: Boolean,
+    isFineScrubbing: Boolean,
+    sliderTargetPositionMs: Long?
+) {
+    Text(
+        text = if (isSliderDragging || isFineScrubbing) {
+            val previewPositionMs = sliderTargetPositionMs ?: currentPositionMs()
+            FileUtils.formatDurationWithMillis(previewPositionMs)
+        } else {
+            FileUtils.formatDuration(currentPositionMs())
+        },
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+/**
+ * Computes the 0..1 display fraction for the seek slider, reading [currentPositionMs]
+ * lazily only when needed.
+ */
+internal fun calculateSliderDisplayFraction(
+    currentPositionMs: () -> Long,
+    durationMs: Long,
+    isSliderDragging: Boolean,
+    isFineScrubbing: Boolean,
+    sliderTargetPositionMs: Long?,
+    localSliderFraction: Float
+): Float = when {
+    isSliderDragging && isFineScrubbing -> {
+        val target = sliderTargetPositionMs ?: currentPositionMs()
+        if (durationMs > 0L) target.toFloat() / durationMs.toFloat() else 0f
+    }
+    isSliderDragging -> localSliderFraction
+    durationMs > 0L -> currentPositionMs().toFloat() / durationMs.toFloat()
+    else -> 0f
 }
 
 /**

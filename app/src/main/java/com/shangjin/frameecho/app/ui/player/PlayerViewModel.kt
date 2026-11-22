@@ -43,7 +43,6 @@ data class PlayerUiState(
     val isPlaying: Boolean = false,
     val isMuted: Boolean = false,
     val rememberQuickSettings: Boolean = true,
-    val currentPositionMs: Long = 0L,
     val durationMs: Long = 0L,
     val capturedFrame: CapturedFrame? = null,
     val capturedBitmap: Bitmap? = null,
@@ -62,18 +61,9 @@ data class PlayerUiState(
 ) {
     /**
      * Adaptive seek interval: ~5% of total duration, rounded to a "nice" value.
-     * Clamped to [1s, 30s].
+     * Clamped to [1s, 30s]. Precomputed once per state instance from [durationMs].
      */
-    val seekIntervalMs: Long
-        get() {
-            if (durationMs <= 0) return 1_000L
-            val raw = (durationMs * 0.05).toLong()
-            // Round to nearest nice step: 1, 2, 5, 10, 15, 20, 30
-            val nice = longArrayOf(1000, 2000, 5000, 10_000, 15_000, 20_000, 30_000)
-            return nice.minByOrNull { kotlin.math.abs(it - raw) }!!
-                .coerceIn(1_000L, 30_000L)
-        }
-
+    val seekIntervalMs: Long = PlayerViewModel.seekIntervalForDuration(durationMs)
 }
 
 /**
@@ -87,6 +77,16 @@ class PlayerViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+
+    /**
+     * Current playback position in milliseconds.
+     *
+     * Deliberately kept out of [PlayerUiState] (mirroring [scrubPreview]): 250ms playback
+     * polling and frame-step clicks update this flow at high frequency, and folding it into
+     * the main state would recompose the whole player screen every time.
+     */
+    private val _playbackPositionMs = MutableStateFlow(0L)
+    val playbackPositionMs: StateFlow<Long> = _playbackPositionMs.asStateFlow()
 
     /**
      * Preview frame shown over the video while the seek bar is being dragged.
@@ -124,6 +124,33 @@ class PlayerViewModel : ViewModel() {
     companion object {
         /** Width of each thumbnail in the timeline strip (px) */
         const val THUMBNAIL_WIDTH_PX = 120
+
+        /** Fixed nice seek step candidates (ms): 1s, 2s, 5s, 10s, 15s, 20s, 30s. */
+        private val NICE_SEEK_STEPS = longArrayOf(
+            1_000L, 2_000L, 5_000L, 10_000L, 15_000L, 20_000L, 30_000L
+        )
+
+        /**
+         * Adaptive seek interval (~5% of total duration) rounded to the nearest step in
+         * [NICE_SEEK_STEPS] using primitive math (smaller step wins ties), clamped to [1s, 30s].
+         */
+        fun seekIntervalForDuration(durationMs: Long): Long {
+            if (durationMs <= 0L) return 1_000L
+            val raw = (durationMs * 0.05).toLong()
+            val steps = NICE_SEEK_STEPS
+            var bestStep = steps[0]
+            var bestDiff = kotlin.math.abs(bestStep - raw)
+            for (i in 1 until steps.size) {
+                val step = steps[i]
+                val diff = kotlin.math.abs(step - raw)
+                if (diff < bestDiff) {
+                    bestDiff = diff
+                    bestStep = step
+                }
+            }
+            return bestStep.coerceIn(1_000L, 30_000L)
+        }
+
         /**
          * Thumbnail count scales with video duration: ~1 thumbnail per second
          * for short videos, tapering off for longer ones using a square-root curve.
@@ -202,6 +229,7 @@ class PlayerViewModel : ViewModel() {
         cancelExport()
         clearThumbnailCache()
         releaseScrubPreview()
+        _playbackPositionMs.value = 0L
         _uiState.update {
             PlayerUiState(
                 isMuted = it.isMuted,
@@ -217,7 +245,9 @@ class PlayerViewModel : ViewModel() {
     }
 
     fun updatePosition(positionMs: Long) {
-        _uiState.update { it.copy(currentPositionMs = positionMs) }
+        if (_playbackPositionMs.value != positionMs) {
+            _playbackPositionMs.value = positionMs
+        }
     }
 
     fun updateDuration(durationMs: Long) {
@@ -504,7 +534,7 @@ class PlayerViewModel : ViewModel() {
             _uiState.update { it.copy(isCapturing = true, isExporting = true, error = null, exportResult = null) }
 
             try {
-                val timestampUs = _uiState.value.currentPositionMs * 1000L
+                val timestampUs = _playbackPositionMs.value * 1000L
                 val result = extractor.extractFrameWithInfo(uri, timestampUs)
 
                 if (result != null) {
