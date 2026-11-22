@@ -219,7 +219,8 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         var maxReadBufferCapacity: Int = 0,
         var lastReadBufferCapacity: Int = 0,
         var lastReadBufferLimit: Int = 0,
-        var lastMuxerTrackCount: Int = 0
+        var lastMuxerTrackCount: Int = 0,
+        var mediaHooks: FrameExporter.MediaHooks = FrameExporter.MediaHooks()
     ) {
         val muxedSpanUs: Long
             get() = if (minPtsUs == Long.MAX_VALUE) 0L else (maxPtsUs - minPtsUs).coerceAtLeast(0L)
@@ -246,6 +247,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
 
         every { context.cacheDir } returns cacheDir
         every { context.applicationInfo } throws RuntimeException("unit test")
+        every { resolver.openFileDescriptor(match { it !== createdUri }, "r") } returns null
 
         val validJpegWithSoi = byteArrayOf(
             0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte()
@@ -269,102 +271,109 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         every { audioFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT) } returns 1
         every { audioFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) } returns AudioFormat.ENCODING_PCM_16BIT
 
-        mockkConstructor(MediaExtractor::class)
         mockkConstructor(MediaMuxer::class)
         mockkConstructor(MediaCodec.BufferInfo::class)
 
-        var selectedTrack = -1
-        var videoIndex = 0
-        var audioIndex = 0
+        fun createMockExtractor(): MediaExtractor {
+            var selectedTrack = -1
+            var videoIndex = 0
+            var audioIndex = 0
+            val ext = mockk<MediaExtractor>(relaxed = true)
 
-        every { anyConstructed<MediaExtractor>().setDataSource(any<Context>(), any<Uri>(), any()) } just Runs
-        every { anyConstructed<MediaExtractor>().trackCount } returns if (audioSamples.isEmpty()) 1 else 2
-        every { anyConstructed<MediaExtractor>().getTrackFormat(0) } returns videoFormat
-        every { anyConstructed<MediaExtractor>().getTrackFormat(1) } returns audioFormat
-        every { anyConstructed<MediaExtractor>().selectTrack(any()) } answers {
-            selectedTrack = firstArg()
-        }
-        every { anyConstructed<MediaExtractor>().unselectTrack(any()) } answers {
-            if (selectedTrack == firstArg<Int>()) {
-                selectedTrack = -1
+            every { ext.setDataSource(any<Context>(), any<Uri>(), any()) } just Runs
+            every { ext.trackCount } returns if (audioSamples.isEmpty()) 1 else 2
+            every { ext.getTrackFormat(0) } returns videoFormat
+            every { ext.getTrackFormat(1) } returns audioFormat
+            every { ext.selectTrack(any()) } answers {
+                selectedTrack = firstArg()
             }
-        }
-        every { anyConstructed<MediaExtractor>().seekTo(any(), any()) } answers {
-            val targetUs = firstArg<Long>()
-            val mode = secondArg<Int>()
-            if (selectedTrack == 0) {
-                videoIndex = onVideoSeek(targetUs, mode)
-            } else if (selectedTrack == 1) {
-                if (onAudioSeek != null) {
-                    audioIndex = onAudioSeek(targetUs, mode)
-                } else {
-                    val idx = audioSamples.indexOfFirst { it.timeUs >= targetUs }
-                    audioIndex = if (idx >= 0) idx else audioSamples.size
+            every { ext.unselectTrack(any()) } answers {
+                if (selectedTrack == firstArg<Int>()) {
+                    selectedTrack = -1
                 }
             }
-        }
-        every { anyConstructed<MediaExtractor>().sampleTrackIndex } answers {
-            when (selectedTrack) {
-                0 -> if (videoIndex in videoSamples.indices) 0 else -1
-                1 -> if (audioIndex in audioSamples.indices) 1 else -1
-                else -> -1
-            }
-        }
-        every { anyConstructed<MediaExtractor>().sampleTime } answers {
-            when (selectedTrack) {
-                0 -> videoSamples.getOrNull(videoIndex)?.timeUs ?: -1L
-                1 -> audioSamples.getOrNull(audioIndex)?.timeUs ?: -1L
-                else -> -1L
-            }
-        }
-        every { anyConstructed<MediaExtractor>().sampleFlags } answers {
-            when (selectedTrack) {
-                0 -> videoSamples.getOrNull(videoIndex)?.flags ?: 0
-                1 -> audioSamples.getOrNull(audioIndex)?.flags ?: 0
-                else -> 0
-            }
-        }
-        every { anyConstructed<MediaExtractor>().readSampleData(any(), any()) } answers {
-            val dst = firstArg<ByteBuffer>()
-            val offset = secondArg<Int>()
-            val availableCapacity = (dst.capacity() - offset).coerceAtLeast(0)
-            if (dst.capacity() > harness.maxReadBufferCapacity) {
-                harness.maxReadBufferCapacity = dst.capacity()
-            }
-            harness.lastReadBufferCapacity = dst.capacity()
-            harness.lastReadBufferLimit = dst.limit()
-            val sample = when (selectedTrack) {
-                0 -> videoSamples.getOrNull(videoIndex)
-                1 -> audioSamples.getOrNull(audioIndex)?.also { harness.audioSamplesRead++ }
-                else -> null
-            } ?: return@answers -1
-            if (throwOnInsufficientReadBuffer && sample.sizeBytes > availableCapacity) {
-                throw IllegalArgumentException(
-                    "Sample (${sample.sizeBytes}) exceeds buffer capacity ($availableCapacity)"
-                )
-            }
-            val toWrite = minOf(sample.sizeBytes, availableCapacity)
-            dst.clear()
-            dst.position(offset)
-            if (toWrite > 0) {
-                dst.put(ByteArray(toWrite))
-            }
-            sample.sizeBytes
-        }
-        every { anyConstructed<MediaExtractor>().advance() } answers {
-            when (selectedTrack) {
-                0 -> {
-                    videoIndex++
-                    videoIndex in videoSamples.indices
+            every { ext.seekTo(any(), any()) } answers {
+                val targetUs = firstArg<Long>()
+                val mode = secondArg<Int>()
+                if (selectedTrack == 0) {
+                    videoIndex = onVideoSeek(targetUs, mode)
+                } else if (selectedTrack == 1) {
+                    if (onAudioSeek != null) {
+                        audioIndex = onAudioSeek(targetUs, mode)
+                    } else {
+                        val idx = audioSamples.indexOfFirst { it.timeUs >= targetUs }
+                        audioIndex = if (idx >= 0) idx else audioSamples.size
+                    }
                 }
-                1 -> {
-                    audioIndex++
-                    audioIndex in audioSamples.indices
-                }
-                else -> false
             }
+            every { ext.sampleTrackIndex } answers {
+                when (selectedTrack) {
+                    0 -> if (videoIndex in videoSamples.indices) 0 else -1
+                    1 -> if (audioIndex in audioSamples.indices) 1 else -1
+                    else -> -1
+                }
+            }
+            every { ext.sampleTime } answers {
+                when (selectedTrack) {
+                    0 -> videoSamples.getOrNull(videoIndex)?.timeUs ?: -1L
+                    1 -> audioSamples.getOrNull(audioIndex)?.timeUs ?: -1L
+                    else -> -1L
+                }
+            }
+            every { ext.sampleFlags } answers {
+                when (selectedTrack) {
+                    0 -> videoSamples.getOrNull(videoIndex)?.flags ?: 0
+                    1 -> audioSamples.getOrNull(audioIndex)?.flags ?: 0
+                    else -> 0
+                }
+            }
+            every { ext.readSampleData(any(), any()) } answers {
+                val dst = firstArg<ByteBuffer>()
+                val offset = secondArg<Int>()
+                val availableCapacity = (dst.capacity() - offset).coerceAtLeast(0)
+                if (dst.capacity() > harness.maxReadBufferCapacity) {
+                    harness.maxReadBufferCapacity = dst.capacity()
+                }
+                harness.lastReadBufferCapacity = dst.capacity()
+                harness.lastReadBufferLimit = dst.limit()
+                val sample = when (selectedTrack) {
+                    0 -> videoSamples.getOrNull(videoIndex)
+                    1 -> audioSamples.getOrNull(audioIndex)?.also { harness.audioSamplesRead++ }
+                    else -> null
+                } ?: return@answers -1
+                if (throwOnInsufficientReadBuffer && sample.sizeBytes > availableCapacity) {
+                    throw IllegalArgumentException(
+                        "Sample (${sample.sizeBytes}) exceeds buffer capacity ($availableCapacity)"
+                    )
+                }
+                val toWrite = minOf(sample.sizeBytes, availableCapacity)
+                dst.clear()
+                dst.position(offset)
+                if (toWrite > 0) {
+                    dst.put(ByteArray(toWrite))
+                }
+                sample.sizeBytes
+            }
+            every { ext.advance() } answers {
+                when (selectedTrack) {
+                    0 -> {
+                        videoIndex++
+                        videoIndex in videoSamples.indices
+                    }
+                    1 -> {
+                        audioIndex++
+                        audioIndex in audioSamples.indices
+                    }
+                    else -> false
+                }
+            }
+            every { ext.release() } just Runs
+            return ext
         }
-        every { anyConstructed<MediaExtractor>().release() } just Runs
+
+        harness.mediaHooks = FrameExporter.MediaHooks(
+            createExtractor = { createMockExtractor() }
+        )
 
         val activeMuxerTracks = mutableMapOf<Int, Int>()
         every { anyConstructed<MediaMuxer>().addTrack(any()) } answers {
@@ -413,6 +422,13 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         return harness
     }
 
+    private fun assertDestinationUntouched() {
+        verify(exactly = 0) { tree.createFile(any(), any()) }
+        verify(exactly = 0) { resolver.openOutputStream(any()) }
+        verify(exactly = 0) { resolver.insert(any(), any()) }
+        verify(exactly = 0) { DocumentsContract.deleteDocument(any(), any()) }
+    }
+
     private fun buildFrame(timestampUs: Long, durationMs: Long): CapturedFrame {
         return CapturedFrame(
             timestampUs = timestampUs,
@@ -451,7 +467,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             0 // Both PREVIOUS_SYNC and CLOSEST_SYNC land back at 0 us (stss = [1])
         }
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -472,7 +488,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             "Temporary motion_clip_*.mp4 files must be deleted on failure",
             harness.cacheDir.listFiles().isNullOrEmpty()
         )
-        verify { resolver wasNot Called }
+        assertDestinationUntouched()
     }
 
     @Test
@@ -494,7 +510,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         every { resolver.openOutputStream(createdUri) } returns output
         every { resolver.openFileDescriptor(createdUri, "r") } returns null
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -527,7 +543,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             videoSamples = videoSamples
         ) { _, _ -> 0 }
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -545,7 +561,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             "Temporary motion_clip_*.mp4 files must be deleted on failure",
             harness.cacheDir.listFiles().isNullOrEmpty()
         )
-        verify { resolver wasNot Called }
+        assertDestinationUntouched()
     }
 
     @Test
@@ -572,7 +588,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             audioMime = MediaFormat.MIMETYPE_AUDIO_AAC
         ) { _, _ -> 0 }
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -589,7 +605,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             "Temporary motion_clip_*.mp4 files must be deleted on failure",
             harness.cacheDir.listFiles().isNullOrEmpty()
         )
-        verify { resolver wasNot Called }
+        assertDestinationUntouched()
     }
 
     @Test
@@ -657,7 +673,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             encoderOutputBuffer
         }
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -673,7 +689,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             "Temporary motion_clip_*.mp4 files must be deleted on failure",
             harness.cacheDir.listFiles().isNullOrEmpty()
         )
-        verify { resolver wasNot Called }
+        assertDestinationUntouched()
     }
 
     @Test
@@ -697,7 +713,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             if (mode == MediaExtractor.SEEK_TO_PREVIOUS_SYNC) 0 else 1
         }
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -718,7 +734,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         assertEquals(0, harness.audioSamplesRead)
         assertTrue(harness.allTempFilesExistedAtMuxerRelease)
         assertTrue(harness.cacheDir.listFiles().isNullOrEmpty())
-        verify { resolver wasNot Called }
+        assertDestinationUntouched()
     }
 
     @Test
@@ -743,7 +759,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             }
         }
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -759,7 +775,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         assertEquals(0, harness.muxerStartCount)
         assertEquals(0L, harness.totalMuxedBytes)
         assertTrue(harness.cacheDir.listFiles().isNullOrEmpty())
-        verify { resolver wasNot Called }
+        assertDestinationUntouched()
     }
 
     @Test
@@ -807,7 +823,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         every { resolver.openOutputStream(createdUri) } returns output
         every { resolver.openFileDescriptor(createdUri, "r") } returns null
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -852,7 +868,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             throwOnInsufficientReadBuffer = true
         ) { _, _ -> 0 }
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -936,7 +952,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         every { resolver.openOutputStream(createdUri) } returns output
         every { resolver.openFileDescriptor(createdUri, "r") } returns null
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -989,7 +1005,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             }
         }
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -1010,7 +1026,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         assertEquals(FrameExporter.MAX_SAMPLE_BUFFER_BYTES, harness.maxReadBufferCapacity)
         assertEquals(0L, harness.totalMuxedBytes)
         assertTrue(harness.cacheDir.listFiles().isNullOrEmpty())
-        verify { resolver wasNot Called }
+        assertDestinationUntouched()
     }
 
     @Test
@@ -1042,7 +1058,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         every { resolver.openOutputStream(createdUri) } returns output
         every { resolver.openFileDescriptor(createdUri, "r") } returns null
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -1094,7 +1110,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         every { resolver.openOutputStream(createdUri) } returns output
         every { resolver.openFileDescriptor(createdUri, "r") } returns null
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -1139,7 +1155,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             }
         }
 
-        val exporter = FrameExporter(context)
+        val exporter = FrameExporter(context, harness.mediaHooks)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -1153,6 +1169,6 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         assertEquals(0, harness.muxerStartCount)
         assertEquals(0L, harness.totalMuxedBytes)
         assertTrue(harness.cacheDir.listFiles().isNullOrEmpty())
-        verify { resolver wasNot Called }
+        assertDestinationUntouched()
     }
 }
