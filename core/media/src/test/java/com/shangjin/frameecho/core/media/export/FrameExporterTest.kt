@@ -311,6 +311,37 @@ class FrameExporterTest {
         // Codec config packet emitted by FakeAacEncoder must be filtered out
         assertTrue(result.packets.none { it.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0 })
         assertTrue(result.packets.isNotEmpty())
+
+        // Android 8 (API 26-27) lacks MediaExtractor.sampleSize (-1L) and may omit KEY_MAX_INPUT_SIZE:
+        // verify > 16 KiB LPCM chunks (e.g. 64 KiB) read cleanly via 256 KiB fallback direct buffer.
+        val api26Chunk = ByteArray(64 * 1024) { ((it * 19 + 5) and 0xFF).toByte() }
+        val api26Encoder = FakeAacEncoder(outputFormat = encoderFormat, inputBufferCapacity = 4_096)
+        exporter.aacEncoderFactory = { _, _ -> api26Encoder }
+        val api26Source = object : AudioSampleSource {
+            private var done = false
+            override val sampleTrackIndex: Int get() = if (!done) 0 else -1
+            override val sampleTimeUs: Long get() = if (!done) 1_000_000L else -1L
+            override val sampleSizeHint: Long get() = -1L
+            override fun readSampleData(buffer: ByteBuffer): Int {
+                if (done || buffer.remaining() < api26Chunk.size) return -1
+                buffer.put(api26Chunk)
+                return api26Chunk.size
+            }
+            override fun advance(): Boolean {
+                done = true
+                return false
+            }
+        }
+        val api26Result = exporter.streamRawPcmToAac(
+            source = api26Source,
+            clipStartUs = 1_000_000L,
+            endUs = 2_000_000L,
+            sampleRate = 48_000,
+            channelCount = 2,
+            maxInputSizeHint = null
+        )
+        assertNotNull(api26Result)
+        assertArrayEquals(api26Chunk, api26Encoder.receivedPcm.toByteArray())
     }
 
     @Test

@@ -67,6 +67,11 @@ class FrameExporter(private val context: Context) {
         internal const val MAX_CODEC_IDLE_ROUNDS = 600
         /** Bounded frame-aligned carry buffer (16 KB) bridging audio sources to AAC encoder. */
         internal const val PCM_CARRY_BUFFER_BYTES = 16 * 1024
+        /**
+         * Fallback direct read buffer (256 KB) for raw LPCM when neither per-sample size
+         * (Android 8 / API 26-27) nor track KEY_MAX_INPUT_SIZE is available.
+         */
+        internal const val FALLBACK_LPCM_READ_BUFFER_BYTES = 256 * 1024
         internal const val MAX_PCM_BUFFER_BYTES = 15 * 1024 * 1024
 
         private val CSD_KEYS = arrayOf("csd-0", "csd-1", "csd-2")
@@ -970,13 +975,13 @@ class FrameExporter(private val context: Context) {
 
         val bytesPerFrame = 2 * channelCount
         val carry = PcmCarryBuffer(bytesPerFrame, PCM_CARRY_BUFFER_BYTES)
-        val initialReadCapacity = if (source.sampleSizeHint > 0L) {
-            source.sampleSizeHint
+        val initialReadCapacity = when {
+            source.sampleSizeHint > 0L -> source.sampleSizeHint
                 .coerceIn(PCM_CARRY_BUFFER_BYTES.toLong(), MAX_PCM_BUFFER_BYTES.toLong())
                 .toInt()
-        } else {
-            (maxInputSizeHint ?: PCM_CARRY_BUFFER_BYTES)
+            maxInputSizeHint != null && maxInputSizeHint > 0 -> maxInputSizeHint
                 .coerceIn(PCM_CARRY_BUFFER_BYTES, MAX_PCM_BUFFER_BYTES)
+            else -> FALLBACK_LPCM_READ_BUFFER_BYTES
         }
         var pcmReadBuffer = ByteBuffer.allocateDirect(initialReadCapacity)
         var pendingPcmBuffer: ByteBuffer? = null
