@@ -220,10 +220,14 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         var lastReadBufferCapacity: Int = 0,
         var lastReadBufferLimit: Int = 0,
         var lastMuxerTrackCount: Int = 0,
-        var mediaHooks: FrameExporter.MediaHooks = FrameExporter.MediaHooks()
+        var extractorFactory: () -> MediaExtractor = { MediaExtractor() }
     ) {
         val muxedSpanUs: Long
             get() = if (minPtsUs == Long.MAX_VALUE) 0L else (maxPtsUs - minPtsUs).coerceAtLeast(0L)
+
+        fun buildExporter(context: Context): FrameExporter = FrameExporter(context).apply {
+            extractorFactory = this@RemuxHarness.extractorFactory
+        }
     }
 
     private fun prepareMotionPhotoMocks(
@@ -247,6 +251,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
 
         every { context.cacheDir } returns cacheDir
         every { context.applicationInfo } throws RuntimeException("unit test")
+        every { resolver.openAssetFileDescriptor(any(), "r") } returns null
         every { resolver.openFileDescriptor(match { it !== createdUri }, "r") } returns null
 
         val validJpegWithSoi = byteArrayOf(
@@ -371,9 +376,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             return ext
         }
 
-        harness.mediaHooks = FrameExporter.MediaHooks(
-            createExtractor = { createMockExtractor() }
-        )
+        harness.extractorFactory = { createMockExtractor() }
 
         val activeMuxerTracks = mutableMapOf<Int, Int>()
         every { anyConstructed<MediaMuxer>().addTrack(any()) } answers {
@@ -467,7 +470,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             0 // Both PREVIOUS_SYNC and CLOSEST_SYNC land back at 0 us (stss = [1])
         }
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -510,7 +513,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         every { resolver.openOutputStream(createdUri) } returns output
         every { resolver.openFileDescriptor(createdUri, "r") } returns null
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -543,7 +546,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             videoSamples = videoSamples
         ) { _, _ -> 0 }
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -588,7 +591,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             audioMime = MediaFormat.MIMETYPE_AUDIO_AAC
         ) { _, _ -> 0 }
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -673,7 +676,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             encoderOutputBuffer
         }
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -713,7 +716,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             if (mode == MediaExtractor.SEEK_TO_PREVIOUS_SYNC) 0 else 1
         }
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -759,7 +762,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             }
         }
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -823,7 +826,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         every { resolver.openOutputStream(createdUri) } returns output
         every { resolver.openFileDescriptor(createdUri, "r") } returns null
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -868,7 +871,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             throwOnInsufficientReadBuffer = true
         ) { _, _ -> 0 }
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -952,7 +955,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         every { resolver.openOutputStream(createdUri) } returns output
         every { resolver.openFileDescriptor(createdUri, "r") } returns null
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -1005,7 +1008,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             }
         }
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -1058,7 +1061,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         every { resolver.openOutputStream(createdUri) } returns output
         every { resolver.openFileDescriptor(createdUri, "r") } returns null
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -1110,7 +1113,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
         every { resolver.openOutputStream(createdUri) } returns output
         every { resolver.openFileDescriptor(createdUri, "r") } returns null
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
@@ -1155,7 +1158,7 @@ class FrameExporterSecurityTest(private val motionPhoto: Boolean) {
             }
         }
 
-        val exporter = FrameExporter(context, harness.mediaHooks)
+        val exporter = harness.buildExporter(context)
         val result = exporter.exportMotionPhoto(
             videoUri = mockk(relaxed = true),
             bitmap = bitmap,
