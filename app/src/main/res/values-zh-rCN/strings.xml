@@ -74,6 +74,15 @@
     <string name="error_capture_failed">无法截取帧，请尝试视频的其他位置</string>
     <string name="error_export_failed">导出失败，请重试</string>
     <string name="error_permission_denied">视频访问权限已失效，请重新选择视频</string>
+    <string name="error_unsupported_video_format">不支持的视频格式，请选择有效的视频文件</string>
+    <string name="error_external_video_access_failed">无法访问外部视频文件，请检查权限或重新选择视频</string>
+
+    <!-- 导出期间收到外部视频的切换确认 -->
+    <string name="external_video_export_busy_title">正在导出画面</string>
+    <string name="external_video_export_busy_message">当前正在导出画面，立即切换将中断本次导出。你可以选择等待导出完成后自动切换、立即取消导出并切换，或保留当前视频。</string>
+    <string name="external_video_switch_now">立即切换</string>
+    <string name="external_video_switch_after_export">导出后切换</string>
+    <string name="external_video_keep_current">暂不切换</string>
 
     <!-- UX: snackbar actions -->
     <string name="snackbar_action_view">查看</string>

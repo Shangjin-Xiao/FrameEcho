@@ -1351,6 +1351,138 @@ class FrameExporterTest {
     }
 
     @Test
+    fun `exportStaticFrame cancelled during bitmap compression deletes uncommitted MediaStore and SAF entries without publishing`(): Unit = runBlocking {
+        val rawJpeg = encodeSampleJpeg(320, 180, 0.9f)
+        val frame = CapturedFrame(
+            timestampUs = 1_000_000L,
+            width = 320,
+            height = 180,
+            colorSpace = ColorSpaceInfo(),
+            metadata = VideoMetadata()
+        )
+
+        // 1. MediaStore path: cancel while bitmap.compress is running -> must NOT clear IS_PENDING, MUST delete URI
+        mockkConstructor(ContentValues::class)
+        try {
+            every { anyConstructed<ContentValues>().put(any(), any<String>()) } returns Unit
+            every { anyConstructed<ContentValues>().put(any(), any<Int>()) } returns Unit
+            every { anyConstructed<ContentValues>().put(any(), any<Long>()) } returns Unit
+            every { anyConstructed<ContentValues>().clear() } returns Unit
+
+            val mediaFile = tempFolder.newFile("cancelled_mediastore.jpg")
+            val resolver = mockk<ContentResolver>()
+            val mediaUri = mockk<Uri> {
+                every { this@mockk.toString() } returns "content://media/external/images/media/777"
+            }
+            val context = mockk<Context>(relaxed = true) {
+                every { contentResolver } returns resolver
+                every { cacheDir } returns tempFolder.newFolder("cancel_ms_cache")
+            }
+            every { resolver.insert(any(), any()) } returns mediaUri
+            every { resolver.openOutputStream(mediaUri) } answers { FileOutputStream(mediaFile) }
+            every { resolver.delete(mediaUri, null, null) } returns 1
+            every { resolver.update(any(), any(), any(), any()) } returns 1
+
+            lateinit var mediaExportJob: kotlinx.coroutines.Job
+            val cancellingBitmap = mockk<Bitmap>(relaxed = true) {
+                every { config } returns Bitmap.Config.ARGB_8888
+                every { width } returns 320
+                every { height } returns 180
+                every { compress(any(), any(), any()) } answers {
+                    val out = thirdArg<OutputStream>()
+                    out.write(rawJpeg)
+                    mediaExportJob.cancel(CancellationException("Switch Now"))
+                    true
+                }
+            }
+
+            var caughtMediaCancel = false
+            mediaExportJob = launch(Dispatchers.Default, start = kotlinx.coroutines.CoroutineStart.LAZY) {
+                try {
+                    FrameExporter(context, sdkInt = Build.VERSION_CODES.Q).exportStaticFrame(
+                        bitmap = cancellingBitmap,
+                        frame = frame,
+                        config = ExportConfig(format = ExportFormat.JPEG, quality = 90, preserveMetadata = false)
+                    )
+                } catch (e: CancellationException) {
+                    caughtMediaCancel = true
+                    throw e
+                }
+            }
+            mediaExportJob.start()
+            mediaExportJob.join()
+
+            assertTrue("Expected exportStaticFrame to propagate CancellationException", caughtMediaCancel)
+            verify(exactly = 0) { resolver.update(mediaUri, any(), any(), any()) }
+            verify(exactly = 1) { resolver.delete(mediaUri, null, null) }
+        } finally {
+            unmockkConstructor(ContentValues::class)
+        }
+
+        // 2. SAF custom directory path: cancel while bitmap.compress is running -> MUST delete created document
+        mockkStatic(DocumentFile::class, DocumentsContract::class)
+        try {
+            val safFile = tempFolder.newFile("cancelled_saf.jpg")
+            val resolver = mockk<ContentResolver>()
+            val treeUri = mockk<Uri> { every { authority } returns "saf.provider" }
+            val createdUri = mockk<Uri> {
+                every { scheme } returns ContentResolver.SCHEME_CONTENT
+                every { authority } returns "saf.provider"
+                every { this@mockk.toString() } returns "content://saf.provider/tree/root/document/root%2Fcancelled.jpg"
+            }
+            val tree = mockk<DocumentFile>()
+            val docFile = mockk<DocumentFile> { every { uri } returns createdUri }
+            val context = mockk<Context>(relaxed = true) {
+                every { contentResolver } returns resolver
+                every { cacheDir } returns tempFolder.newFolder("cancel_saf_cache")
+            }
+
+            every { DocumentFile.fromTreeUri(context, treeUri) } returns tree
+            every { tree.createFile(ExportFormat.JPEG.mimeType, any()) } returns docFile
+            every { DocumentsContract.isDocumentUri(context, createdUri) } returns true
+            every { DocumentsContract.isTreeUri(createdUri) } returns true
+            every { DocumentsContract.getTreeDocumentId(treeUri) } returns "root"
+            every { DocumentsContract.getTreeDocumentId(createdUri) } returns "root"
+            every { resolver.openOutputStream(createdUri) } answers { FileOutputStream(safFile) }
+            every { DocumentsContract.deleteDocument(resolver, createdUri) } returns true
+
+            lateinit var safExportJob: kotlinx.coroutines.Job
+            val cancellingSafBitmap = mockk<Bitmap>(relaxed = true) {
+                every { config } returns Bitmap.Config.ARGB_8888
+                every { width } returns 320
+                every { height } returns 180
+                every { compress(any(), any(), any()) } answers {
+                    thirdArg<OutputStream>().write(rawJpeg)
+                    safExportJob.cancel(CancellationException("Switch Now"))
+                    true
+                }
+            }
+
+            var caughtSafCancel = false
+            safExportJob = launch(Dispatchers.Default, start = kotlinx.coroutines.CoroutineStart.LAZY) {
+                try {
+                    FrameExporter(context, sdkInt = Build.VERSION_CODES.Q).exportStaticFrame(
+                        bitmap = cancellingSafBitmap,
+                        frame = frame,
+                        config = ExportConfig(format = ExportFormat.JPEG, quality = 90, preserveMetadata = false),
+                        customExportTreeUri = treeUri
+                    )
+                } catch (e: CancellationException) {
+                    caughtSafCancel = true
+                    throw e
+                }
+            }
+            safExportJob.start()
+            safExportJob.join()
+
+            assertTrue("Expected SAF exportStaticFrame to propagate CancellationException", caughtSafCancel)
+            verify(exactly = 1) { DocumentsContract.deleteDocument(resolver, createdUri) }
+        } finally {
+            unmockkStatic(DocumentFile::class, DocumentsContract::class)
+        }
+    }
+
+    @Test
     fun `exportStaticFrame to SAF custom directory performs 2 provider operations without openFileDescriptor`() = runTest {
         val cacheDir = tempFolder.newFolder("saf_cache")
         val safFile = tempFolder.newFile("saf_target.jpg")

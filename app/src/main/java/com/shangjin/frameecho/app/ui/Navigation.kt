@@ -6,9 +6,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.shangjin.frameecho.app.intent.InboundVideoEvent
 import com.shangjin.frameecho.app.ui.about.AboutScreen
 import com.shangjin.frameecho.app.ui.player.PlayerScreen
 
@@ -26,8 +28,21 @@ sealed class Screen(val route: String) {
  * Navigation host for the FrameEcho app.
  */
 @Composable
-fun FrameEchoNavHost() {
+fun FrameEchoNavHost(
+    inboundVideoEvent: InboundVideoEvent? = null,
+    isResolvingInboundVideo: Boolean = false,
+    onInboundVideoEventConsumed: (Long) -> Unit = {},
+    onExitExternalSession: () -> Unit = {}
+) {
     val navController = rememberNavController()
+
+    LaunchedEffect(inboundVideoEvent, isResolvingInboundVideo) {
+        if ((inboundVideoEvent != null || isResolvingInboundVideo) &&
+            navController.currentBackStackEntry?.destination?.route != Screen.Player.route
+        ) {
+            navController.popBackStack(Screen.Player.route, inclusive = false)
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -63,6 +78,10 @@ fun FrameEchoNavHost() {
     ) {
         composable(Screen.Player.route) {
             PlayerScreen(
+                inboundVideoEvent = inboundVideoEvent,
+                isResolvingInboundVideo = isResolvingInboundVideo,
+                onInboundVideoEventConsumed = onInboundVideoEventConsumed,
+                onExitExternalSession = onExitExternalSession,
                 onNavigateToAbout = {
                     navController.navigate(Screen.About.route) {
                         launchSingleTop = true

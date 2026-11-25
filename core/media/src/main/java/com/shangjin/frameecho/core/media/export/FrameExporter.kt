@@ -137,16 +137,21 @@ class FrameExporter internal constructor(
         var processedBitmap: Bitmap? = null
         var finalBitmap: Bitmap? = null
         var outputUri: Uri? = null
+        val coroutineContext = currentCoroutineContext()
+        val checkCancellation: () -> Unit = { coroutineContext.ensureActive() }
         try {
+            checkCancellation()
             // Ensure we have a software bitmap (HARDWARE bitmaps can't be compressed)
             softBitmap = ensureSoftwareBitmap(bitmap)
 
+            checkCancellation()
             // Apply HDR tone mapping if needed
             processedBitmap = HdrToneMapper.process(
                 bitmap = softBitmap,
                 colorSpaceInfo = frame.colorSpace
             )
 
+            checkCancellation()
             // Scale if needed
             finalBitmap = scaleBitmap(processedBitmap, config.maxResolution)
 
@@ -156,6 +161,7 @@ class FrameExporter internal constructor(
             // Generate output file
             val fileName = generateFileName(frame, config)
 
+            checkCancellation()
             // Prebuild standard EXIF APP1 segment from a 28-byte minimal JPEG stub before opening
             // the destination stream so JPEG static frames are written once with zero rewrite IPC.
             val prebuiltApp1Segment = if (config.preserveMetadata && config.format == ExportFormat.JPEG) {
@@ -164,6 +170,7 @@ class FrameExporter internal constructor(
                 null
             }
 
+            checkCancellation()
             // Save to MediaStore or custom directory (scoped storage compatible)
             val dateTakenMs = frame.metadata.dateTime?.let { DateTimeUtils.parseToMillis(it) }
             val saveOutcome = if (customExportTreeUri != null) {
@@ -173,7 +180,8 @@ class FrameExporter internal constructor(
                     config = config,
                     treeUri = customExportTreeUri,
                     metadata = frame.metadata,
-                    prebuiltApp1Segment = prebuiltApp1Segment
+                    prebuiltApp1Segment = prebuiltApp1Segment,
+                    checkCancellation = checkCancellation
                 )
             } else {
                 saveStaticToMediaStore(
@@ -182,7 +190,8 @@ class FrameExporter internal constructor(
                     config = config,
                     dateTakenMs = dateTakenMs,
                     metadata = frame.metadata,
-                    prebuiltApp1Segment = prebuiltApp1Segment
+                    prebuiltApp1Segment = prebuiltApp1Segment,
+                    checkCancellation = checkCancellation
                 )
             }
             outputUri = saveOutcome.uri
@@ -2514,8 +2523,10 @@ class FrameExporter internal constructor(
         config: ExportConfig,
         dateTakenMs: Long? = null,
         metadata: VideoMetadata? = null,
-        prebuiltApp1Segment: ByteArray? = null
+        prebuiltApp1Segment: ByteArray? = null,
+        checkCancellation: () -> Unit = {}
     ): StaticSaveOutcome {
+        checkCancellation()
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
             put(MediaStore.Images.Media.MIME_TYPE, config.format.mimeType)
@@ -2534,27 +2545,32 @@ class FrameExporter internal constructor(
         ) ?: throw java.io.IOException("Failed to create MediaStore entry — storage may be full or unavailable")
 
         try {
+            checkCancellation()
             val outputStream = context.contentResolver.openOutputStream(uri)
                 ?: throw java.io.IOException("Failed to open output stream for MediaStore entry")
             val splicingStream = JpegApp1SplicingOutputStream(outputStream, prebuiltApp1Segment)
             splicingStream.use {
+                checkCancellation()
                 val compressFormat = config.format.toCompressFormat(config.quality, sdkInt)
                 if (!bitmap.compress(compressFormat, config.quality, it)) {
                     throw java.io.IOException("Failed to compress bitmap (format: ${config.format}, config: ${bitmap.config})")
                 }
             }
+            checkCancellation()
 
             var finalFileSize = splicingStream.bytesWritten
             var metadataPreserved = splicingStream.app1Injected
 
             if (metadata != null && config.preserveMetadata && config.format != ExportFormat.JPEG) {
                 metadataPreserved = writeMetadataToUri(uri, metadata)
+                checkCancellation()
                 val queriedSize = getFileSize(uri)
                 if (queriedSize > 0L || finalFileSize == 0L) {
                     finalFileSize = queriedSize
                 }
             }
 
+            checkCancellation()
             // Mark as not pending only after both image payload and EXIF metadata are persisted
             if (sdkInt >= Build.VERSION_CODES.Q) {
                 values.clear()
@@ -2598,35 +2614,42 @@ class FrameExporter internal constructor(
         config: ExportConfig,
         treeUri: Uri,
         metadata: VideoMetadata?,
-        prebuiltApp1Segment: ByteArray?
+        prebuiltApp1Segment: ByteArray?,
+        checkCancellation: () -> Unit = {}
     ): StaticSaveOutcome {
+        checkCancellation()
         val tree = DocumentFile.fromTreeUri(context, treeUri)
             ?: throw java.io.IOException("Failed to access custom directory — permission may have been revoked")
         val docFile = tree.createFile(config.format.mimeType, fileName)
             ?: throw java.io.IOException("Failed to create file in custom directory")
         val uri = validateCustomDocumentUri(docFile.uri, treeUri)
         try {
+            checkCancellation()
             val outputStream = context.contentResolver.openOutputStream(uri)
                 ?: throw java.io.IOException("Failed to open output stream for custom directory")
             val splicingStream = JpegApp1SplicingOutputStream(outputStream, prebuiltApp1Segment)
             splicingStream.use {
+                checkCancellation()
                 val compressFormat = config.format.toCompressFormat(config.quality, sdkInt)
                 if (!bitmap.compress(compressFormat, config.quality, it)) {
                     throw java.io.IOException("Failed to compress bitmap (format: ${config.format}, config: ${bitmap.config})")
                 }
             }
+            checkCancellation()
 
             var finalFileSize = splicingStream.bytesWritten
             var metadataPreserved = splicingStream.app1Injected
 
             if (metadata != null && config.preserveMetadata && config.format != ExportFormat.JPEG) {
                 metadataPreserved = writeMetadataToUri(uri, metadata)
+                checkCancellation()
                 val queriedSize = getFileSize(uri)
                 if (queriedSize > 0L || finalFileSize == 0L) {
                     finalFileSize = queriedSize
                 }
             }
 
+            checkCancellation()
             return StaticSaveOutcome(
                 uri = uri,
                 fileSizeBytes = finalFileSize,

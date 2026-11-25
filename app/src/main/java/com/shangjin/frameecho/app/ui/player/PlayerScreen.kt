@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -37,12 +38,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -52,10 +56,12 @@ import com.shangjin.frameecho.core.media.utils.LogUtils
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import com.shangjin.frameecho.R
+import com.shangjin.frameecho.app.intent.InboundVideoEvent
 import com.shangjin.frameecho.app.ui.components.LEGACY_ONBOARDING_STEP_KEYS
 import com.shangjin.frameecho.app.ui.components.OnboardingManager
 import com.shangjin.frameecho.app.ui.components.OnboardingOverlay
@@ -64,6 +70,7 @@ import com.shangjin.frameecho.app.ui.components.rememberAllOnboardingSteps
 import com.shangjin.frameecho.app.ui.export.ExportSettingsSheet
 import com.shangjin.frameecho.app.ui.player.components.EmptyState
 import com.shangjin.frameecho.app.ui.player.components.FrameInfoCard
+import com.shangjin.frameecho.app.ui.player.components.PendingExternalVideoDialog
 import com.shangjin.frameecho.app.ui.player.components.PlaybackControls
 import com.shangjin.frameecho.app.ui.player.components.PlayerBottomBar
 import com.shangjin.frameecho.app.ui.player.components.PlayerTopBar
@@ -87,6 +94,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 @Composable
 fun PlayerScreen(
     viewModel: PlayerViewModel = viewModel(),
+    inboundVideoEvent: InboundVideoEvent? = null,
+    isResolvingInboundVideo: Boolean = false,
+    onInboundVideoEventConsumed: (Long) -> Unit = {},
+    onExitExternalSession: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -119,6 +130,17 @@ fun PlayerScreen(
     // Initialize ViewModel
     LaunchedEffect(Unit) {
         viewModel.initialize(context)
+    }
+
+    // Consume external ACTION_VIEW / ACTION_SEND video events after ViewModel initialization
+    LaunchedEffect(inboundVideoEvent) {
+        val event = inboundVideoEvent ?: return@LaunchedEffect
+        viewModel.initialize(context)
+        when (event) {
+            is InboundVideoEvent.OpenVideo -> viewModel.onExternalVideoReceived(event.uri)
+            is InboundVideoEvent.Error -> viewModel.onExternalVideoError(event.error)
+        }
+        onInboundVideoEventConsumed(event.id)
     }
 
     // Video picker launcher
@@ -158,12 +180,16 @@ fun PlayerScreen(
             }
     }
 
-    // Back handler: return to home (clear video) instead of exiting
+    // Back handler: end external Intent session to return to caller app, or return to in-app home
     BackHandler(enabled = uiState.videoUri != null) {
         if (uiState.isCapturing || uiState.isExporting) return@BackHandler
+        val shouldExitExternalSession = uiState.isExternalSession
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
         viewModel.clearVideoUri()
+        if (shouldExitExternalSession) {
+            onExitExternalSession()
+        }
     }
 
     var pendingCaptureAfterPermission by remember { mutableStateOf(false) }
@@ -243,15 +269,14 @@ fun PlayerScreen(
         }
     }
 
-    // Update ExoPlayer when video URI changes
-    LaunchedEffect(uiState.videoUri) {
+    // Update ExoPlayer when video URI or session changes
+    LaunchedEffect(uiState.videoUri, uiState.videoSessionId) {
         uiState.videoUri?.let { uri ->
+            exoPlayer.pause()
             exoPlayer.setMediaItem(MediaItem.fromUri(uri))
             exoPlayer.prepare()
             val savedPositionMs = viewModel.playbackPositionMs.value
-            if (savedPositionMs > 0L) {
-                exoPlayer.seekTo(savedPositionMs)
-            }
+            exoPlayer.seekTo(savedPositionMs.coerceAtLeast(0L))
         }
     }
 
@@ -310,6 +335,21 @@ fun PlayerScreen(
                 if (!isPlaying && !isScrubbing) {
                     viewModel.updatePosition(exoPlayer.currentPosition)
                 }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                isVideoLoading = false
+                if (awaitingSettledFrame) {
+                    awaitingSettledFrame = false
+                    viewModel.clearScrubPreview()
+                }
+                LogUtils.w(
+                    context,
+                    "PlayerScreen",
+                    "ExoPlayer playback error (code=${error.errorCode})",
+                    error
+                )
+                viewModel.onPlaybackError(error.errorCode, error.cause)
             }
         }
         exoPlayer.addListener(listener)
@@ -397,11 +437,15 @@ fun PlayerScreen(
     val captureErrorMsg = stringResource(R.string.error_capture_failed)
     val exportErrorMsgGeneric = stringResource(R.string.error_export_failed)
     val permissionErrorMsg = stringResource(R.string.error_permission_denied)
+    val unsupportedVideoFormatMsg = stringResource(R.string.error_unsupported_video_format)
+    val externalVideoAccessFailedMsg = stringResource(R.string.error_external_video_access_failed)
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
             val message = when (error) {
                 is PlayerError.CaptureFailed -> captureErrorMsg
                 is PlayerError.PermissionDenied -> permissionErrorMsg
+                is PlayerError.UnsupportedVideoFormat -> unsupportedVideoFormatMsg
+                is PlayerError.ExternalVideoAccessFailed -> externalVideoAccessFailedMsg
                 is PlayerError.ExportFailed -> error.detail ?: exportErrorMsgGeneric
             }
             snackbarHostState.showSnackbar(
@@ -572,12 +616,33 @@ fun PlayerScreen(
 
                     // Frame info card
                     FrameInfoCard(capturedFrame = uiState.capturedFrame)
+                } else if (isResolvingInboundVideo || inboundVideoEvent is InboundVideoEvent.OpenVideo) {
+                    val loadingLabel = stringResource(R.string.video_loading)
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.semantics { contentDescription = loadingLabel }
+                        )
+                    }
                 } else {
                     // Empty state
                     EmptyState(
                         onSelectVideo = { videoPickerLauncher.launch("video/*") }
                     )
                 }
+            }
+
+            if (uiState.pendingExternalVideoUri != null &&
+                !uiState.deferPendingExternalSwitchUntilExportEnds
+            ) {
+                PendingExternalVideoDialog(
+                    isExportStillRunning = uiState.isCapturing || uiState.isExporting,
+                    onSwitchNow = { viewModel.confirmReplaceWithExternalVideo() },
+                    onSwitchAfterExport = { viewModel.switchToExternalVideoAfterExport() },
+                    onKeepCurrent = { viewModel.dismissPendingExternalVideo() }
+                )
             }
 
             // Export settings bottom sheet

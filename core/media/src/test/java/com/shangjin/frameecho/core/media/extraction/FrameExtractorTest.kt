@@ -2,18 +2,29 @@ package com.shangjin.frameecho.core.media.extraction
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import com.shangjin.frameecho.core.media.colorspace.ColorSpaceDetector
+import com.shangjin.frameecho.core.media.metadata.MetadataExtractor
+import com.shangjin.frameecho.core.model.ColorGamut
+import com.shangjin.frameecho.core.model.ColorSpaceInfo
+import com.shangjin.frameecho.core.model.ColorSpaceType
+import com.shangjin.frameecho.core.model.VideoMetadata
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkConstructor
+import io.mockk.mockkObject
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import io.mockk.verify
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -456,5 +467,110 @@ class FrameExtractorTest {
         }
 
         verify(exactly = 1) { anyConstructed<MediaMetadataRetriever>().release() }
+    }
+
+    @Test
+    fun `extractFrameWithInfo reuses cache within session and refreshes metadata and color space after invalidateCache`(): Unit = runBlocking {
+        mockkObject(MetadataExtractor, ColorSpaceDetector)
+        val sameUri = mockk<Uri> {
+            every { this@mockk.toString() } returns "content://provider/videos/edited_in_place.mp4"
+        }
+        val decodedBitmap = mockk<Bitmap>(relaxed = true) {
+            every { width } returns 1920
+            every { height } returns 1080
+        }
+        val mediaFormat = mockk<MediaFormat>(relaxed = true)
+
+        every { anyConstructed<MediaMetadataRetriever>().setDataSource(any<Context>(), any<Uri>()) } returns Unit
+        every { anyConstructed<MediaMetadataRetriever>().getFrameAtTime(any(), any()) } returns decodedBitmap
+        every { anyConstructed<MediaMetadataRetriever>().release() } returns Unit
+
+        val oldMetadata = VideoMetadata(dateTime = "2025-01-01T10:00:00", make = "OldCam")
+        val newMetadata = VideoMetadata(dateTime = null, make = "EditedClip")
+        val oldColorSpace = ColorSpaceInfo(type = ColorSpaceType.HDR10, colorGamut = ColorGamut.BT2020)
+        val newColorSpace = ColorSpaceInfo(type = ColorSpaceType.SDR, colorGamut = ColorGamut.BT709)
+
+        var metadataCalls = 0
+        var colorSpaceCalls = 0
+        every { MetadataExtractor.getVideoTrackFormat(context, sameUri) } returns mediaFormat
+        every { MetadataExtractor.extract(context, sameUri, any(), mediaFormat) } answers {
+            metadataCalls += 1
+            if (metadataCalls == 1) oldMetadata else newMetadata
+        }
+        every { ColorSpaceDetector.detect(mediaFormat) } answers {
+            colorSpaceCalls += 1
+            if (colorSpaceCalls == 1) oldColorSpace else newColorSpace
+        }
+
+        val firstCapture = frameExtractor.extractFrameWithInfo(sameUri, 1_000_000L)!!
+        val secondCaptureSameSession = frameExtractor.extractFrameWithInfo(sameUri, 2_000_000L)!!
+        assertEquals(oldMetadata, firstCapture.second.metadata)
+        assertEquals(oldColorSpace, firstCapture.second.colorSpace)
+        assertEquals(oldMetadata, secondCaptureSameSession.second.metadata)
+        assertEquals(oldColorSpace, secondCaptureSameSession.second.colorSpace)
+        assertEquals(1, metadataCalls)
+        assertEquals(1, colorSpaceCalls)
+
+        // Video changed in place and was reopened -> invalidateCache forces fresh extraction for same URI
+        frameExtractor.invalidateCache()
+
+        val reopenedCapture = frameExtractor.extractFrameWithInfo(sameUri, 1_000_000L)!!
+        assertEquals(newMetadata, reopenedCapture.second.metadata)
+        assertEquals(newColorSpace, reopenedCapture.second.colorSpace)
+        assertEquals(2, metadataCalls)
+        assertEquals(2, colorSpaceCalls)
+    }
+
+    @Test
+    fun `invalidateCache prevents in-flight extraction from previous session from populating new session cache`(): Unit = runBlocking {
+        mockkObject(MetadataExtractor, ColorSpaceDetector)
+        val sameUri = mockk<Uri> {
+            every { this@mockk.toString() } returns "content://provider/videos/race_clip.mp4"
+        }
+        val decodedBitmap = mockk<Bitmap>(relaxed = true) {
+            every { width } returns 1280
+            every { height } returns 720
+        }
+        val mediaFormat = mockk<MediaFormat>(relaxed = true)
+        every { anyConstructed<MediaMetadataRetriever>().setDataSource(any<Context>(), any<Uri>()) } returns Unit
+        every { anyConstructed<MediaMetadataRetriever>().getFrameAtTime(any(), any()) } returns decodedBitmap
+        every { anyConstructed<MediaMetadataRetriever>().release() } returns Unit
+
+        val session1EnteredExtract = CountDownLatch(1)
+        val allowSession1ToFinish = CountDownLatch(1)
+        val staleMetadata = VideoMetadata(dateTime = "2024-05-01T00:00:00")
+        val freshMetadata = VideoMetadata(dateTime = "2026-11-24T12:00:00")
+        var extractCount = 0
+
+        every { MetadataExtractor.getVideoTrackFormat(context, sameUri) } returns mediaFormat
+        every { ColorSpaceDetector.detect(mediaFormat) } returns ColorSpaceInfo()
+        every { MetadataExtractor.extract(context, sameUri, any(), mediaFormat) } answers {
+            val callIndex = synchronized(this@FrameExtractorTest) {
+                extractCount += 1
+                extractCount
+            }
+            if (callIndex == 1) {
+                session1EnteredExtract.countDown()
+                assertTrue(allowSession1ToFinish.await(5, TimeUnit.SECONDS))
+                staleMetadata
+            } else {
+                freshMetadata
+            }
+        }
+
+        val session1Deferred = async(Dispatchers.Default) {
+            frameExtractor.extractFrameWithInfo(sameUri, 500_000L)
+        }
+        assertTrue(session1EnteredExtract.await(5, TimeUnit.SECONDS))
+
+        // New video session starts while session 1 extraction is still in flight
+        frameExtractor.invalidateCache()
+        allowSession1ToFinish.countDown()
+        session1Deferred.await()
+
+        // Subsequent capture in the new session must NOT see staleMetadata from session 1
+        val session2Result = frameExtractor.extractFrameWithInfo(sameUri, 500_000L)!!
+        assertEquals(freshMetadata, session2Result.second.metadata)
+        assertEquals(2, extractCount)
     }
 }
