@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.PlaybackException
 import com.shangjin.frameecho.app.intent.InboundVideoError
 import com.shangjin.frameecho.core.media.extraction.FrameExtractor
 import com.shangjin.frameecho.core.media.extraction.ScrubPreviewExtractor
@@ -288,6 +289,46 @@ class PlayerViewModel : ViewModel() {
         _uiState.update { it.copy(error = mappedError) }
     }
 
+    /**
+     * Surface a Media3 [PlaybackException] encountered while preparing or decoding the active
+     * video so corrupt, truncated, or inaccessible files show a localized message instead of
+     * failing silently.
+     */
+    fun onPlaybackError(errorCode: Int, cause: Throwable? = null) {
+        _uiState.update { state ->
+            if (state.videoUri == null) return@update state
+            val mappedError = when {
+                errorCode == PlaybackException.ERROR_CODE_IO_NO_PERMISSION ||
+                    hasSecurityExceptionCause(cause) -> {
+                    if (state.isExternalSession) {
+                        PlayerError.ExternalVideoAccessFailed
+                    } else {
+                        PlayerError.PermissionDenied
+                    }
+                }
+                errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ||
+                    errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> {
+                    if (state.isExternalSession) {
+                        PlayerError.ExternalVideoAccessFailed
+                    } else {
+                        PlayerError.UnsupportedVideoFormat
+                    }
+                }
+                else -> PlayerError.UnsupportedVideoFormat
+            }
+            state.copy(
+                isPlaying = false,
+                error = mappedError
+            )
+        }
+    }
+
+    private fun hasSecurityExceptionCause(throwable: Throwable?): Boolean {
+        return generateSequence(throwable) { it.cause }
+            .take(8)
+            .any { it is SecurityException }
+    }
+
     private fun loadVideoInternal(
         uri: Uri,
         fromExternalIntent: Boolean,
@@ -298,6 +339,7 @@ class PlayerViewModel : ViewModel() {
         val oldBitmap = _uiState.value.capturedBitmap
         val canRecycleImmediately = !isAnyExportRunning()
         cancelExport()
+        frameExtractor?.invalidateCache()
         clearThumbnailCache()
         // The preview session is bound to a single URI — tear it down before switching.
         releaseScrubPreview()
@@ -312,7 +354,7 @@ class PlayerViewModel : ViewModel() {
                 capturedFrame = null,
                 exportResult = if (preserveExportResult) it.exportResult else null,
                 showExportSettings = false,
-                error = null,
+                error = if (preserveExportResult) it.error else null,
                 thumbnailCount = 0,
                 videoFrameRate = 0f,
                 isExternalSession = fromExternalIntent,
@@ -336,6 +378,7 @@ class PlayerViewModel : ViewModel() {
         val oldBitmap = _uiState.value.capturedBitmap
         val canRecycleImmediately = !isAnyExportRunning()
         cancelExport()
+        frameExtractor?.invalidateCache()
         clearThumbnailCache()
         releaseScrubPreview()
         _playbackPositionMs.value = 0L

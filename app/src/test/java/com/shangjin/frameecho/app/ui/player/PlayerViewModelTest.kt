@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.snapshots.SnapshotStateMap
+import androidx.media3.common.PlaybackException
 import com.shangjin.frameecho.app.intent.InboundVideoError
 import com.shangjin.frameecho.core.media.export.FrameExporter
 import com.shangjin.frameecho.core.media.extraction.FrameExtractor
@@ -984,5 +985,109 @@ class PlayerViewModelTest {
         viewModel.onExternalVideoError(InboundVideoError.ACCESS_FAILED)
         assertEquals(PlayerError.ExternalVideoAccessFailed, viewModel.uiState.value.error)
         assertSame(existingUri, viewModel.uiState.value.videoUri)
+    }
+
+    @Test
+    fun `video session transitions and clearVideoUri invalidate FrameExtractor metadata cache`() = runTest {
+        val uri = mockk<Uri>()
+        viewModel.setVideoUri(uri)
+        verify(exactly = 1) { frameExtractor.invalidateCache() }
+
+        // Re-importing the exact same URI (e.g. edited in place externally) invalidates cache again
+        viewModel.onExternalVideoReceived(uri)
+        verify(exactly = 2) { frameExtractor.invalidateCache() }
+
+        viewModel.clearVideoUri()
+        verify(exactly = 3) { frameExtractor.invalidateCache() }
+    }
+
+    @Test
+    fun `switchToExternalVideoAfterExport preserves capture and export failures when switching to staged video`() = runTest {
+        val originalUri = mockk<Uri>()
+        val stagedUri1 = mockk<Uri>()
+        val stagedUri2 = mockk<Uri>()
+        val stagedUri3 = mockk<Uri>()
+        val bitmap = mockk<Bitmap>(relaxed = true)
+        val frame = mockk<CapturedFrame>(relaxed = true)
+
+        // 1. Capture fails (returns null) after "After Export" was selected
+        val captureGate = CompletableDeferred<Pair<Bitmap, CapturedFrame>?>()
+        coEvery { frameExtractor.extractFrameWithInfo(originalUri, any()) } coAnswers {
+            captureGate.await()
+        }
+        viewModel.setVideoUri(originalUri)
+        viewModel.captureAndSave(motionPhoto = false)
+        viewModel.onExternalVideoReceived(stagedUri1)
+        viewModel.switchToExternalVideoAfterExport()
+
+        captureGate.complete(null)
+        assertSame(stagedUri1, viewModel.uiState.value.videoUri)
+        assertEquals(PlayerError.CaptureFailed, viewModel.uiState.value.error)
+
+        // 2. Export throws SecurityException after "After Export" was selected
+        val permissionGate = CompletableDeferred<ExportResult>()
+        coEvery { frameExtractor.extractFrameWithInfo(stagedUri1, any()) } returns Pair(bitmap, frame)
+        coEvery { frameExporter.exportStaticFrame(bitmap, frame, any(), any()) } coAnswers {
+            permissionGate.await()
+        }
+        viewModel.captureAndSave(motionPhoto = false)
+        viewModel.onExternalVideoReceived(stagedUri2)
+        viewModel.switchToExternalVideoAfterExport()
+
+        permissionGate.completeExceptionally(SecurityException("URI grant expired"))
+        assertSame(stagedUri2, viewModel.uiState.value.videoUri)
+        assertEquals(PlayerError.PermissionDenied, viewModel.uiState.value.error)
+
+        // 3. Export throws generic Exception after "After Export" was selected
+        val exportFailGate = CompletableDeferred<ExportResult>()
+        coEvery { frameExtractor.extractFrameWithInfo(stagedUri2, any()) } returns Pair(bitmap, frame)
+        coEvery { frameExporter.exportStaticFrame(bitmap, frame, any(), any()) } coAnswers {
+            exportFailGate.await()
+        }
+        viewModel.captureAndSave(motionPhoto = false)
+        viewModel.onExternalVideoReceived(stagedUri3)
+        viewModel.switchToExternalVideoAfterExport()
+
+        exportFailGate.completeExceptionally(IllegalStateException("Storage full"))
+        assertSame(stagedUri3, viewModel.uiState.value.videoUri)
+        assertEquals(PlayerError.ExportFailed("Storage full"), viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun `onPlaybackError maps corrupt container, unsupported codec, and access errors to localized PlayerError`() = runTest {
+        val externalUri = mockk<Uri>()
+        val inAppUri = mockk<Uri>()
+
+        // No-op when no active video URI is loaded
+        viewModel.onPlaybackError(PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED)
+        assertNull(viewModel.uiState.value.error)
+
+        // External video session: corrupt container / decoder failure -> UnsupportedVideoFormat
+        viewModel.onExternalVideoReceived(externalUri)
+        viewModel.setPlaying(true)
+        viewModel.onPlaybackError(PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED)
+        assertFalse(viewModel.uiState.value.isPlaying)
+        assertEquals(PlayerError.UnsupportedVideoFormat, viewModel.uiState.value.error)
+
+        viewModel.clearError()
+        viewModel.onPlaybackError(PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED)
+        assertEquals(PlayerError.UnsupportedVideoFormat, viewModel.uiState.value.error)
+
+        // External video session: permission / file missing -> ExternalVideoAccessFailed
+        viewModel.clearError()
+        viewModel.onPlaybackError(PlaybackException.ERROR_CODE_IO_NO_PERMISSION)
+        assertEquals(PlayerError.ExternalVideoAccessFailed, viewModel.uiState.value.error)
+
+        viewModel.clearError()
+        viewModel.onPlaybackError(PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND)
+        assertEquals(PlayerError.ExternalVideoAccessFailed, viewModel.uiState.value.error)
+
+        // In-app session: SecurityException cause -> PermissionDenied
+        viewModel.setVideoUri(inAppUri)
+        viewModel.onPlaybackError(
+            PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE,
+            RuntimeException("Wrapper", SecurityException("Revoked"))
+        )
+        assertEquals(PlayerError.PermissionDenied, viewModel.uiState.value.error)
     }
 }

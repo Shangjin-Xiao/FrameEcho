@@ -56,6 +56,7 @@ import com.shangjin.frameecho.core.media.utils.LogUtils
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -334,6 +335,21 @@ fun PlayerScreen(
                 if (!isPlaying && !isScrubbing) {
                     viewModel.updatePosition(exoPlayer.currentPosition)
                 }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                isVideoLoading = false
+                if (awaitingSettledFrame) {
+                    awaitingSettledFrame = false
+                    viewModel.clearScrubPreview()
+                }
+                LogUtils.w(
+                    context,
+                    "PlayerScreen",
+                    "ExoPlayer playback error (code=${error.errorCode})",
+                    error
+                )
+                viewModel.onPlaybackError(error.errorCode, error.cause)
             }
         }
         exoPlayer.addListener(listener)

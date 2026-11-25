@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
 
 /**
@@ -40,11 +41,27 @@ class FrameExtractor(
         private const val MAX_THUMBNAIL_COUNT = 150
     }
 
-    @Volatile
-    private var cachedMetadata: Pair<String, VideoMetadata>? = null
+    private data class CacheKey(val uri: String, val generation: Long)
+
+    private val cacheGeneration = AtomicLong(0L)
 
     @Volatile
-    private var cachedColorSpace: Pair<String, ColorSpaceInfo>? = null
+    private var cachedMetadata: Pair<CacheKey, VideoMetadata>? = null
+
+    @Volatile
+    private var cachedColorSpace: Pair<CacheKey, ColorSpaceInfo>? = null
+
+    /**
+     * Invalidates cached video metadata and color space information and advances the cache
+     * generation so any in-flight extraction from a previous session cannot repopulate the cache.
+     */
+    fun invalidateCache() {
+        synchronized(this) {
+            cacheGeneration.incrementAndGet()
+            cachedMetadata = null
+            cachedColorSpace = null
+        }
+    }
 
     /**
      * Recycle the bitmap immediately.
@@ -87,55 +104,61 @@ class FrameExtractor(
     suspend fun extractFrameWithInfo(
         videoUri: Uri,
         timestampUs: Long
-    ): Pair<Bitmap, CapturedFrame>? = useRetriever(
-        videoUri,
-        null,
-        "Failed to extract frame with info"
-    ) { retriever ->
-        val bitmap = extractFrameInternal(retriever, timestampUs) ?: return@useRetriever null
+    ): Pair<Bitmap, CapturedFrame>? {
+        val startGeneration = cacheGeneration.get()
+        val cacheKey = CacheKey(videoUri.toString(), startGeneration)
+        return useRetriever(
+            videoUri,
+            null,
+            "Failed to extract frame with info"
+        ) { retriever ->
+            val bitmap = extractFrameInternal(retriever, timestampUs) ?: return@useRetriever null
 
-        val cacheKey = videoUri.toString()
+            // Check both caches first (fast path)
+            var metadata = cachedMetadata?.takeIf { it.first == cacheKey }?.second
+            var colorSpace = cachedColorSpace?.takeIf { it.first == cacheKey }?.second
 
-        // Check both caches first (fast path)
-        var metadata = cachedMetadata?.takeIf { it.first == cacheKey }?.second
-        var colorSpace = cachedColorSpace?.takeIf { it.first == cacheKey }?.second
+            if (metadata == null || colorSpace == null) {
+                // Need to fetch missing info.
+                // We need MediaFormat for both metadata (enrichment) and color space.
+                val mediaFormat = MetadataExtractor.getVideoTrackFormat(context, videoUri)
 
-        if (metadata == null || colorSpace == null) {
-            // Need to fetch missing info.
-            // We need MediaFormat for both metadata (enrichment) and color space.
-            val mediaFormat = MetadataExtractor.getVideoTrackFormat(context, videoUri)
+                if (metadata == null) {
+                    // Extract outside synchronized(this) so main-thread invalidateCache() never blocks on I/O
+                    val extracted = MetadataExtractor.extract(context, videoUri, retriever, mediaFormat)
+                    metadata = synchronized(this) {
+                        cachedMetadata?.takeIf { it.first == cacheKey }?.second ?: run {
+                            if (cacheGeneration.get() == startGeneration) {
+                                cachedMetadata = cacheKey to extracted
+                            }
+                            extracted
+                        }
+                    }
+                }
 
-            if (metadata == null) {
-                // Pass existing retriever and mediaFormat to avoid creating new ones
-                metadata = synchronized(this) {
-                    cachedMetadata?.takeIf { it.first == cacheKey }?.second ?: run {
-                        val extracted = MetadataExtractor.extract(context, videoUri, retriever, mediaFormat)
-                        cachedMetadata = cacheKey to extracted
-                        extracted
+                if (colorSpace == null) {
+                    val detected = mediaFormat?.let { ColorSpaceDetector.detect(it) } ?: ColorSpaceInfo()
+                    colorSpace = synchronized(this) {
+                        cachedColorSpace?.takeIf { it.first == cacheKey }?.second ?: run {
+                            if (cacheGeneration.get() == startGeneration) {
+                                cachedColorSpace = cacheKey to detected
+                            }
+                            detected
+                        }
                     }
                 }
             }
 
-            if (colorSpace == null) {
-                colorSpace = synchronized(this) {
-                    cachedColorSpace?.takeIf { it.first == cacheKey }?.second ?: run {
-                        val detected = mediaFormat?.let { ColorSpaceDetector.detect(it) } ?: ColorSpaceInfo()
-                        cachedColorSpace = cacheKey to detected
-                        detected
-                    }
-                }
-            }
+            val frame = CapturedFrame(
+                timestampUs = timestampUs,
+                width = bitmap.width,
+                height = bitmap.height,
+                colorSpace = colorSpace!!,
+                metadata = metadata!!
+            )
+
+            Pair(bitmap, frame)
         }
-
-        val frame = CapturedFrame(
-            timestampUs = timestampUs,
-            width = bitmap.width,
-            height = bitmap.height,
-            colorSpace = colorSpace!!,
-            metadata = metadata!!
-        )
-
-        Pair(bitmap, frame)
     }
 
     /**
