@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FrameEcho — Español (values-es). AI-translated from values/strings.xml on 2026-11-25; keys and format placeholders unchanged. -->
+<resources>
+    <string name="app_name">FrameEcho</string>
+    <string name="app_slogan">Congela cada fotograma que amas</string>
+    <string name="select_video">Seleccionar video</string>
+    <string name="capture_frame">Capturar fotograma</string>
+    <string name="export_settings">Ajustes de exportación</string>
+    <string name="quality">Calidad</string>
+    <string name="format">Formato</string>
+    <string name="motion_duration">Duración del movimiento (segundos)</string>
+    <string name="preserve_metadata">Conservar metadatos</string>
+    <string name="remember_quick_settings">Recordar ajustes rápidos</string>
+    <string name="remember_quick_settings_hint">Mantener los ajustes de silencio, foto en movimiento y metadatos para el próximo video/sesión</string>
+    <string name="no_video_selected">Ningún video seleccionado</string>
+    <string name="select_video_hint">Explora los fotogramas del video y captura imágenes de alta calidad</string>
+    <string name="captured_info">Capturado: %1$d × %2$d</string>
+    <string name="hdr_info">HDR: %1$s</string>
+    <string name="export_success_message">¡Exportado correctamente!</string>
+    <string name="export_format_fallback_message">Exportado como %2$s (%1$s no es compatible con este dispositivo)</string>
+    <string name="export_audio_dropped_message">Exportado sin sonido</string>
+    <string name="export_fallback_audio_dropped_message">Exportado como %2$s (%1$s no es compatible con este dispositivo) sin sonido</string>
+    <string name="mute">Silenciar</string>
+    <string name="unmute">Activar sonido</string>
+    <string name="play">Reproducir</string>
+    <string name="pause">Pausar</string>
+    <string name="motion_photo_on">Foto en movimiento activada</string>
+    <string name="motion_photo_off">Foto en movimiento desactivada</string>
+    <string name="metadata_on">Metadatos activados</string>
+    <string name="metadata_off">Metadatos desactivados</string>
+    <string name="capture_and_save">Capturar y guardar</string>
+    <string name="forward_5s">Adelantar 5 s</string>
+    <string name="replay_5s">Retroceder 5 s</string>
+    <string name="next_frame">Fotograma siguiente</string>
+    <string name="prev_frame">Fotograma anterior</string>
+    <string name="custom_file_name">Nombre de archivo personalizado</string>
+    <string name="custom_file_name_hint">Nombre del archivo (sin extensión)</string>
+    <string name="default_export_location">Ubicación de exportación predeterminada</string>
+    <string name="location_pictures">Pictures/FrameEcho</string>
+    <string name="location_dcim">DCIM/FrameEcho</string>
+    <string name="location_movies">Movies/FrameEcho</string>
+    <string name="current_name_format">Actual: %1$s</string>
+    <string name="default_name_example">IMG_marca_de_tiempo_posición</string>
+    <string name="name_auto">Automático</string>
+    <string name="location_pictures_root">Pictures</string>
+    <string name="location_dcim_root">DCIM</string>
+    <string name="location_movies_root">Movies</string>
+    <string name="scrubbing_position">Buscando: %1$s</string>
+    <string name="fine_scrubbing_position">Búsqueda precisa: %1$s (%2$s ms)</string>
+    <string name="fine_scrubbing_frame_position">Búsqueda precisa: %1$s  F#%2$d (%3$s ms)</string>
+    <string name="swipe_up_fine_scrub">↑ Desliza hacia arriba para el control preciso</string>
+    <string name="swipe_down_exit_fine_scrub">↓ Desliza hacia atrás para salir del control preciso</string>
+    <string name="zoom_reset">Restablecer</string>
+    <string name="about">Acerca de</string>
+    <string name="go_back">Volver</string>
+    <string name="app_description">Una herramienta profesional para extraer fotogramas de video. Captura cualquier momento de tus videos con alta calidad, compatible con HDR y fotos en movimiento.</string>
+    <string name="developer">Desarrollador</string>
+    <string name="project_homepage">Página del proyecto</string>
+    <string name="official_website">Sitio web oficial</string>
+    <string name="feedback">Comentarios y problemas</string>
+    <string name="license">Licencia</string>
+    <string name="app_version">Versión</string>
+    <string name="location_custom">Carpeta personalizada…</string>
+    <string name="custom_folder_active">Usando carpeta personalizada</string>
+
+    <!-- Format descriptions -->
+    <string name="format_desc_jpeg">Compatibilidad universal, archivo pequeño</string>
+
+    <!-- Quality hints -->
+    <string name="quality_hint">Los valores más altos producen mejor calidad, pero archivos más grandes</string>
+
+    <!-- HDR strategy descriptions -->
+
+    <!-- UX: user-friendly error messages -->
+    <string name="error_capture_failed">No se pudo capturar el fotograma. Prueba con otra posición del video.</string>
+    <string name="error_export_failed">La exportación falló. Inténtalo de nuevo.</string>
+    <string name="error_permission_denied">Se revocó el permiso de acceso al video. Vuelve a seleccionar el video.</string>
+    <string name="error_unsupported_video_format">Formato de video no compatible. Selecciona un archivo de video válido.</string>
+    <string name="error_external_video_access_failed">No se pudo abrir el video externo. Comprueba los permisos del archivo o selecciona otro video.</string>
+
+    <!-- External video switch while exporting -->
+    <string name="external_video_export_busy_title">Exportación en curso</string>
+    <string name="external_video_export_busy_message">Se está exportando un fotograma. Cambiar ahora cancelará la exportación en curso. ¿Quieres cambiar cuando termine la exportación, cambiar de inmediato o mantener el video actual?</string>
+    <string name="external_video_switch_now">Cambiar ahora</string>
+    <string name="external_video_switch_after_export">Después de exportar</string>
+    <string name="external_video_keep_current">Mantener el actual</string>
+
+    <!-- UX: snackbar actions -->
+    <string name="snackbar_action_view">Ver</string>
+
+    <!-- UX: loading / cancel -->
+    <string name="cancel">Cancelar</string>
+    <string name="exporting">Exportando…</string>
+    <string name="video_loading">Cargando…</string>
+    <string name="char_count_format">%1$d/%2$d</string>
+
+    <!-- Onboarding / New user guide -->
+    <string name="onboarding_skip">Omitir</string>
+    <string name="onboarding_next">Siguiente</string>
+    <string name="onboarding_got_it">¡Entendido!</string>
+
+    <string name="onboarding_capture_title">Capturar y guardar</string>
+    <string name="onboarding_capture_desc">Toca el botón de la cámara en la esquina inferior derecha para capturar el fotograma actual y guardarlo al instante.</string>
+
+    <string name="onboarding_mute_title">Silenciar audio</string>
+    <string name="onboarding_mute_desc">Silencia la reproducción del video y elimina el audio de las fotos en movimiento exportadas.</string>
+
+    <string name="onboarding_motion_title">Foto en movimiento</string>
+    <string name="onboarding_motion_desc">Activa esta opción para exportar una Google Motion Photo: una imagen fija con un breve clip de video incrustado alrededor del fotograma capturado.</string>
+
+    <string name="onboarding_metadata_title">Conservar metadatos</string>
+    <string name="onboarding_metadata_desc">Mantén los metadatos EXIF originales del video (fecha, ubicación, datos de la cámara) en la imagen exportada.</string>
+
+    <string name="onboarding_slider_title">Búsqueda y desplazamiento preciso</string>
+    <string name="onboarding_slider_desc">Arrastra el control deslizante para buscar. Desliza hacia ARRIBA mientras arrastras para entrar en el modo de desplazamiento preciso y controlar fotograma a fotograma.</string>
+
+    <string name="onboarding_gestures_title">Gestos en el video</string>
+    <string name="onboarding_gestures_desc">Toca el video para reproducir/pausar. Pellizca para hacer zoom (hasta 3x). Con el zoom activado, arrastra para desplazarte o toca dos veces para restablecer el zoom.</string>
+
+    <string name="onboarding_frame_step_title">Avance por fotogramas</string>
+    <string name="onboarding_frame_step_desc">Usa los botones ‹‹ y ›› para retroceder o avanzar un fotograma cada vez y elegir el fotograma exacto.</string>
+
+    <string name="onboarding_show_guide">Mostrar la guía de nuevo</string>
+
+    <!-- Update checker -->
+    <string name="update_check_for_updates">Buscar actualizaciones</string>
+    <string name="update_current_version">Versión actual: %1$s</string>
+    <string name="update_available">Actualización disponible</string>
+    <string name="update_new_version">¡Hay una nueva versión %1$s disponible!</string>
+    <string name="update_release_notes">Notas de la versión</string>
+    <string name="update_go_to_release">Ir a la versión</string>
+    <string name="update_ignore_this_time">Ahora no</string>
+    <string name="update_ignore_permanently">Ignorar esta versión</string>
+    <string name="update_already_latest">Ya tienes la versión más reciente</string>
+    <string name="update_ignored_version">La nueva versión %1$s se ignorará permanentemente</string>
+    <string name="update_check_failed">No se pudieron buscar actualizaciones. Comprueba tu conexión.</string>
+</resources>
