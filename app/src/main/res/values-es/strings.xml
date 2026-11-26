@@ -49,7 +49,7 @@
     <string name="fine_scrubbing_position">Búsqueda precisa: %1$s (%2$s ms)</string>
     <string name="fine_scrubbing_frame_position">Búsqueda precisa: %1$s  F#%2$d (%3$s ms)</string>
     <string name="swipe_up_fine_scrub">↑ Desliza hacia arriba para el control preciso</string>
-    <string name="swipe_down_exit_fine_scrub">↓ Desliza hacia atrás para salir del control preciso</string>
+    <string name="swipe_down_exit_fine_scrub">↓ Desliza hacia abajo para salir del control preciso</string>
     <string name="zoom_reset">Restablecer</string>
     <string name="about">Acerca de</string>
     <string name="go_back">Volver</string>
@@ -111,8 +111,8 @@
     <string name="onboarding_metadata_title">Conservar metadatos</string>
     <string name="onboarding_metadata_desc">Mantén los metadatos EXIF originales del video (fecha, ubicación, datos de la cámara) en la imagen exportada.</string>
 
-    <string name="onboarding_slider_title">Búsqueda y desplazamiento preciso</string>
-    <string name="onboarding_slider_desc">Arrastra el control deslizante para buscar. Desliza hacia ARRIBA mientras arrastras para entrar en el modo de desplazamiento preciso y controlar fotograma a fotograma.</string>
+    <string name="onboarding_slider_title">Búsqueda y ajuste preciso</string>
+    <string name="onboarding_slider_desc">Arrastra el control deslizante para buscar. Desliza hacia ARRIBA mientras arrastras para entrar en el modo de búsqueda precisa y controlar fotograma a fotograma.</string>
 
     <string name="onboarding_gestures_title">Gestos en el video</string>
     <string name="onboarding_gestures_desc">Toca el video para reproducir/pausar. Pellizca para hacer zoom (hasta 3x). Con el zoom activado, arrastra para desplazarte o toca dos veces para restablecer el zoom.</string>
