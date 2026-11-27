@@ -16,10 +16,10 @@ async function makeBanner() {
     }
 
     try {
-        const imgEmpty = await getBase64Image('docs/screenshot_empty.jpg');
-        const imgPlayer = await getBase64Image('docs/screenshot_player.jpg');
-        const imgExport = await getBase64Image('docs/screenshot_export.jpg');
-        const iconSvg = await fs.readFile(path.join(__dirname, '..', 'docs', 'icon.svg'), 'utf8');
+        const imgEmpty = await getBase64Image('assets/screenshot_empty.jpg');
+        const imgPlayer = await getBase64Image('assets/screenshot_player.jpg');
+        const imgExport = await getBase64Image('assets/screenshot_export.jpg');
+        const iconSvg = await fs.readFile(path.join(__dirname, '..', 'icon.svg'), 'utf8');
         
         // Extract the core of the icon SVG to embed
         const iconContent = iconSvg.replace(/<svg[^>]*>/, '').replace(/<\/svg>/, '');
@@ -113,7 +113,7 @@ async function makeBanner() {
     </g>
 </svg>`;
 
-        await fs.writeFile(path.join(__dirname, '..', 'docs', 'banner.svg'), svg);
+        await fs.writeFile(path.join(__dirname, '..', 'assets', 'banner.svg'), svg);
         console.log("Banner created successfully with premium design!");
     } catch (e) {
         console.error("Error creating banner:", e);

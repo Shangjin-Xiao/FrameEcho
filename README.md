@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/banner.svg" alt="FrameEcho Banner" width="100%" />
+<img src="assets/banner.svg" alt="FrameEcho Banner" width="100%" />
 
 <a id="frameecho"></a>
 
@@ -46,9 +46,9 @@ Extract precise frames from any video with HDR awareness, motion photo export, a
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshot_empty.jpg" width="240" alt="尚未选择视频" /></td>
-    <td align="center"><img src="docs/screenshot_player.jpg" width="240" alt="视频抽帧界面" /></td>
-    <td align="center"><img src="docs/screenshot_export.jpg" width="240" alt="导出设置界面" /></td>
+    <td align="center"><img src="assets/screenshot_empty.jpg" width="240" alt="尚未选择视频" /></td>
+    <td align="center"><img src="assets/screenshot_player.jpg" width="240" alt="视频抽帧界面" /></td>
+    <td align="center"><img src="assets/screenshot_export.jpg" width="240" alt="导出设置界面" /></td>
   </tr>
   <tr>
     <td align="center"><strong>首页状态</strong><br/>选择视频后即可开始精准定位帧。</td>
@@ -159,9 +159,9 @@ Extract precise frames from any video with HDR awareness, motion photo export, a
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshot_empty.jpg" width="240" alt="No Video Selected" /></td>
-    <td align="center"><img src="docs/screenshot_player.jpg" width="240" alt="Video Player Screen" /></td>
-    <td align="center"><img src="docs/screenshot_export.jpg" width="240" alt="Export Settings" /></td>
+    <td align="center"><img src="assets/screenshot_empty.jpg" width="240" alt="No Video Selected" /></td>
+    <td align="center"><img src="assets/screenshot_player.jpg" width="240" alt="Video Player Screen" /></td>
+    <td align="center"><img src="assets/screenshot_export.jpg" width="240" alt="Export Settings" /></td>
   </tr>
   <tr>
     <td align="center"><strong>Start clean</strong><br/>Open a video and jump straight into frame-accurate capture.</td>
