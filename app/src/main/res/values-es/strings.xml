@@ -77,6 +77,8 @@
     <string name="error_permission_denied">Se revocó el permiso de acceso al video. Vuelve a seleccionar el video.</string>
     <string name="error_unsupported_video_format">Formato de video no compatible. Selecciona un archivo de video válido.</string>
     <string name="error_external_video_access_failed">No se pudo abrir el video externo. Comprueba los permisos del archivo o selecciona otro video.</string>
+    <string name="error_exported_file_unavailable">El archivo exportado ya no está disponible. Es posible que se haya movido o eliminado.</string>
+    <string name="error_no_app_to_open_media">No se encontró ninguna aplicación compatible para completar esta acción.</string>
 
     <!-- External video switch while exporting -->
     <string name="external_video_export_busy_title">Exportación en curso</string>
@@ -85,8 +87,13 @@
     <string name="external_video_switch_after_export">Después de exportar</string>
     <string name="external_video_keep_current">Mantener el actual</string>
 
-    <!-- UX: snackbar actions -->
+    <!-- UX: snackbar & frame info card actions -->
     <string name="snackbar_action_view">Ver</string>
+    <string name="snackbar_action_share">Compartir</string>
+    <string name="share_captured_frame">Compartir fotograma capturado</string>
+    <string name="view_captured_frame">Ver fotograma capturado</string>
+    <string name="captured_frame_thumbnail">Vista previa del fotograma capturado</string>
+    <string name="motion_photo_badge">Foto en movimiento</string>
 
     <!-- UX: loading / cancel -->
     <string name="cancel">Cancelar</string>

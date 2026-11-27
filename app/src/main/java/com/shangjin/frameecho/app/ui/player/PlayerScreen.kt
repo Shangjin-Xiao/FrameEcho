@@ -8,7 +8,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import androidx.core.net.toUri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -61,6 +60,8 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import com.shangjin.frameecho.R
+import com.shangjin.frameecho.app.intent.ExportedMediaActionResult
+import com.shangjin.frameecho.app.intent.ExportedMediaDispatcher
 import com.shangjin.frameecho.app.intent.InboundVideoEvent
 import com.shangjin.frameecho.app.ui.components.LEGACY_ONBOARDING_STEP_KEYS
 import com.shangjin.frameecho.app.ui.components.OnboardingManager
@@ -378,12 +379,24 @@ fun PlayerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Localized strings for snackbar messages
+    // Localized strings for snackbar & exported media actions
     val exportSuccessMsg = stringResource(R.string.export_success_message)
     val exportFallbackMsg = stringResource(R.string.export_format_fallback_message)
     val exportAudioDroppedMsg = stringResource(R.string.export_audio_dropped_message)
     val exportFallbackAudioDroppedMsg = stringResource(R.string.export_fallback_audio_dropped_message)
-    val viewActionLabel = stringResource(R.string.snackbar_action_view)
+    val shareActionLabel = stringResource(R.string.snackbar_action_share)
+    val shareFrameChooserTitle = stringResource(R.string.share_captured_frame)
+    val viewFrameChooserTitle = stringResource(R.string.view_captured_frame)
+    val exportedFileUnavailableMsg = stringResource(R.string.error_exported_file_unavailable)
+    val noAppToOpenMediaMsg = stringResource(R.string.error_no_app_to_open_media)
+
+    val resolveDispatchErrorMessage: (ExportedMediaActionResult) -> String? = { dispatchResult ->
+        when (dispatchResult) {
+            ExportedMediaActionResult.SUCCESS -> null
+            ExportedMediaActionResult.FILE_UNAVAILABLE -> exportedFileUnavailableMsg
+            ExportedMediaActionResult.NO_APP_AVAILABLE -> noAppToOpenMediaMsg
+        }
+    }
 
     // Show export result
     LaunchedEffect(uiState.exportResult) {
@@ -403,24 +416,24 @@ fun PlayerScreen(
                 }
                 val snackbarResult = snackbarHostState.showSnackbar(
                     message = message,
-                    actionLabel = viewActionLabel,
+                    actionLabel = shareActionLabel,
                     duration = SnackbarDuration.Short
                 )
-                if (snackbarResult == SnackbarResult.ActionPerformed) {
-                    try {
-                        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(
-                                result.outputPath.toUri(),
-                                result.format.mimeType
-                            )
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        // Security: Wrap implicit intent with chooser to prevent hijacking
-                        val chooserIntent = Intent.createChooser(viewIntent, null)
-                        context.startActivity(chooserIntent)
-                    } catch (_: Exception) { }
-                }
                 viewModel.clearExportResult()
+                if (snackbarResult == SnackbarResult.ActionPerformed) {
+                    val dispatchResult = ExportedMediaDispatcher.Default.share(
+                        context = context,
+                        outputPath = result.outputPath,
+                        mimeType = result.format.mimeType,
+                        chooserTitle = shareFrameChooserTitle
+                    )
+                    resolveDispatchErrorMessage(dispatchResult)?.let { errorText ->
+                        snackbarHostState.showSnackbar(
+                            message = errorText,
+                            duration = SnackbarDuration.Long
+                        )
+                    }
+                }
             }
             is ExportResult.Error -> {
                 snackbarHostState.showSnackbar(
@@ -614,8 +627,58 @@ fun PlayerScreen(
                         }
                     }
 
-                    // Frame info card
-                    FrameInfoCard(capturedFrame = uiState.capturedFrame)
+                    // Frame info card (persistent preview + system share & external view)
+                    val isBusyExporting = uiState.isCapturing || uiState.isExporting
+                    val lastExported = uiState.lastExportSuccess
+                    FrameInfoCard(
+                        capturedFrame = uiState.capturedFrame,
+                        previewBitmap = uiState.capturedPreviewBitmap,
+                        isMotionPhoto = lastExported?.isMotionPhoto ?: uiState.isCapturedMotionPhoto,
+                        isExporting = isBusyExporting,
+                        canOpenOrShare = !isBusyExporting &&
+                            lastExported != null &&
+                            lastExported.outputPath.isNotBlank(),
+                        onShareClick = {
+                            val target = uiState.lastExportSuccess
+                            if (target != null && !uiState.isCapturing && !uiState.isExporting) {
+                                val dispatchResult = ExportedMediaDispatcher.Default.share(
+                                    context = context,
+                                    outputPath = target.outputPath,
+                                    mimeType = target.format.mimeType,
+                                    chooserTitle = shareFrameChooserTitle
+                                )
+                                resolveDispatchErrorMessage(dispatchResult)?.let { errorText ->
+                                    scope.launch {
+                                        snackbarHostState.currentSnackbarData?.dismiss()
+                                        snackbarHostState.showSnackbar(
+                                            message = errorText,
+                                            duration = SnackbarDuration.Long
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        onViewClick = {
+                            val target = uiState.lastExportSuccess
+                            if (target != null && !uiState.isCapturing && !uiState.isExporting) {
+                                val dispatchResult = ExportedMediaDispatcher.Default.view(
+                                    context = context,
+                                    outputPath = target.outputPath,
+                                    mimeType = target.format.mimeType,
+                                    chooserTitle = viewFrameChooserTitle
+                                )
+                                resolveDispatchErrorMessage(dispatchResult)?.let { errorText ->
+                                    scope.launch {
+                                        snackbarHostState.currentSnackbarData?.dismiss()
+                                        snackbarHostState.showSnackbar(
+                                            message = errorText,
+                                            duration = SnackbarDuration.Long
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    )
                 } else if (isResolvingInboundVideo || inboundVideoEvent is InboundVideoEvent.OpenVideo) {
                     val loadingLabel = stringResource(R.string.video_loading)
                     Box(

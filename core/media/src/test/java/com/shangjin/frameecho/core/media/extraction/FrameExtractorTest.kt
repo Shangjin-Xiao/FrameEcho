@@ -573,4 +573,94 @@ class FrameExtractorTest {
         assertEquals(freshMetadata, session2Result.second.metadata)
         assertEquals(2, extractCount)
     }
+
+    @Test
+    fun `createPreviewThumbnail downscales landscape and portrait frames to target short side`() = runBlocking {
+        val landscapeSource = mockk<Bitmap>(relaxed = true) {
+            every { isRecycled } returns false
+            every { width } returns 3840
+            every { height } returns 2160
+            every { config } returns Bitmap.Config.ARGB_8888
+        }
+        val landscapeThumb = mockk<Bitmap>(relaxed = true)
+        every { Bitmap.createScaledBitmap(landscapeSource, 284, 160, true) } returns landscapeThumb
+
+        val resultLandscape = frameExtractor.createPreviewThumbnail(landscapeSource, 160)
+        assertSame(landscapeThumb, resultLandscape)
+        verify(exactly = 0) { landscapeSource.recycle() }
+
+        val portraitSource = mockk<Bitmap>(relaxed = true) {
+            every { isRecycled } returns false
+            every { width } returns 1080
+            every { height } returns 1920
+            every { config } returns Bitmap.Config.ARGB_8888
+        }
+        val portraitThumb = mockk<Bitmap>(relaxed = true)
+        every { Bitmap.createScaledBitmap(portraitSource, 160, 284, true) } returns portraitThumb
+
+        val resultPortrait = frameExtractor.createPreviewThumbnail(portraitSource, 160)
+        assertSame(portraitThumb, resultPortrait)
+        verify(exactly = 0) { portraitSource.recycle() }
+    }
+
+    @Test
+    fun `createPreviewThumbnail copies small frame to independent software bitmap when scale returns source`() = runBlocking {
+        val smallSource = mockk<Bitmap>(relaxed = true) {
+            every { isRecycled } returns false
+            every { width } returns 120
+            every { height } returns 90
+            every { config } returns Bitmap.Config.ARGB_8888
+        }
+        val distinctCopy = mockk<Bitmap>(relaxed = true)
+        // Android's Bitmap.createScaledBitmap returns `source` itself when target dimensions match
+        every { Bitmap.createScaledBitmap(smallSource, 120, 90, true) } returns smallSource
+        every { smallSource.copy(Bitmap.Config.ARGB_8888, false) } returns distinctCopy
+
+        val result = frameExtractor.createPreviewThumbnail(smallSource, 160)
+
+        assertSame(distinctCopy, result)
+        verify(exactly = 1) { smallSource.copy(Bitmap.Config.ARGB_8888, false) }
+        verify(exactly = 0) { smallSource.recycle() }
+        verify(exactly = 0) { distinctCopy.recycle() }
+    }
+
+    @Test
+    fun `createPreviewThumbnail converts HARDWARE or F16 bitmap to ARGB_8888 and recycles intermediate full-res copy`() = runBlocking {
+        val hardwareSource = mockk<Bitmap>(relaxed = true) {
+            every { isRecycled } returns false
+            every { width } returns 1920
+            every { height } returns 1080
+            every { config } returns Bitmap.Config.HARDWARE
+        }
+        val intermediateSoftCopy = mockk<Bitmap>(relaxed = true) {
+            every { isRecycled } returns false
+        }
+        val scaledSoftThumb = mockk<Bitmap>(relaxed = true)
+        every { hardwareSource.copy(Bitmap.Config.ARGB_8888, false) } returns intermediateSoftCopy
+        every { Bitmap.createScaledBitmap(intermediateSoftCopy, 284, 160, true) } returns scaledSoftThumb
+
+        val result = frameExtractor.createPreviewThumbnail(hardwareSource, 160)
+
+        assertSame(scaledSoftThumb, result)
+        verify(exactly = 1) { intermediateSoftCopy.recycle() }
+        verify(exactly = 0) { hardwareSource.recycle() }
+        verify(exactly = 0) { scaledSoftThumb.recycle() }
+    }
+
+    @Test
+    fun `createPreviewThumbnail returns null safely for recycled or invalid-dimension bitmap`() = runBlocking {
+        val recycled = mockk<Bitmap>(relaxed = true) {
+            every { isRecycled } returns true
+            every { width } returns 1920
+            every { height } returns 1080
+        }
+        val zeroSize = mockk<Bitmap>(relaxed = true) {
+            every { isRecycled } returns false
+            every { width } returns 0
+            every { height } returns 1080
+        }
+
+        org.junit.Assert.assertNull(frameExtractor.createPreviewThumbnail(recycled, 160))
+        org.junit.Assert.assertNull(frameExtractor.createPreviewThumbnail(zeroSize, 160))
+    }
 }
