@@ -10,5 +10,7 @@ data class CapturedFrame(
     val colorSpace: ColorSpaceInfo,
     val metadata: VideoMetadata,
     val format: ExportFormat = ExportFormat.JPEG,
-    val quality: Int = 100
+    val quality: Int = 100,
+    /** Whether HDR-to-SDR tone mapping to sRGB has already been applied during extraction */
+    val isToneMapped: Boolean = false
 )

@@ -23,6 +23,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -135,6 +136,7 @@ class PlayerViewModel : ViewModel() {
     private var activeThumbnailCount: Int = 0
     private var activeThumbnailAnchorIndex: Int = 0
     private var captureAndSaveJob: Job? = null
+    private var hdrCaptureIdleJob: Job? = null
     private var activeBitmapExportRefCount: Int = 0
 
     // ── Scrub preview ───────────────────────────────────────────────────
@@ -199,6 +201,13 @@ class PlayerViewModel : ViewModel() {
          * concurrent codec instances.
          */
         const val SCRUB_PREVIEW_IDLE_RELEASE_MS = 10_000L
+
+        /**
+         * How long [FrameExtractor]'s Media3 GPU HDR capture session stays open after an
+         * export finishes so consecutive captures reuse the warm decoder, before releasing
+         * its hardware codec and GL context back to the system.
+         */
+        const val HDR_CAPTURE_IDLE_RELEASE_MS = 10_000L
     }
 
     fun initialize(context: Context) {
@@ -344,7 +353,9 @@ class PlayerViewModel : ViewModel() {
         // after the StateFlow no longer exposes the old bitmap.
         val oldBitmap = _uiState.value.capturedBitmap
         val canRecycleImmediately = !isAnyExportRunning()
+        cancelHdrCaptureIdleRelease()
         cancelExport()
+        cancelHdrCaptureIdleRelease()
         frameExtractor?.invalidateCache()
         clearThumbnailCache()
         // The preview session is bound to a single URI — tear it down before switching.
@@ -386,7 +397,9 @@ class PlayerViewModel : ViewModel() {
     fun clearVideoUri() {
         val oldBitmap = _uiState.value.capturedBitmap
         val canRecycleImmediately = !isAnyExportRunning()
+        cancelHdrCaptureIdleRelease()
         cancelExport()
+        cancelHdrCaptureIdleRelease()
         frameExtractor?.invalidateCache()
         clearThumbnailCache()
         releaseScrubPreview()
@@ -773,6 +786,7 @@ class PlayerViewModel : ViewModel() {
         val extractor = frameExtractor ?: return
         val exporter = frameExporter ?: return
 
+        cancelHdrCaptureIdleRelease()
         captureAndSaveJob = viewModelScope.launch {
             _uiState.update { it.copy(isCapturing = true, isExporting = true, error = null, exportResult = null) }
 
@@ -802,7 +816,9 @@ class PlayerViewModel : ViewModel() {
                             isCapturing = false
                         )
                     }
-                    oldBitmap?.let { extractor.releaseBitmap(it) }
+                    if (oldBitmap != null && oldBitmap !== bitmap) {
+                        extractor.releaseBitmap(oldBitmap)
+                    }
 
                     val customTreeUri = _uiState.value.customExportTreeUri
 
@@ -878,6 +894,8 @@ class PlayerViewModel : ViewModel() {
                         fromExternalIntent = true,
                         preserveExportResult = true
                     )
+                } else if (currentCoroutineContext().isActive && postExportState.videoUri != null) {
+                    scheduleHdrCaptureIdleRelease()
                 }
             }
         }
@@ -916,13 +934,17 @@ class PlayerViewModel : ViewModel() {
         captureAndSaveJob = null
     }
 
-    override fun onCleared() {
+    public override fun onCleared() {
         super.onCleared()
+        cancelHdrCaptureIdleRelease()
         // Cancel running jobs FIRST — the export coroutine may still hold a
         // reference to capturedBitmap on Dispatchers.IO (e.g. inside
         // Bitmap.compress).  Recycling the bitmap while the IO work is
         // in-flight would cause a use-after-recycle crash.
         captureAndSaveJob?.cancel()
+        // Deterministically release any open Media3 GPU HDR capture session
+        // (coordinated with any in-flight extraction inside FrameExtractor).
+        frameExtractor?.releaseSession()
         // Do NOT recycle capturedBitmap here: the cancelled export coroutine
         // may still be executing non-cancellable blocking IO that references
         // the bitmap.  The Bitmap finalizer will recycle it once the last
@@ -931,6 +953,19 @@ class PlayerViewModel : ViewModel() {
         clearThumbnailCache(recycleBitmaps = true)
         // Same for the preview session: it owns a decoder and a GL context.
         releaseScrubPreview()
+    }
+
+    private fun cancelHdrCaptureIdleRelease() {
+        hdrCaptureIdleJob?.cancel()
+        hdrCaptureIdleJob = null
+    }
+
+    private fun scheduleHdrCaptureIdleRelease() {
+        hdrCaptureIdleJob?.cancel()
+        hdrCaptureIdleJob = viewModelScope.launch {
+            delay(HDR_CAPTURE_IDLE_RELEASE_MS)
+            frameExtractor?.releaseSession()
+        }
     }
 
     private fun beginBitmapExportUsage() {
