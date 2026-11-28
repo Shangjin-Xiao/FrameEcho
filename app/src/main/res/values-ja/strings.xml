@@ -76,6 +76,8 @@
     <string name="error_permission_denied">動画へのアクセス権限が失効しました。動画をもう一度選択してください。</string>
     <string name="error_unsupported_video_format">サポートされていない動画形式です。有効な動画ファイルを選択してください。</string>
     <string name="error_external_video_access_failed">外部動画ファイルにアクセスできません。権限を確認するか、別の動画を選択してください。</string>
+    <string name="error_exported_file_unavailable">エクスポートされたファイルが見つかりません。移動または削除された可能性があります。</string>
+    <string name="error_no_app_to_open_media">この操作を実行できるアプリが見つかりません。</string>
 
     <!-- エクスポート中の外部動画切り替え確認 -->
     <string name="external_video_export_busy_title">エクスポート中</string>
@@ -84,8 +86,13 @@
     <string name="external_video_switch_after_export">完了後に切替</string>
     <string name="external_video_keep_current">切り替えない</string>
 
-    <!-- UX: snackbar actions -->
+    <!-- UX: snackbar & frame info card actions -->
     <string name="snackbar_action_view">表示</string>
+    <string name="snackbar_action_share">共有</string>
+    <string name="share_captured_frame">キャプチャしたフレームを共有</string>
+    <string name="view_captured_frame">キャプチャしたフレームを表示</string>
+    <string name="captured_frame_thumbnail">キャプチャしたフレームのサムネイルプレビュー</string>
+    <string name="motion_photo_badge">モーションフォト</string>
 
     <!-- UX: loading / cancel -->
     <string name="cancel">キャンセル</string>

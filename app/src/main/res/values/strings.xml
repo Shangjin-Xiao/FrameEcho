@@ -76,6 +76,8 @@
     <string name="error_permission_denied">Video access permission was revoked. Please re-select the video.</string>
     <string name="error_unsupported_video_format">Unsupported video format. Please select a valid video file.</string>
     <string name="error_external_video_access_failed">Unable to open the external video. Please check file permissions or select another video.</string>
+    <string name="error_exported_file_unavailable">Exported file is no longer available. It may have been moved or deleted.</string>
+    <string name="error_no_app_to_open_media">No compatible app found to complete this action.</string>
 
     <!-- External video switch while exporting -->
     <string name="external_video_export_busy_title">Export in Progress</string>
@@ -84,8 +86,13 @@
     <string name="external_video_switch_after_export">After Export</string>
     <string name="external_video_keep_current">Keep Current</string>
 
-    <!-- UX: snackbar actions -->
+    <!-- UX: snackbar & frame info card actions -->
     <string name="snackbar_action_view">View</string>
+    <string name="snackbar_action_share">Share</string>
+    <string name="share_captured_frame">Share captured frame</string>
+    <string name="view_captured_frame">View captured frame</string>
+    <string name="captured_frame_thumbnail">Captured frame preview</string>
+    <string name="motion_photo_badge">Motion Photo</string>
 
     <!-- UX: loading / cancel -->
     <string name="cancel">Cancel</string>

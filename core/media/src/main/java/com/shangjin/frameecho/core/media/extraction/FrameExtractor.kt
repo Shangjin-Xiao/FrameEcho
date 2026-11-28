@@ -35,6 +35,8 @@ class FrameExtractor(
 ) {
     companion object {
         const val DEFAULT_THUMBNAIL_CHUNK_SIZE = 8
+        const val DEFAULT_PREVIEW_SHORT_SIDE_PX = 160
+        private const val MAX_PREVIEW_LONG_SIDE_PX = 640
         private const val MAX_THUMBNAIL_DIMENSION = 240
         // Fits the timeline's 150 thumbnails at 120 x 240, including portrait videos.
         private const val MAX_THUMBNAIL_BATCH_PIXELS = 4_500_000L
@@ -70,6 +72,91 @@ class FrameExtractor(
         if (!bitmap.isRecycled) {
             bitmap.recycle()
         }
+    }
+
+    /**
+     * Create a downsampled software (`ARGB_8888`) preview thumbnail for Compose UI display.
+     *
+     * Always returns an independent [Bitmap] instance distinct from [source] so that recycling
+     * the full-resolution `capturedBitmap` can never invalidate an in-flight Compose draw pass.
+     * The returned thumbnail is intended to be freed by GC when unreachable (never explicitly recycled).
+     */
+    suspend fun createPreviewThumbnail(
+        source: Bitmap,
+        targetShortSidePx: Int = DEFAULT_PREVIEW_SHORT_SIDE_PX
+    ): Bitmap? = withContext(Dispatchers.Default) {
+        createPreviewThumbnailSync(source, targetShortSidePx)
+    }
+
+    internal fun createPreviewThumbnailSync(
+        source: Bitmap,
+        targetShortSidePx: Int = DEFAULT_PREVIEW_SHORT_SIDE_PX
+    ): Bitmap? {
+        if (source.isRecycled || targetShortSidePx <= 0) return null
+        val srcWidth = source.width
+        val srcHeight = source.height
+        if (srcWidth <= 0 || srcHeight <= 0) return null
+
+        val (targetWidth, targetHeight) = previewThumbnailDimensions(
+            sourceWidth = srcWidth,
+            sourceHeight = srcHeight,
+            targetShortSidePx = targetShortSidePx
+        )
+
+        var softSource: Bitmap? = null
+        return try {
+            val working = if (source.config != Bitmap.Config.ARGB_8888) {
+                val copied = source.copy(Bitmap.Config.ARGB_8888, false) ?: return null
+                if (copied !== source) {
+                    softSource = copied
+                }
+                copied
+            } else {
+                source
+            }
+
+            val scaled = working.scale(targetWidth, targetHeight, true)
+            when {
+                scaled === source -> {
+                    scaled.copy(Bitmap.Config.ARGB_8888, false)?.takeIf { it !== source }
+                }
+                scaled === softSource -> {
+                    softSource = null
+                    scaled
+                }
+                else -> scaled
+            }
+        } catch (e: Exception) {
+            LogUtils.w(context, "FrameExtractor", "Failed to create preview thumbnail", e)
+            null
+        } finally {
+            val temp = softSource
+            if (temp != null && temp !== source && !temp.isRecycled) {
+                temp.recycle()
+            }
+        }
+    }
+
+    internal fun previewThumbnailDimensions(
+        sourceWidth: Int,
+        sourceHeight: Int,
+        targetShortSidePx: Int = DEFAULT_PREVIEW_SHORT_SIDE_PX
+    ): Pair<Int, Int> {
+        val shortSide = minOf(sourceWidth, sourceHeight)
+        val longSide = maxOf(sourceWidth, sourceHeight)
+        val maxLongSidePx = maxOf(targetShortSidePx, MAX_PREVIEW_LONG_SIDE_PX)
+        val shortScale = if (shortSide > targetShortSidePx) {
+            targetShortSidePx.toDouble() / shortSide.toDouble()
+        } else {
+            1.0
+        }
+        val scale = if (longSide * shortScale > maxLongSidePx) {
+            minOf(1.0, shortScale, maxLongSidePx.toDouble() / longSide.toDouble())
+        } else {
+            minOf(1.0, shortScale)
+        }
+        return (sourceWidth * scale).roundToInt().coerceAtLeast(1) to
+            (sourceHeight * scale).roundToInt().coerceAtLeast(1)
     }
 
     /**

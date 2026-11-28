@@ -76,6 +76,8 @@
     <string name="error_permission_denied">视频访问权限已失效，请重新选择视频</string>
     <string name="error_unsupported_video_format">不支持的视频格式，请选择有效的视频文件</string>
     <string name="error_external_video_access_failed">无法访问外部视频文件，请检查权限或重新选择视频</string>
+    <string name="error_exported_file_unavailable">导出的文件已不可用，可能已被移动或删除</string>
+    <string name="error_no_app_to_open_media">未找到可执行此操作的应用</string>
 
     <!-- 导出期间收到外部视频的切换确认 -->
     <string name="external_video_export_busy_title">正在导出画面</string>
@@ -84,8 +86,13 @@
     <string name="external_video_switch_after_export">导出后切换</string>
     <string name="external_video_keep_current">暂不切换</string>
 
-    <!-- UX: snackbar actions -->
+    <!-- UX: snackbar & frame info card actions -->
     <string name="snackbar_action_view">查看</string>
+    <string name="snackbar_action_share">分享</string>
+    <string name="share_captured_frame">分享截取画面</string>
+    <string name="view_captured_frame">查看截取画面</string>
+    <string name="captured_frame_thumbnail">截取画面缩略图预览</string>
+    <string name="motion_photo_badge">动态照片</string>
 
     <!-- UX: loading / cancel -->
     <string name="cancel">取消</string>

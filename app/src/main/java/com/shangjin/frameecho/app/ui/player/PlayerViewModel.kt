@@ -56,6 +56,12 @@ data class PlayerUiState(
     val durationMs: Long = 0L,
     val capturedFrame: CapturedFrame? = null,
     val capturedBitmap: Bitmap? = null,
+    /** Downsampled software preview thumbnail for persistent FrameInfoCard; freed by GC. */
+    val capturedPreviewBitmap: Bitmap? = null,
+    /** Metadata of the most recent successful export in the active video session. */
+    val lastExportSuccess: ExportResult.Success? = null,
+    /** Whether the current captured frame is being or was exported as a Motion Photo. */
+    val isCapturedMotionPhoto: Boolean = false,
     val isCapturing: Boolean = false,
     val isExporting: Boolean = false,
     val exportResult: ExportResult? = null,
@@ -352,6 +358,9 @@ class PlayerViewModel : ViewModel() {
                 durationMs = 0L,
                 capturedBitmap = null,
                 capturedFrame = null,
+                capturedPreviewBitmap = null,
+                lastExportSuccess = null,
+                isCapturedMotionPhoto = false,
                 exportResult = if (preserveExportResult) it.exportResult else null,
                 showExportSettings = false,
                 error = if (preserveExportResult) it.error else null,
@@ -773,13 +782,23 @@ class PlayerViewModel : ViewModel() {
 
                 if (result != null) {
                     val (bitmap, frame) = result
+                    val previewBitmap = try {
+                        extractor.createPreviewThumbnail(bitmap)
+                    } catch (e: CancellationException) {
+                        extractor.releaseBitmap(bitmap)
+                        throw e
+                    }
                     // Capture old reference BEFORE updating state,
                     // then recycle AFTER so no observer reads a recycled bitmap.
+                    // Preview thumbnails are deliberately never recycled (GC frees them safely).
                     val oldBitmap = _uiState.value.capturedBitmap
                     _uiState.update {
                         it.copy(
                             capturedBitmap = bitmap,
                             capturedFrame = frame,
+                            capturedPreviewBitmap = previewBitmap,
+                            lastExportSuccess = null,
+                            isCapturedMotionPhoto = motionPhoto,
                             isCapturing = false
                         )
                     }
@@ -810,8 +829,14 @@ class PlayerViewModel : ViewModel() {
                     } finally {
                         endBitmapExportUsage()
                     }
-                    _uiState.update {
-                        it.copy(isExporting = false, exportResult = exportResult)
+                    _uiState.update { state ->
+                        val successResult = exportResult as? ExportResult.Success
+                        state.copy(
+                            isExporting = false,
+                            exportResult = exportResult,
+                            lastExportSuccess = successResult,
+                            isCapturedMotionPhoto = successResult?.isMotionPhoto ?: state.isCapturedMotionPhoto
+                        )
                     }
                 } else {
                     _uiState.update {

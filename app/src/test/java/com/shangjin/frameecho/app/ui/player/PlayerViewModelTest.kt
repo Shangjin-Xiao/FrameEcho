@@ -1090,4 +1090,179 @@ class PlayerViewModelTest {
         )
         assertEquals(PlayerError.PermissionDenied, viewModel.uiState.value.error)
     }
+
+    @Test
+    fun `clearExportResult consumes transient snackbar event while retaining lastExportSuccess and preview thumbnail`() = runTest {
+        val uri = mockk<Uri>()
+        val fullBitmap = mockk<Bitmap>(relaxed = true)
+        val previewBitmap = mockk<Bitmap>(relaxed = true)
+        val frame = mockk<CapturedFrame>(relaxed = true)
+        val exportedSuccess = ExportResult.Success(
+            outputPath = "content://media/external/images/media/512",
+            width = 3840,
+            height = 2160,
+            fileSizeBytes = 2_048_000L,
+            format = ExportFormat.JPEG,
+            isMotionPhoto = true
+        )
+
+        coEvery { frameExtractor.extractFrameWithInfo(uri, any()) } returns Pair(fullBitmap, frame)
+        coEvery { frameExtractor.createPreviewThumbnail(fullBitmap, any()) } returns previewBitmap
+        coEvery { frameExporter.exportMotionPhoto(uri, fullBitmap, frame, any(), any()) } returns exportedSuccess
+
+        viewModel.setVideoUri(uri)
+        viewModel.captureAndSave(motionPhoto = true)
+
+        assertEquals(exportedSuccess, viewModel.uiState.value.exportResult)
+        assertEquals(exportedSuccess, viewModel.uiState.value.lastExportSuccess)
+        assertSame(previewBitmap, viewModel.uiState.value.capturedPreviewBitmap)
+        assertSame(frame, viewModel.uiState.value.capturedFrame)
+        assertTrue(viewModel.uiState.value.isCapturedMotionPhoto)
+
+        // Simulate 4s Snackbar dismissal consuming transient exportResult
+        viewModel.clearExportResult()
+
+        assertNull(viewModel.uiState.value.exportResult)
+        assertEquals(exportedSuccess, viewModel.uiState.value.lastExportSuccess)
+        assertSame(previewBitmap, viewModel.uiState.value.capturedPreviewBitmap)
+        assertSame(frame, viewModel.uiState.value.capturedFrame)
+        assertTrue(viewModel.uiState.value.isCapturedMotionPhoto)
+        verify(exactly = 0) { previewBitmap.recycle() }
+    }
+
+    @Test
+    fun `in-progress second capture clears stale lastExportSuccess until new export finishes and never recycles preview bitmaps`() = runTest {
+        val uri = mockk<Uri>()
+        val bitmap1 = mockk<Bitmap>(relaxed = true)
+        val preview1 = mockk<Bitmap>(relaxed = true)
+        val frame1 = mockk<CapturedFrame>(relaxed = true)
+        val success1 = ExportResult.Success(
+            outputPath = "content://media/external/images/media/101",
+            width = 1920,
+            height = 1080,
+            fileSizeBytes = 500_000L,
+            format = ExportFormat.JPEG,
+            isMotionPhoto = false
+        )
+
+        val bitmap2 = mockk<Bitmap>(relaxed = true)
+        val preview2 = mockk<Bitmap>(relaxed = true)
+        val frame2 = mockk<CapturedFrame>(relaxed = true)
+        val exportGate2 = CompletableDeferred<ExportResult>()
+        val success2 = ExportResult.Success(
+            outputPath = "content://media/external/images/media/102",
+            width = 1920,
+            height = 1080,
+            fileSizeBytes = 650_000L,
+            format = ExportFormat.JPEG,
+            isMotionPhoto = false
+        )
+
+        // Frame 1 capture & export
+        coEvery { frameExtractor.extractFrameWithInfo(uri, 1_000_000L) } returns Pair(bitmap1, frame1)
+        coEvery { frameExtractor.createPreviewThumbnail(bitmap1, any()) } returns preview1
+        coEvery { frameExporter.exportStaticFrame(bitmap1, frame1, any(), any()) } returns success1
+
+        viewModel.setVideoUri(uri)
+        viewModel.updatePosition(1_000L)
+        viewModel.captureAndSave(motionPhoto = false)
+        viewModel.clearExportResult()
+        assertEquals(success1, viewModel.uiState.value.lastExportSuccess)
+        assertSame(preview1, viewModel.uiState.value.capturedPreviewBitmap)
+
+        // Frame 2 capture starts and suspends during export
+        coEvery { frameExtractor.extractFrameWithInfo(uri, 5_000_000L) } returns Pair(bitmap2, frame2)
+        coEvery { frameExtractor.createPreviewThumbnail(bitmap2, any()) } returns preview2
+        coEvery { frameExporter.exportStaticFrame(bitmap2, frame2, any(), any()) } coAnswers {
+            exportGate2.await()
+        }
+
+        viewModel.updatePosition(5_000L)
+        viewModel.captureAndSave(motionPhoto = false)
+
+        // While Frame 2 is exporting: preview2 is shown, isExporting is true, and stale success1 is cleared
+        assertTrue(viewModel.uiState.value.isExporting)
+        assertSame(preview2, viewModel.uiState.value.capturedPreviewBitmap)
+        assertSame(frame2, viewModel.uiState.value.capturedFrame)
+        assertNull(viewModel.uiState.value.lastExportSuccess)
+        // Old full-res bitmap1 is released, while old UI preview1 is left to GC (never explicitly recycled)
+        verify(exactly = 1) { frameExtractor.releaseBitmap(bitmap1) }
+        verify(exactly = 0) { preview1.recycle() }
+        verify(exactly = 0) { frameExtractor.releaseBitmap(preview1) }
+
+        // Complete Frame 2 export -> lastExportSuccess activates immediately with new URI
+        exportGate2.complete(success2)
+        assertFalse(viewModel.uiState.value.isExporting)
+        assertEquals(success2, viewModel.uiState.value.lastExportSuccess)
+        assertSame(preview2, viewModel.uiState.value.capturedPreviewBitmap)
+    }
+
+    @Test
+    fun `video switch and clearVideoUri reset lastExportSuccess and capturedPreviewBitmap without recycling preview`() = runTest {
+        val uri1 = mockk<Uri>()
+        val uri2 = mockk<Uri>()
+        val externalUri = mockk<Uri>()
+        val fullBitmap = mockk<Bitmap>(relaxed = true)
+        val previewBitmap = mockk<Bitmap>(relaxed = true)
+        val frame = mockk<CapturedFrame>(relaxed = true)
+        val exportedSuccess = ExportResult.Success(
+            outputPath = "content://media/external/images/media/777",
+            width = 1920,
+            height = 1080,
+            fileSizeBytes = 800_000L,
+            format = ExportFormat.JPEG,
+            isMotionPhoto = true
+        )
+
+        coEvery { frameExtractor.extractFrameWithInfo(any(), any()) } returns Pair(fullBitmap, frame)
+        coEvery { frameExtractor.createPreviewThumbnail(fullBitmap, any()) } returns previewBitmap
+        coEvery { frameExporter.exportMotionPhoto(any(), fullBitmap, frame, any(), any()) } returns exportedSuccess
+
+        // 1. Switch via setVideoUri clears persistent export state & preview
+        viewModel.setVideoUri(uri1)
+        viewModel.captureAndSave(motionPhoto = true)
+        viewModel.clearExportResult()
+        assertNotNull(viewModel.uiState.value.lastExportSuccess)
+        assertSame(previewBitmap, viewModel.uiState.value.capturedPreviewBitmap)
+
+        viewModel.setVideoUri(uri2)
+        assertNull(viewModel.uiState.value.lastExportSuccess)
+        assertNull(viewModel.uiState.value.capturedPreviewBitmap)
+        assertNull(viewModel.uiState.value.capturedFrame)
+        assertFalse(viewModel.uiState.value.isCapturedMotionPhoto)
+        verify(exactly = 0) { previewBitmap.recycle() }
+
+        // 2. Switch via external video Intent clears persistent export state & preview
+        val fullBitmap2 = mockk<Bitmap>(relaxed = true)
+        val previewBitmap2 = mockk<Bitmap>(relaxed = true)
+        coEvery { frameExtractor.extractFrameWithInfo(uri2, any()) } returns Pair(fullBitmap2, frame)
+        coEvery { frameExtractor.createPreviewThumbnail(fullBitmap2, any()) } returns previewBitmap2
+        coEvery { frameExporter.exportStaticFrame(fullBitmap2, frame, any(), any()) } returns exportedSuccess.copy(isMotionPhoto = false)
+
+        viewModel.captureAndSave(motionPhoto = false)
+        assertNotNull(viewModel.uiState.value.lastExportSuccess)
+        assertSame(previewBitmap2, viewModel.uiState.value.capturedPreviewBitmap)
+
+        viewModel.onExternalVideoReceived(externalUri)
+        assertNull(viewModel.uiState.value.lastExportSuccess)
+        assertNull(viewModel.uiState.value.capturedPreviewBitmap)
+        verify(exactly = 0) { previewBitmap2.recycle() }
+
+        // 3. Return home via clearVideoUri clears persistent export state & preview
+        val fullBitmap3 = mockk<Bitmap>(relaxed = true)
+        val previewBitmap3 = mockk<Bitmap>(relaxed = true)
+        coEvery { frameExtractor.extractFrameWithInfo(externalUri, any()) } returns Pair(fullBitmap3, frame)
+        coEvery { frameExtractor.createPreviewThumbnail(fullBitmap3, any()) } returns previewBitmap3
+        coEvery { frameExporter.exportStaticFrame(fullBitmap3, frame, any(), any()) } returns exportedSuccess
+
+        viewModel.captureAndSave(motionPhoto = false)
+        assertNotNull(viewModel.uiState.value.lastExportSuccess)
+        assertSame(previewBitmap3, viewModel.uiState.value.capturedPreviewBitmap)
+
+        viewModel.clearVideoUri()
+        assertNull(viewModel.uiState.value.lastExportSuccess)
+        assertNull(viewModel.uiState.value.capturedPreviewBitmap)
+        assertNull(viewModel.uiState.value.capturedFrame)
+        verify(exactly = 0) { previewBitmap3.recycle() }
+    }
 }
