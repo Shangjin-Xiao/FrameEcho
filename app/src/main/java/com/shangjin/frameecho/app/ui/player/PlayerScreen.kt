@@ -77,6 +77,7 @@ import com.shangjin.frameecho.app.ui.player.components.PlayerBottomBar
 import com.shangjin.frameecho.app.ui.player.components.PlayerTopBar
 import com.shangjin.frameecho.app.ui.player.components.VideoSurface
 import com.shangjin.frameecho.core.model.ExportResult
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
@@ -399,52 +400,26 @@ fun PlayerScreen(
     }
 
     // Show export result
-    LaunchedEffect(uiState.exportResult) {
-        when (val result = uiState.exportResult) {
-            is ExportResult.Success -> {
-                val message = when {
-                    result.formatFallbackOccurred && result.audioDropped -> exportFallbackAudioDroppedMsg.format(
-                        result.requestedFormat!!.name,
-                        result.format.name
-                    )
-                    result.audioDropped -> exportAudioDroppedMsg
-                    result.formatFallbackOccurred -> exportFallbackMsg.format(
-                        result.requestedFormat!!.name,
-                        result.format.name
-                    )
-                    else -> exportSuccessMsg
-                }
-                val snackbarResult = snackbarHostState.showSnackbar(
-                    message = message,
-                    actionLabel = shareActionLabel,
-                    duration = SnackbarDuration.Short
-                )
-                viewModel.clearExportResult()
-                if (snackbarResult == SnackbarResult.ActionPerformed) {
-                    val dispatchResult = ExportedMediaDispatcher.Default.share(
-                        context = context,
-                        outputPath = result.outputPath,
-                        mimeType = result.format.mimeType,
-                        chooserTitle = shareFrameChooserTitle
-                    )
-                    resolveDispatchErrorMessage(dispatchResult)?.let { errorText ->
-                        snackbarHostState.showSnackbar(
-                            message = errorText,
-                            duration = SnackbarDuration.Long
-                        )
-                    }
-                }
-            }
-            is ExportResult.Error -> {
-                snackbarHostState.showSnackbar(
-                    message = result.message,
-                    duration = SnackbarDuration.Long
-                )
-                viewModel.clearExportResult()
-            }
-            null -> {}
+    ExportResultSnackbarEffect(
+        exportResult = uiState.exportResult,
+        snackbarHostState = snackbarHostState,
+        snackbarCoroutineScope = scope,
+        exportSuccessMsg = exportSuccessMsg,
+        exportFallbackMsg = exportFallbackMsg,
+        exportAudioDroppedMsg = exportAudioDroppedMsg,
+        exportFallbackAudioDroppedMsg = exportFallbackAudioDroppedMsg,
+        shareActionLabel = shareActionLabel,
+        onClearExportResult = viewModel::clearExportResult,
+        onShareExportedResult = { result ->
+            val dispatchResult = ExportedMediaDispatcher.Default.share(
+                context = context,
+                outputPath = result.outputPath,
+                mimeType = result.format.mimeType,
+                chooserTitle = shareFrameChooserTitle
+            )
+            resolveDispatchErrorMessage(dispatchResult)
         }
-    }
+    )
 
     // Show errors
     val captureErrorMsg = stringResource(R.string.error_capture_failed)
@@ -749,6 +724,68 @@ fun PlayerScreen(
                     }
                 }
             )
+        }
+    }
+}
+
+@Composable
+internal fun ExportResultSnackbarEffect(
+    exportResult: ExportResult?,
+    snackbarHostState: SnackbarHostState,
+    snackbarCoroutineScope: CoroutineScope,
+    exportSuccessMsg: String,
+    exportFallbackMsg: String,
+    exportAudioDroppedMsg: String,
+    exportFallbackAudioDroppedMsg: String,
+    shareActionLabel: String,
+    onClearExportResult: () -> Unit,
+    onShareExportedResult: (ExportResult.Success) -> String?
+) {
+    val currentOnClearExportResult by rememberUpdatedState(onClearExportResult)
+    val currentOnShareExportedResult by rememberUpdatedState(onShareExportedResult)
+
+    LaunchedEffect(exportResult) {
+        when (exportResult) {
+            is ExportResult.Success -> {
+                val message = when {
+                    exportResult.formatFallbackOccurred && exportResult.audioDropped ->
+                        exportFallbackAudioDroppedMsg.format(
+                            exportResult.requestedFormat!!.name,
+                            exportResult.format.name
+                        )
+                    exportResult.audioDropped -> exportAudioDroppedMsg
+                    exportResult.formatFallbackOccurred -> exportFallbackMsg.format(
+                        exportResult.requestedFormat!!.name,
+                        exportResult.format.name
+                    )
+                    else -> exportSuccessMsg
+                }
+                val snackbarResult = snackbarHostState.showSnackbar(
+                    message = message,
+                    actionLabel = shareActionLabel,
+                    duration = SnackbarDuration.Short
+                )
+                currentOnClearExportResult()
+                if (snackbarResult == SnackbarResult.ActionPerformed) {
+                    currentOnShareExportedResult(exportResult)?.let { errorText ->
+                        snackbarCoroutineScope.launch {
+                            snackbarHostState.currentSnackbarData?.dismiss()
+                            snackbarHostState.showSnackbar(
+                                message = errorText,
+                                duration = SnackbarDuration.Long
+                            )
+                        }
+                    }
+                }
+            }
+            is ExportResult.Error -> {
+                snackbarHostState.showSnackbar(
+                    message = exportResult.message,
+                    duration = SnackbarDuration.Long
+                )
+                currentOnClearExportResult()
+            }
+            null -> {}
         }
     }
 }
