@@ -13,10 +13,15 @@ on:
         required: false
         default: false
         type: boolean
+      build_play_aab:
+        description: 'Build signed Google Play AAB (Actions artifact only, never uploaded to GitHub Release)'
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   build:
-    name: Build Signed Release APK
+    name: Build Signed Release Artifacts
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -41,9 +46,20 @@ jobs:
         run: |
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > $RUNNER_TEMP/frameecho-release.jks
 
-      - name: Build Release APK (signed)
+      - name: Build GitHub Release APK (signed)
         run: |
-          ./gradlew assembleRelease --no-daemon --stacktrace \
+          ./gradlew assembleGithubRelease --no-daemon --stacktrace \
+            -PVERSION_NAME="${{ inputs.version }}" \
+            -PVERSION_CODE="${{ github.run_number }}" \
+            -PRELEASE_STORE_FILE=$RUNNER_TEMP/frameecho-release.jks \
+            -PRELEASE_STORE_PASSWORD="${{ secrets.RELEASE_STORE_PASSWORD }}" \
+            -PRELEASE_KEY_ALIAS="frameecho" \
+            -PRELEASE_KEY_PASSWORD="${{ secrets.RELEASE_KEY_PASSWORD }}"
+
+      - name: Build Play Release AAB (signed)
+        if: ${{ inputs.build_play_aab == true }}
+        run: |
+          ./gradlew bundlePlayRelease --no-daemon --stacktrace \
             -PVERSION_NAME="${{ inputs.version }}" \
             -PVERSION_CODE="${{ github.run_number }}" \
             -PRELEASE_STORE_FILE=$RUNNER_TEMP/frameecho-release.jks \
@@ -55,11 +71,21 @@ jobs:
         if: always()
         run: rm -f $RUNNER_TEMP/frameecho-release.jks
 
-      - name: Upload Release APK Artifact
+      - name: Upload GitHub Release APK Artifact
         uses: actions/upload-artifact@v7
         with:
           name: frameecho-release-apk-${{ inputs.version }}
-          path: app/build/outputs/apk/release/app-release.apk
+          path: app/build/outputs/apk/github/release/app-github-release.apk
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Play Release AAB Artifact
+        if: ${{ inputs.build_play_aab == true }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: frameecho-play-aab-${{ inputs.version }}
+          path: app/build/outputs/bundle/playRelease/app-play-release.aab
           archive: false
           if-no-files-found: error
           retention-days: 30
@@ -84,7 +110,7 @@ jobs:
           tag_name: ${{ inputs.version }}
           name: FrameEcho ${{ inputs.version }}
           body_path: ${{ runner.temp }}/release-body.md
-          files: app/build/outputs/apk/release/app-release.apk
+          files: app/build/outputs/apk/github/release/app-github-release.apk
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

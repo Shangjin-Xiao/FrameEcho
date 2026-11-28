@@ -481,13 +481,16 @@ fun PlayerScreen(
                         },
                         onCapture = {
                             if (uiState.isCapturing || uiState.isExporting) return@PlayerBottomBar
-                            val requiresLegacyWritePermission =
-                                Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
-                                    uiState.customExportTreeUri == null &&
+                            val requiresLegacyWritePermission = shouldRequestLegacyWritePermission(
+                                sdkInt = Build.VERSION.SDK_INT,
+                                hasCustomExportTreeUri = uiState.customExportTreeUri != null,
+                                hasWriteExternalStoragePermission = {
                                     ContextCompat.checkSelfPermission(
                                         context,
                                         Manifest.permission.WRITE_EXTERNAL_STORAGE
-                                    ) != PackageManager.PERMISSION_GRANTED
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                }
+                            )
                             if (requiresLegacyWritePermission) {
                                 pendingCaptureAfterPermission = true
                                 writePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -727,6 +730,15 @@ fun PlayerScreen(
         }
     }
 }
+
+internal fun shouldRequestLegacyWritePermission(
+    sdkInt: Int,
+    hasCustomExportTreeUri: Boolean,
+    hasWriteExternalStoragePermission: () -> Boolean
+): Boolean =
+    sdkInt <= Build.VERSION_CODES.P &&
+        !hasCustomExportTreeUri &&
+        !hasWriteExternalStoragePermission()
 
 @Composable
 internal fun ExportResultSnackbarEffect(

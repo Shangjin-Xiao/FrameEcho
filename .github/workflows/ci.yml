@@ -27,13 +27,13 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Android Lint
-        run: ./gradlew lint --no-daemon --stacktrace
+        run: ./gradlew lintGithubDebug lintPlayDebug :core:common:lintDebug :core:media:lintDebug :core:model:lintDebug --no-daemon --stacktrace
 
       - name: Run unit tests
-        run: ./gradlew test --no-daemon --stacktrace
+        run: ./gradlew testGithubDebugUnitTest testPlayDebugUnitTest :core:common:testDebugUnitTest :core:media:testDebugUnitTest :core:model:testDebugUnitTest --no-daemon --stacktrace
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+      - name: Build Debug APKs
+        run: ./gradlew assembleGithubDebug assemblePlayDebug --no-daemon --stacktrace
 
       - name: Upload lint reports
         if: always()
@@ -55,11 +55,20 @@ jobs:
             **/build/test-results/
           retention-days: 7
 
-      - name: Upload Debug APK
+      - name: Upload GitHub Debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: frameecho-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: frameecho-github-debug-apk
+          path: app/build/outputs/apk/github/debug/app-github-debug.apk
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Play Debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: frameecho-play-debug-apk
+          path: app/build/outputs/apk/play/debug/app-play-debug.apk
           archive: false
           if-no-files-found: error
           retention-days: 14

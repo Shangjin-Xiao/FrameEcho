@@ -1,5 +1,45 @@
 # Release Notes
 
+## v1.3.0
+
+> 定格你所爱的每一帧 · Freeze Every Frame You Love
+
+本次更新带来更准确的 HDR 视频色调映射、系统视频直接分享打开、卡片缩略图预览与一键分享，并新增西班牙语支持。
+
+### 新增与改进
+
+- **HDR 抽帧色彩更自然。** 优先使用 GPU 硬件管线将 HDR10、HDR10+、HLG 与杜比视界视频映射为标准 sRGB 图片，高光过渡更平滑；旧机型软件回退也保留高光细节，避免暗部被二次压暗。导出动态照片时，保留原视频的 HDR 色彩元数据。
+- **从其他应用直接发来视频。** 支持在系统相册或文件管理中通过「打开方式」或「分享」直接把视频送入帧迹抽帧；正在导出时接入新视频会先弹窗确认，不打断当前任务。
+- **帧信息卡片预览与快速分享。** 常驻帧信息卡片新增刚导出图片的缩略图预览，支持一键调用系统分享或跳转查看。
+- **新增西班牙语界面。** 补充完整西班牙语翻译（values-es）并适配系统应用语言设置。
+- **加载、导出与安全优化。** 时间轴缩略图改为从当前播放位置向两侧优先加载；优化静态照片写入与动态照片音频转码速度，拖动进度条更跟手；增加缩略图内存上限、自定义导出目录校验与混流边界保护。
+
+### 系统要求
+
+- Android 8.0（API 26）及以上
+
+---
+
+## v1.3.0
+
+> Freeze Every Frame You Love
+
+This update improves HDR video tone mapping, adds direct video opening from other apps, upgrades the frame info card with previews and quick sharing, and adds Spanish localization.
+
+### Highlights
+
+- **Accurate HDR tone mapping and Motion Photo color metadata.** HDR10, HDR10+, HLG, and Dolby Vision frames now go through a GPU OpenGL pipeline to produce natural SDR images with smooth highlights. Software fallback on older devices preserves highlight detail without double tone mapping, and Motion Photo clips keep the source HDR color metadata.
+- **Open or share videos into FrameEcho.** Send videos directly from your gallery or file manager via Android Share or Open With. If an export is already running, FrameEcho asks before switching videos.
+- **Preview and share from the frame info card.** The persistent frame info card now shows a thumbnail preview of the exported frame with one-tap system sharing.
+- **Spanish language support.** Added Spanish translations (`values-es`) and per-app language configuration.
+- **Performance and safety fixes.** Timeline thumbnails now load outward from the current playhead. Static JPEG saving, Motion Photo audio transcoding, and seek scrubbing use less memory and fewer allocations, with stricter bounds on thumbnail memory, custom export folder permissions, and muxer buffers.
+
+### Requirements
+
+- Android 8.0 (API 26) or higher
+
+---
+
 ## v1.2.0
 
 > 定格你所爱的每一帧 · Freeze Every Frame You Love

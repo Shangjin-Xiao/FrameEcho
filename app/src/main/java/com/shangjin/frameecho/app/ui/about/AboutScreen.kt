@@ -72,11 +72,13 @@ fun AboutScreen(
     val uriHandler = LocalUriHandler.current
     val context = LocalContext.current
     val onboardingManager = remember { OnboardingManager(context) }
-    val updatePreferences = remember { UpdatePreferences(context) }
+    val updatePreferences = remember {
+        if (BuildConfig.ENABLE_IN_APP_UPDATE) UpdatePreferences(context) else null
+    }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Update check state
+    // Update check state (only active when BuildConfig.ENABLE_IN_APP_UPDATE is true)
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var latestRelease by remember { mutableStateOf<ReleaseInfo?>(null) }
@@ -154,72 +156,76 @@ fun AboutScreen(
             }
 
             // ── Check for Updates ─────────────────────────────────────
-            item {
-                Card(
-                    modifier = ModifierFillMaxWidth,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                    )
-                ) {
-                    ListItem(
-                        headlineContent = { Text(stringResource(R.string.update_check_for_updates)) },
-                        supportingContent = {
-                            Text(
-                                text = stringResource(
-                                    R.string.update_current_version,
-                                    BuildConfig.VERSION_NAME
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        },
-                        leadingContent = {
-                            if (isCheckingUpdate) {
-                                CircularProgressIndicator(
-                                    modifier = ModifierSize24,
-                                    strokeWidth = 2.dp
+            if (BuildConfig.ENABLE_IN_APP_UPDATE) {
+                item {
+                    Card(
+                        modifier = ModifierFillMaxWidth,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        )
+                    ) {
+                        ListItem(
+                            headlineContent = { Text(stringResource(R.string.update_check_for_updates)) },
+                            supportingContent = {
+                                Text(
+                                    text = stringResource(
+                                        R.string.update_current_version,
+                                        BuildConfig.VERSION_NAME
+                                    ),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.SystemUpdate,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        },
-                        modifier = Modifier.clickable(
-                            enabled = !isCheckingUpdate,
-                            role = Role.Button
-                        ) {
-                            scope.launch {
-                                isCheckingUpdate = true
-                                val release = UpdateChecker.fetchLatestRelease()
-                                isCheckingUpdate = false
-
-                                if (release != null &&
-                                    UpdateChecker.isNewerVersion(
-                                        BuildConfig.VERSION_NAME,
-                                        release.versionName
+                            },
+                            leadingContent = {
+                                if (isCheckingUpdate) {
+                                    CircularProgressIndicator(
+                                        modifier = ModifierSize24,
+                                        strokeWidth = 2.dp
                                     )
-                                ) {
-                                    if (!updatePreferences.isVersionPermanentlyIgnored(release.tagName)) {
-                                        latestRelease = release
-                                        showUpdateDialog = true
-                                    } else {
-                                        snackbarHostState.showSnackbar(
-                                            msgIgnoredVersionTemplate.format(release.versionName)
-                                        )
-                                    }
-                                } else if (release != null) {
-                                    snackbarHostState.showSnackbar(msgAlreadyLatest)
                                 } else {
-                                    snackbarHostState.showSnackbar(msgCheckFailed)
+                                    Icon(
+                                        imageVector = Icons.Default.SystemUpdate,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            },
+                            modifier = Modifier.clickable(
+                                enabled = !isCheckingUpdate,
+                                role = Role.Button
+                            ) {
+                                scope.launch {
+                                    isCheckingUpdate = true
+                                    val release = UpdateChecker.fetchLatestRelease()
+                                    isCheckingUpdate = false
+
+                                    if (release != null &&
+                                        UpdateChecker.isNewerVersion(
+                                            BuildConfig.VERSION_NAME,
+                                            release.versionName
+                                        )
+                                    ) {
+                                        val isIgnored = updatePreferences
+                                            ?.isVersionPermanentlyIgnored(release.tagName) == true
+                                        if (!isIgnored) {
+                                            latestRelease = release
+                                            showUpdateDialog = true
+                                        } else {
+                                            snackbarHostState.showSnackbar(
+                                                msgIgnoredVersionTemplate.format(release.versionName)
+                                            )
+                                        }
+                                    } else if (release != null) {
+                                        snackbarHostState.showSnackbar(msgAlreadyLatest)
+                                    } else {
+                                        snackbarHostState.showSnackbar(msgCheckFailed)
+                                    }
                                 }
                             }
-                        }
-                    )
+                        )
+                    }
+                    Spacer(modifier = ModifierHeight12)
                 }
-                Spacer(modifier = ModifierHeight12)
             }
 
             // ── Links ─────────────────────────────────────────────────
@@ -388,7 +394,7 @@ fun AboutScreen(
         }
 
         // ── Update Dialog ─────────────────────────────────────────
-        if (showUpdateDialog && latestRelease != null) {
+        if (BuildConfig.ENABLE_IN_APP_UPDATE && showUpdateDialog && latestRelease != null) {
             UpdateDialog(
                 releaseInfo = latestRelease!!,
                 onGoToRelease = {
@@ -401,7 +407,7 @@ fun AboutScreen(
                 onIgnorePermanently = {
                     showUpdateDialog = false
                     scope.launch {
-                        updatePreferences.ignoreVersionPermanently(latestRelease!!.tagName)
+                        updatePreferences?.ignoreVersionPermanently(latestRelease!!.tagName)
                     }
                 }
             )
