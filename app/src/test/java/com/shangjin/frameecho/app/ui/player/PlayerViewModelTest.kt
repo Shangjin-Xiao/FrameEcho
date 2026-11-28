@@ -1265,4 +1265,67 @@ class PlayerViewModelTest {
         assertNull(viewModel.uiState.value.capturedFrame)
         verify(exactly = 0) { previewBitmap3.recycle() }
     }
+
+    @Test
+    fun `captureAndSave releases FrameExtractor GPU session after idle timeout and resets timer on new capture`() {
+        val standardDispatcher = StandardTestDispatcher()
+        Dispatchers.setMain(standardDispatcher)
+        runTest(standardDispatcher) {
+            val localViewModel = PlayerViewModel()
+            val localExtractor = mockk<FrameExtractor>(relaxed = true)
+            val localExporter = mockk<FrameExporter>(relaxed = true)
+            localViewModel.setDependenciesForTesting(localExtractor, localExporter)
+
+            val uri = mockk<Uri>()
+            val bmp1 = mockk<Bitmap>(relaxed = true)
+            val bmp2 = mockk<Bitmap>(relaxed = true)
+            val frame = mockk<CapturedFrame>(relaxed = true)
+            val success = ExportResult.Success(
+                outputPath = "content://media/external/images/media/55",
+                width = 3840,
+                height = 2160,
+                fileSizeBytes = 1024L,
+                format = ExportFormat.JPEG
+            )
+
+            coEvery { localExtractor.extractFrameWithInfo(uri, 1_000_000L) } returns Pair(bmp1, frame)
+            coEvery { localExtractor.extractFrameWithInfo(uri, 2_000_000L) } returns Pair(bmp2, frame)
+            coEvery { localExtractor.createPreviewThumbnail(any(), any()) } returns mockk(relaxed = true)
+            coEvery { localExporter.exportStaticFrame(any(), frame, any(), any()) } returns success
+
+            localViewModel.setVideoUri(uri)
+            localViewModel.updatePosition(1_000L)
+            localViewModel.captureAndSave(motionPhoto = false)
+            runCurrent()
+
+            // Before 10s idle timeout, GPU session stays warm for back-to-back captures
+            advanceTimeBy(PlayerViewModel.HDR_CAPTURE_IDLE_RELEASE_MS - 2_000L)
+            runCurrent()
+            verify(exactly = 0) { localExtractor.releaseSession() }
+
+            // Second capture at 8s resets the 10s idle timer
+            localViewModel.updatePosition(2_000L)
+            localViewModel.captureAndSave(motionPhoto = false)
+            runCurrent()
+
+            advanceTimeBy(5_000L)
+            runCurrent()
+            verify(exactly = 0) { localExtractor.releaseSession() }
+
+            // Completing full 10s idle window after second capture deterministically releases session
+            advanceTimeBy(PlayerViewModel.HDR_CAPTURE_IDLE_RELEASE_MS - 5_000L)
+            runCurrent()
+            verify(exactly = 1) { localExtractor.releaseSession() }
+        }
+    }
+
+    @Test
+    fun `onCleared deterministically releases FrameExtractor GPU session`() = runTest {
+        val uri = mockk<Uri>()
+        viewModel.setVideoUri(uri)
+
+        viewModel.onCleared()
+
+        verify(atLeast = 1) { frameExtractor.releaseSession() }
+    }
 }

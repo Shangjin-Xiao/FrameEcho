@@ -94,10 +94,18 @@ class FrameExporter internal constructor(
         internal const val MAX_MUXED_SAMPLES = 6_000
         internal const val MAX_AUDIO_SOURCE_SAMPLES = 6_000
 
-        private val CSD_KEYS = arrayOf("csd-0", "csd-1", "csd-2")
+        private val CSD_KEYS = arrayOf(
+            "csd-0",
+            "csd-1",
+            "csd-2",
+            MediaFormat.KEY_HDR_STATIC_INFO
+        )
         private val OPTIONAL_INT_KEYS = arrayOf(
             MediaFormat.KEY_FRAME_RATE,
-            MediaFormat.KEY_MAX_INPUT_SIZE
+            MediaFormat.KEY_MAX_INPUT_SIZE,
+            MediaFormat.KEY_COLOR_STANDARD,
+            MediaFormat.KEY_COLOR_TRANSFER,
+            MediaFormat.KEY_COLOR_RANGE
         )
         private val VALID_ROTATIONS = intArrayOf(0, 90, 180, 270)
     }
@@ -145,10 +153,11 @@ class FrameExporter internal constructor(
             softBitmap = ensureSoftwareBitmap(bitmap)
 
             checkCancellation()
-            // Apply HDR tone mapping if needed
+            // Apply HDR tone mapping if needed (passes straight through when already GPU tone-mapped)
             processedBitmap = HdrToneMapper.process(
                 bitmap = softBitmap,
-                colorSpaceInfo = frame.colorSpace
+                colorSpaceInfo = frame.colorSpace,
+                isAlreadyToneMapped = frame.isToneMapped
             )
 
             checkCancellation()
@@ -252,7 +261,8 @@ class FrameExporter internal constructor(
 
             processedBitmap = HdrToneMapper.process(
                 bitmap = softBitmap,
-                colorSpaceInfo = frame.colorSpace
+                colorSpaceInfo = frame.colorSpace,
+                isAlreadyToneMapped = frame.isToneMapped
             )
 
             finalBitmap = scaleBitmap(processedBitmap, config.maxResolution)

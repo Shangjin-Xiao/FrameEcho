@@ -3672,4 +3672,150 @@ class FrameExporterTest {
 
         override fun stopAndRelease() {}
     }
+
+    @Test
+    fun `createCleanVideoFormat strips vendor keys while preserving HDR color standard, transfer, range, and static info`() {
+        val context = mockk<Context>(relaxed = true)
+        val exporter = FrameExporter(context, Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+
+        val original = mockk<MediaFormat>()
+        val csd0 = ByteBuffer.wrap(byteArrayOf(0x01, 0x42, 0x00, 0x1E))
+        csd0.position(csd0.limit())
+        val hdrStaticInfo = ByteBuffer.wrap(ByteArray(25) { (it + 1).toByte() })
+        hdrStaticInfo.position(hdrStaticInfo.limit()) // simulate MediaExtractor buffer at limit
+
+        val presentKeys = setOf(
+            MediaFormat.KEY_MIME,
+            MediaFormat.KEY_WIDTH,
+            MediaFormat.KEY_HEIGHT,
+            "csd-0",
+            MediaFormat.KEY_FRAME_RATE,
+            MediaFormat.KEY_DURATION,
+            MediaFormat.KEY_COLOR_STANDARD,
+            MediaFormat.KEY_COLOR_TRANSFER,
+            MediaFormat.KEY_COLOR_RANGE,
+            MediaFormat.KEY_HDR_STATIC_INFO,
+            "vendor.qti-ext-dec-picture-order.enable",
+            "com.sony.xavc.proprietary-meta"
+        )
+
+        every { original.containsKey(any()) } answers { presentKeys.contains(firstArg()) }
+        every { original.getString(MediaFormat.KEY_MIME) } returns MediaFormat.MIMETYPE_VIDEO_HEVC
+        every { original.getInteger(MediaFormat.KEY_WIDTH) } returns 3840
+        every { original.getInteger(MediaFormat.KEY_HEIGHT) } returns 2160
+        every { original.getByteBuffer("csd-0") } returns csd0
+        every { original.getByteBuffer(MediaFormat.KEY_HDR_STATIC_INFO) } returns hdrStaticInfo
+        every { original.getInteger(MediaFormat.KEY_FRAME_RATE) } returns 60
+        every { original.getLong(MediaFormat.KEY_DURATION) } returns 3_000_000L
+        every { original.getInteger(MediaFormat.KEY_COLOR_STANDARD) } returns MediaFormat.COLOR_STANDARD_BT2020
+        every { original.getInteger(MediaFormat.KEY_COLOR_TRANSFER) } returns MediaFormat.COLOR_TRANSFER_ST2084
+        every { original.getInteger(MediaFormat.KEY_COLOR_RANGE) } returns MediaFormat.COLOR_RANGE_LIMITED
+        every { original.getInteger("vendor.qti-ext-dec-picture-order.enable") } returns 1
+        every { original.getString("com.sony.xavc.proprietary-meta") } returns "opaque"
+
+        mockkStatic(MediaFormat::class)
+        val cleanFormat = mockk<MediaFormat>(relaxed = true)
+        every {
+            MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_HEVC, 3840, 2160)
+        } returns cleanFormat
+
+        try {
+            val result = exporter.createCleanVideoFormat(original)
+            assertEquals(cleanFormat, result)
+
+            // HDR color space metadata must be preserved intact
+            verify {
+                cleanFormat.setInteger(
+                    MediaFormat.KEY_COLOR_STANDARD,
+                    MediaFormat.COLOR_STANDARD_BT2020
+                )
+            }
+            verify {
+                cleanFormat.setInteger(
+                    MediaFormat.KEY_COLOR_TRANSFER,
+                    MediaFormat.COLOR_TRANSFER_ST2084
+                )
+            }
+            verify {
+                cleanFormat.setInteger(
+                    MediaFormat.KEY_COLOR_RANGE,
+                    MediaFormat.COLOR_RANGE_LIMITED
+                )
+            }
+            assertEquals("hdr-static-info buffer must be rewound before setByteBuffer", 0, hdrStaticInfo.position())
+            verify {
+                cleanFormat.setByteBuffer(MediaFormat.KEY_HDR_STATIC_INFO, hdrStaticInfo)
+            }
+
+            // Unknown vendor keys must NOT be copied onto clean format
+            verify(exactly = 0) {
+                cleanFormat.setInteger("vendor.qti-ext-dec-picture-order.enable", any())
+            }
+            verify(exactly = 0) {
+                cleanFormat.setString("com.sony.xavc.proprietary-meta", any())
+            }
+        } finally {
+            unmockkStatic(MediaFormat::class)
+        }
+    }
+
+    @Test
+    fun `exportStaticFrame passes isToneMapped to HdrToneMapper to prevent double tone mapping`() = runBlocking {
+        io.mockk.mockkObject(com.shangjin.frameecho.core.media.colorspace.HdrToneMapper)
+        mockkConstructor(ContentValues::class)
+        try {
+            every { anyConstructed<ContentValues>().put(any(), any<String>()) } returns Unit
+            every { anyConstructed<ContentValues>().put(any(), any<Int>()) } returns Unit
+            every { anyConstructed<ContentValues>().put(any(), any<Long>()) } returns Unit
+            every { anyConstructed<ContentValues>().clear() } returns Unit
+
+            val resolver = mockk<ContentResolver>(relaxed = true)
+            val context = mockk<Context>(relaxed = true) {
+                every { contentResolver } returns resolver
+                every { cacheDir } returns tempFolder.newFolder("hdr_export_cache")
+            }
+            val insertedUri = mockk<Uri>(relaxed = true) {
+                every { this@mockk.toString() } returns "content://media/external/images/media/901"
+            }
+            val memOut = ByteArrayOutputStream()
+            every { resolver.insert(any(), any()) } returns insertedUri
+            every { resolver.openOutputStream(insertedUri) } returns memOut
+            every { resolver.update(insertedUri, any(), any(), any()) } returns 1
+
+            val rawJpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte())
+            val gpuMappedBitmap = mockSoftwareBitmap(1920, 1080, rawJpeg)
+            val hdrFrame = CapturedFrame(
+                timestampUs = 1_000_000L,
+                width = 1920,
+                height = 1080,
+                colorSpace = ColorSpaceInfo(
+                    type = com.shangjin.frameecho.core.model.ColorSpaceType.HDR10,
+                    transferFunction = com.shangjin.frameecho.core.model.TransferFunction.PQ,
+                    colorGamut = com.shangjin.frameecho.core.model.ColorGamut.BT2020,
+                    bitDepth = 10
+                ),
+                metadata = VideoMetadata(),
+                isToneMapped = true
+            )
+
+            val exporter = FrameExporter(context, Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+            val result = exporter.exportStaticFrame(
+                bitmap = gpuMappedBitmap,
+                frame = hdrFrame,
+                config = ExportConfig(preserveMetadata = false)
+            )
+
+            assertTrue("Expected ExportResult.Success, got $result", result is ExportResult.Success)
+            verify(exactly = 1) {
+                com.shangjin.frameecho.core.media.colorspace.HdrToneMapper.process(
+                    bitmap = gpuMappedBitmap,
+                    colorSpaceInfo = hdrFrame.colorSpace,
+                    isAlreadyToneMapped = true
+                )
+            }
+        } finally {
+            unmockkConstructor(ContentValues::class)
+            io.mockk.unmockkObject(com.shangjin.frameecho.core.media.colorspace.HdrToneMapper)
+        }
+    }
 }

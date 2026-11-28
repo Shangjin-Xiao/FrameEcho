@@ -26,10 +26,11 @@ class CapturedFrameTest {
         assertEquals(VideoMetadata(), frame.metadata)
         assertEquals(ExportFormat.JPEG, frame.format)
         assertEquals(100, frame.quality)
+        assertEquals(false, frame.isToneMapped)
     }
 
     @Test
-    fun `custom format and quality are preserved`() {
+    fun `custom format, quality, and isToneMapped are preserved`() {
         val frame = CapturedFrame(
             timestampUs = 2_000_000L,
             width = 3840,
@@ -37,7 +38,8 @@ class CapturedFrameTest {
             colorSpace = ColorSpaceInfo(type = ColorSpaceType.HDR10),
             metadata = VideoMetadata(make = "Google", model = "Pixel"),
             format = ExportFormat.JPEG,
-            quality = 90
+            quality = 90,
+            isToneMapped = true
         )
 
         assertEquals(2_000_000L, frame.timestampUs)
@@ -47,6 +49,7 @@ class CapturedFrameTest {
         assertEquals("Google", frame.metadata.make)
         assertEquals(ExportFormat.JPEG, frame.format)
         assertEquals(90, frame.quality)
+        assertEquals(true, frame.isToneMapped)
     }
 
     @Test
