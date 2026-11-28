@@ -1,5 +1,6 @@
 package com.shangjin.frameecho.app.ui.about
 
+import com.shangjin.frameecho.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -42,10 +43,20 @@ object UpdateChecker {
      *
      * @return [ReleaseInfo] if a release was found, or `null` on any error.
      */
-    suspend fun fetchLatestRelease(): ReleaseInfo? = withContext(Dispatchers.IO) {
+    suspend fun fetchLatestRelease(): ReleaseInfo? =
+        fetchLatestReleaseInternal()
+
+    internal suspend fun fetchLatestReleaseInternal(
+        isInAppUpdateEnabled: Boolean = BuildConfig.ENABLE_IN_APP_UPDATE,
+        connectionFactory: (String) -> HttpURLConnection = { url ->
+            URL(url).openConnection() as HttpURLConnection
+        }
+    ): ReleaseInfo? = withContext(Dispatchers.IO) {
+        if (!isInAppUpdateEnabled) {
+            return@withContext null
+        }
         try {
-            val url = URL(GITHUB_API_URL)
-            val connection = url.openConnection() as HttpURLConnection
+            val connection = connectionFactory(GITHUB_API_URL)
             connection.apply {
                 requestMethod = "GET"
                 setRequestProperty("Accept", "application/vnd.github.v3+json")

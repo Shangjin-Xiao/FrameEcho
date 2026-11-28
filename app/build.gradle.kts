@@ -45,7 +45,15 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             } else {
                 gradle.taskGraph.whenReady {
-                    if (hasTask(":app:assembleRelease") || hasTask(":app:bundleRelease")) {
+                    val releaseTasks = listOf(
+                        ":app:assembleRelease",
+                        ":app:assembleGithubRelease",
+                        ":app:assemblePlayRelease",
+                        ":app:bundleRelease",
+                        ":app:bundleGithubRelease",
+                        ":app:bundlePlayRelease"
+                    )
+                    if (releaseTasks.any { hasTask(it) }) {
                         throw GradleException("Release signing config is missing. Please provide RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, and RELEASE_KEY_PASSWORD properties.")
                     }
                 }
@@ -54,6 +62,18 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("github") {
+            dimension = "distribution"
+            buildConfigField("boolean", "ENABLE_IN_APP_UPDATE", "true")
+        }
+        create("play") {
+            dimension = "distribution"
+            buildConfigField("boolean", "ENABLE_IN_APP_UPDATE", "false")
         }
     }
 
