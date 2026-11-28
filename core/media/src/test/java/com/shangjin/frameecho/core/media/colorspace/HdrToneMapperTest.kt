@@ -131,15 +131,15 @@ class HdrToneMapperTest {
     }
 
     @Test
-    fun `untagged and SRGB-mislabeled BT2020 PQ bitmaps restore BT709 gamut and tonal hierarchy`() {
+    fun `untagged and BT2020_PQ-tagged bitmaps restore BT709 gamut and tonal hierarchy`() {
         val hdr10Info = ColorSpaceInfo(
             type = ColorSpaceType.HDR10,
             transferFunction = TransferFunction.PQ,
             colorGamut = ColorGamut.BT2020,
             bitDepth = 10
         )
-        val mislabeledSrgb = mockk<AndroidColorSpace> {
-            every { name } returns "sRGB IEC61966-2.1"
+        val explicitBt2020Pq = mockk<AndroidColorSpace> {
+            every { name } returns "Rec. ITU-R BT.2100-1 PQ"
         }
 
         // Pixel 0: Mid-tone saturated BT.2020 red (R=140 ~145 nits, G=60 ~2 nits, B=60 ~2 nits)
@@ -173,7 +173,7 @@ class HdrToneMapperTest {
         // Without BT.2020->BT.709 matrix, equal G/B input stays equal G/B in output
         assertEquals(bt709Green, bt709Blue, 2)
 
-        for (tag in listOf(null, mislabeledSrgb)) {
+        for (tag in listOf(null, explicitBt2020Pq)) {
             val source = createPixelBackedArgbBitmap(
                 width = 4,
                 height = 1,
@@ -289,6 +289,52 @@ class HdrToneMapperTest {
     }
 
     @Test
+    fun `RGBA_F16 non-linear EXTENDED_SRGB (scRGB-nl) preserves highlight differences above 1_0 without clamping`() {
+        val hdr10Info = ColorSpaceInfo(
+            type = ColorSpaceType.HDR10,
+            transferFunction = TransferFunction.PQ,
+            colorGamut = ColorGamut.BT2020,
+            bitDepth = 10
+        )
+        val scRgbNonLinearCs = mockk<AndroidColorSpace> {
+            every { name } returns "scRGB-nl IEC 61966-2-2:2003"
+        }
+
+        // Non-linear scRGB-nl encoded values:
+        // 1.0 -> linear 1.0 (203 nits SDR white)
+        // 2.0 -> linear ~4.97 (~1008 nits)
+        // 4.0 -> linear ~25.43 (~5162 nits)
+        // Plus wide-gamut sample with negative green/blue lobes (2.0, -0.35, -0.10)
+        val f16ScRgbNl = createPixelBackedRgbaF16Bitmap(
+            width = 4,
+            height = 1,
+            rgbaFloats = floatArrayOf(
+                1.0f, 1.0f, 1.0f, 1.0f,
+                2.0f, 2.0f, 2.0f, 1.0f,
+                4.0f, 4.0f, 4.0f, 1.0f,
+                2.0f, -0.35f, -0.10f, 1.0f
+            ),
+            taggedColorSpace = scRgbNonLinearCs
+        )
+
+        val mapped = HdrToneMapper.process(f16ScRgbNl, hdr10Info)
+        val out = IntArray(4)
+        mapped.getPixels(out, 0, 4, 0, 0, 4, 1)
+
+        val luma1 = srgbLuma8(out[0])
+        val luma2 = srgbLuma8(out[1])
+        val luma4 = srgbLuma8(out[2])
+
+        assertTrue("scRGB-nl 1.0 ($luma1) must be brighter-differentiated below 2.0 ($luma2)", luma1 < luma2)
+        assertTrue("scRGB-nl 2.0 ($luma2) must be brighter-differentiated below 4.0 ($luma4)", luma2 < luma4)
+        assertTrue("scRGB-nl 1.0 SDR white must not clip ($luma1 < 220)", luma1 < 220.0)
+
+        val wideR = (out[3] ushr 16) and 0xFF
+        val wideG = (out[3] ushr 8) and 0xFF
+        assertTrue("Sign-preserving scRGB-nl must retain wide-gamut red dominance ($wideR > $wideG)", wideR > wideG)
+    }
+
+    @Test
     fun `ordered spatial dithering breaks up flat 8-bit quantization steps on mid-LSB HDR values`() {
         val hdr10Info = ColorSpaceInfo(
             type = ColorSpaceType.HDR10,
@@ -309,6 +355,49 @@ class HdrToneMapperTest {
         // Ordered dither must produce adjacent quantized levels (at most 1 LSB apart) rather than severe noise
         assertTrue("Dithered levels must stay within 1 LSB: $distinctReds", distinctReds.max() - distinctReds.min() <= 1)
         assertFalse(distinctReds.isEmpty())
+    }
+
+    @Test
+    fun `standard sRGB-tagged fallback ARGB_8888 and RGBA_F16 bitmaps are not tone-mapped twice`() {
+        val hdr10Info = ColorSpaceInfo(
+            type = ColorSpaceType.HDR10,
+            transferFunction = TransferFunction.PQ,
+            colorGamut = ColorGamut.BT2020,
+            bitDepth = 10
+        )
+        val standardSrgbCs = mockk<AndroidColorSpace> {
+            every { name } returns "sRGB IEC61966-2.1"
+        }
+
+        // 1. ARGB_8888 already converted to sRGB by MediaMetadataRetriever passes through untouched
+        //    so shadow code values (e.g. 25/255) are not crushed by a second PQ EOTF pass.
+        val sdrPixels = intArrayOf(packGray(25), packGray(128), packGray(240))
+        val srgbArgb = createPixelBackedArgbBitmap(
+            width = 3,
+            height = 1,
+            initialPixels = sdrPixels.clone(),
+            taggedColorSpace = standardSrgbCs
+        )
+        val mappedArgb = HdrToneMapper.process(srgbArgb, hdr10Info, isAlreadyToneMapped = false)
+        assertSame(srgbArgb, mappedArgb)
+
+        // 2. RGBA_F16 tagged standard sRGB quantizes sRGB [0..1] directly with dither instead
+        //    of decoding as PQ (which would crush sRGB 0.1 ~ 25/255 down to ~3/255).
+        val srgbF16 = createPixelBackedRgbaF16Bitmap(
+            width = 2,
+            height = 1,
+            rgbaFloats = floatArrayOf(
+                0.1f, 0.1f, 0.1f, 1.0f,
+                0.8f, 0.8f, 0.8f, 1.0f
+            ),
+            taggedColorSpace = standardSrgbCs
+        )
+        val mappedF16 = HdrToneMapper.process(srgbF16, hdr10Info, isAlreadyToneMapped = false)
+        assertNotSame(srgbF16, mappedF16)
+        val outF16 = IntArray(2)
+        mappedF16.getPixels(outF16, 0, 2, 0, 0, 2, 1)
+        assertEquals(25, (outF16[0] ushr 16) and 0xFF, 1)
+        assertEquals(204, (outF16[1] ushr 16) and 0xFF, 1)
     }
 
     // ── Test helpers ────────────────────────────────────────────────────

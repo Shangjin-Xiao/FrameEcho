@@ -942,8 +942,8 @@ class PlayerViewModel : ViewModel() {
         // Bitmap.compress).  Recycling the bitmap while the IO work is
         // in-flight would cause a use-after-recycle crash.
         captureAndSaveJob?.cancel()
-        cancelHdrCaptureIdleRelease()
-        // Deterministically release any open Media3 GPU HDR capture session.
+        // Deterministically release any open Media3 GPU HDR capture session
+        // (coordinated with any in-flight extraction inside FrameExtractor).
         frameExtractor?.releaseSession()
         // Do NOT recycle capturedBitmap here: the cancelled export coroutine
         // may still be executing non-cancellable blocking IO that references

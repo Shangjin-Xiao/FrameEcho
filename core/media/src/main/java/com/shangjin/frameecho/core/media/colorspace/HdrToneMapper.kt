@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.ColorSpace as AndroidColorSpace
 import android.graphics.Paint
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.core.graphics.createBitmap
 import com.shangjin.frameecho.core.model.ColorGamut
 import com.shangjin.frameecho.core.model.ColorSpaceInfo
@@ -100,12 +102,39 @@ object HdrToneMapper {
         safeGetNamedColorSpace(AndroidColorSpace.Named.LINEAR_EXTENDED_SRGB)
     }
 
+    private val bt2020PqColorSpace: AndroidColorSpace? by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            safeGetApi34NamedColorSpace(isPq = true)
+        } else {
+            null
+        }
+    }
+
+    private val bt2020HlgColorSpace: AndroidColorSpace? by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            safeGetApi34NamedColorSpace(isPq = false)
+        } else {
+            null
+        }
+    }
+
+    private enum class BitmapColorSpaceClass {
+        UNTAGGED_HDR,
+        EXTENDED_SRGB,
+        LINEAR_EXTENDED_SRGB,
+        EXPLICIT_HDR_PQ,
+        EXPLICIT_HDR_HLG,
+        STANDARD_SRGB,
+        OTHER_SDR
+    }
+
     private enum class F16SignalEncoding {
         PQ,
         HLG,
         EXTENDED_SRGB,
         LINEAR_EXTENDED_SRGB,
-        SCENE_LINEAR
+        SCENE_LINEAR,
+        SRGB
     }
 
     /**
@@ -131,6 +160,14 @@ object HdrToneMapper {
         val height = bitmap.height
         if (width <= 0 || height <= 0) return bitmap
 
+        val initialCsClass = classifyBitmapColorSpace(bitmap)
+        if (bitmap.config == Bitmap.Config.ARGB_8888 &&
+            initialCsClass == BitmapColorSpaceClass.STANDARD_SRGB
+        ) {
+            // MediaMetadataRetriever / platform decoder already tone-mapped to SDR sRGB.
+            return bitmap
+        }
+
         var tempSoftwareBitmap: Bitmap? = null
         return try {
             val working = if (bitmap.config == Bitmap.Config.HARDWARE) {
@@ -145,23 +182,56 @@ object HdrToneMapper {
                 bitmap
             }
 
-            if (working.config == Bitmap.Config.RGBA_F16) {
-                toneMapRgbaF16Bitmap(working, colorSpaceInfo)
+            val csClass = if (working === bitmap) {
+                initialCsClass
             } else {
-                val argbSource = if (working.config == Bitmap.Config.ARGB_8888) {
-                    working
-                } else {
-                    val copied = working.copy(Bitmap.Config.ARGB_8888, false)
-                    if (copied != null && copied !== bitmap && copied !== tempSoftwareBitmap) {
-                        tempSoftwareBitmap?.let { if (!it.isRecycled) it.recycle() }
-                        tempSoftwareBitmap = copied
+                classifyBitmapColorSpace(working)
+            }
+
+            when (csClass) {
+                BitmapColorSpaceClass.STANDARD_SRGB -> {
+                    when (working.config) {
+                        Bitmap.Config.ARGB_8888 -> {
+                            if (working === tempSoftwareBitmap) {
+                                tempSoftwareBitmap = null
+                            }
+                            working
+                        }
+                        Bitmap.Config.RGBA_F16 -> {
+                            toneMapRgbaF16Bitmap(working, colorSpaceInfo, csClass)
+                        }
+                        else -> drawFallbackWithDither(working)
                     }
-                    copied
                 }
-                if (argbSource != null) {
-                    toneMapArgb8888Bitmap(argbSource, colorSpaceInfo)
-                } else {
+                BitmapColorSpaceClass.OTHER_SDR -> {
+                    // Already SDR (e.g. Display-P3, BT.709, Linear sRGB): convert gamut/transfer
+                    // to sRGB via Canvas with dithering without applying a second PQ/HLG curve.
                     drawFallbackWithDither(working)
+                }
+                BitmapColorSpaceClass.UNTAGGED_HDR,
+                BitmapColorSpaceClass.EXTENDED_SRGB,
+                BitmapColorSpaceClass.LINEAR_EXTENDED_SRGB,
+                BitmapColorSpaceClass.EXPLICIT_HDR_PQ,
+                BitmapColorSpaceClass.EXPLICIT_HDR_HLG -> {
+                    if (working.config == Bitmap.Config.RGBA_F16) {
+                        toneMapRgbaF16Bitmap(working, colorSpaceInfo, csClass)
+                    } else {
+                        val argbSource = if (working.config == Bitmap.Config.ARGB_8888) {
+                            working
+                        } else {
+                            val copied = working.copy(Bitmap.Config.ARGB_8888, false)
+                            if (copied != null && copied !== bitmap && copied !== tempSoftwareBitmap) {
+                                tempSoftwareBitmap?.let { if (!it.isRecycled) it.recycle() }
+                                tempSoftwareBitmap = copied
+                            }
+                            copied
+                        }
+                        if (argbSource != null) {
+                            toneMapArgb8888Bitmap(argbSource, colorSpaceInfo, csClass)
+                        } else {
+                            drawFallbackWithDither(working)
+                        }
+                    }
                 }
             }
         } catch (_: OutOfMemoryError) {
@@ -176,14 +246,23 @@ object HdrToneMapper {
 
     private fun toneMapArgb8888Bitmap(
         source: Bitmap,
-        colorSpaceInfo: ColorSpaceInfo
+        colorSpaceInfo: ColorSpaceInfo,
+        csClass: BitmapColorSpaceClass
     ): Bitmap {
         val width = source.width
         val height = source.height
         val output = createSdrOutputBitmap(width, height)
         val rowPixels = IntArray(width)
-        val transfer = resolveEffectiveTransfer(colorSpaceInfo)
-        val gamut = resolveEffectiveGamut(colorSpaceInfo)
+        val transfer = when (csClass) {
+            BitmapColorSpaceClass.EXPLICIT_HDR_PQ -> TransferFunction.PQ
+            BitmapColorSpaceClass.EXPLICIT_HDR_HLG -> TransferFunction.HLG
+            else -> resolveEffectiveTransfer(colorSpaceInfo)
+        }
+        val gamut = when (csClass) {
+            BitmapColorSpaceClass.EXPLICIT_HDR_PQ,
+            BitmapColorSpaceClass.EXPLICIT_HDR_HLG -> ColorGamut.BT2020
+            else -> resolveEffectiveGamut(colorSpaceInfo)
+        }
 
         for (y in 0 until height) {
             source.getPixels(rowPixels, 0, width, 0, y, width, 1)
@@ -201,7 +280,8 @@ object HdrToneMapper {
 
     private fun toneMapRgbaF16Bitmap(
         source: Bitmap,
-        colorSpaceInfo: ColorSpaceInfo
+        colorSpaceInfo: ColorSpaceInfo,
+        csClass: BitmapColorSpaceClass
     ): Bitmap {
         val width = source.width
         val height = source.height
@@ -213,8 +293,12 @@ object HdrToneMapper {
         val shortBuffer = ShortBuffer.allocate(totalShorts.toInt())
         source.copyPixelsToBuffer(shortBuffer)
         val halfPixels = shortBuffer.array()
-        val encoding = detectF16Encoding(source, colorSpaceInfo)
-        val gamut = resolveEffectiveGamut(colorSpaceInfo)
+        val encoding = detectF16Encoding(csClass, colorSpaceInfo)
+        val gamut = when (csClass) {
+            BitmapColorSpaceClass.EXPLICIT_HDR_PQ,
+            BitmapColorSpaceClass.EXPLICIT_HDR_HLG -> ColorGamut.BT2020
+            else -> resolveEffectiveGamut(colorSpaceInfo)
+        }
 
         val output = createSdrOutputBitmap(width, height)
         val rowPixels = IntArray(width)
@@ -271,43 +355,65 @@ object HdrToneMapper {
         }
     }
 
-    private fun detectF16Encoding(
-        bitmap: Bitmap,
-        colorSpaceInfo: ColorSpaceInfo
-    ): F16SignalEncoding {
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun safeGetApi34NamedColorSpace(isPq: Boolean): AndroidColorSpace? {
+        val named = if (isPq) {
+            AndroidColorSpace.Named.BT2020_PQ
+        } else {
+            AndroidColorSpace.Named.BT2020_HLG
+        }
+        return safeGetNamedColorSpace(named)
+    }
+
+    private fun classifyBitmapColorSpace(bitmap: Bitmap): BitmapColorSpaceClass {
         val bitmapCs = try {
             bitmap.colorSpace
         } catch (_: RuntimeException) {
             null
+        } ?: return BitmapColorSpaceClass.UNTAGGED_HDR
+
+        if (bitmapCs == extendedSrgbColorSpace) return BitmapColorSpaceClass.EXTENDED_SRGB
+        if (bitmapCs == linearExtendedSrgbColorSpace) return BitmapColorSpaceClass.LINEAR_EXTENDED_SRGB
+        if (bitmapCs == bt2020PqColorSpace) return BitmapColorSpaceClass.EXPLICIT_HDR_PQ
+        if (bitmapCs == bt2020HlgColorSpace) return BitmapColorSpaceClass.EXPLICIT_HDR_HLG
+        if (bitmapCs == srgbColorSpace) return BitmapColorSpaceClass.STANDARD_SRGB
+
+        val csName = try {
+            bitmapCs.name
+        } catch (_: RuntimeException) {
+            ""
         }
-        if (bitmapCs != null) {
-            if (bitmapCs == extendedSrgbColorSpace) return F16SignalEncoding.EXTENDED_SRGB
-            if (bitmapCs == linearExtendedSrgbColorSpace) return F16SignalEncoding.LINEAR_EXTENDED_SRGB
-            val csName = try {
-                bitmapCs.name
-            } catch (_: RuntimeException) {
-                ""
-            }
-            if (csName.startsWith("scRGB-nl", ignoreCase = true)) {
-                return F16SignalEncoding.EXTENDED_SRGB
-            }
-            if (csName.startsWith("scRGB", ignoreCase = true)) {
-                return F16SignalEncoding.LINEAR_EXTENDED_SRGB
-            }
-            if (csName.contains("PQ", ignoreCase = true) || csName.contains("2084")) {
-                return F16SignalEncoding.PQ
-            }
-            if (csName.contains("HLG", ignoreCase = true)) {
-                return F16SignalEncoding.HLG
-            }
-            if (csName.contains("Linear", ignoreCase = true)) {
-                return F16SignalEncoding.SCENE_LINEAR
-            }
+        return when {
+            csName.startsWith("scRGB-nl", ignoreCase = true) ||
+                (csName.contains("Extended sRGB", ignoreCase = true) &&
+                    !csName.contains("Linear", ignoreCase = true)) -> BitmapColorSpaceClass.EXTENDED_SRGB
+            csName.startsWith("scRGB", ignoreCase = true) ||
+                csName.contains("Linear Extended", ignoreCase = true) -> BitmapColorSpaceClass.LINEAR_EXTENDED_SRGB
+            csName.contains("PQ", ignoreCase = true) ||
+                csName.contains("2084") -> BitmapColorSpaceClass.EXPLICIT_HDR_PQ
+            csName.contains("HLG", ignoreCase = true) ||
+                csName.contains("STD-B67", ignoreCase = true) -> BitmapColorSpaceClass.EXPLICIT_HDR_HLG
+            csName.startsWith("sRGB", ignoreCase = true) -> BitmapColorSpaceClass.STANDARD_SRGB
+            else -> BitmapColorSpaceClass.OTHER_SDR
         }
-        return when (resolveEffectiveTransfer(colorSpaceInfo)) {
-            TransferFunction.HLG -> F16SignalEncoding.HLG
-            TransferFunction.LINEAR -> F16SignalEncoding.SCENE_LINEAR
-            else -> F16SignalEncoding.PQ
+    }
+
+    private fun detectF16Encoding(
+        csClass: BitmapColorSpaceClass,
+        colorSpaceInfo: ColorSpaceInfo
+    ): F16SignalEncoding {
+        return when (csClass) {
+            BitmapColorSpaceClass.STANDARD_SRGB -> F16SignalEncoding.SRGB
+            BitmapColorSpaceClass.EXTENDED_SRGB -> F16SignalEncoding.EXTENDED_SRGB
+            BitmapColorSpaceClass.LINEAR_EXTENDED_SRGB -> F16SignalEncoding.LINEAR_EXTENDED_SRGB
+            BitmapColorSpaceClass.EXPLICIT_HDR_PQ -> F16SignalEncoding.PQ
+            BitmapColorSpaceClass.EXPLICIT_HDR_HLG -> F16SignalEncoding.HLG
+            BitmapColorSpaceClass.UNTAGGED_HDR,
+            BitmapColorSpaceClass.OTHER_SDR -> when (resolveEffectiveTransfer(colorSpaceInfo)) {
+                TransferFunction.HLG -> F16SignalEncoding.HLG
+                TransferFunction.LINEAR -> F16SignalEncoding.SCENE_LINEAR
+                else -> F16SignalEncoding.PQ
+            }
         }
     }
 
@@ -456,9 +562,12 @@ object HdrToneMapper {
                 )
             }
             F16SignalEncoding.LINEAR_EXTENDED_SRGB -> {
-                val r2020 = max(0f, 0.6274039f * safeR + 0.3292830f * safeG + 0.0433131f * safeB)
-                val g2020 = max(0f, 0.0690973f * safeR + 0.9195404f * safeG + 0.0113623f * safeB)
-                val b2020 = max(0f, 0.0163914f * safeR + 0.0880133f * safeG + 0.8955953f * safeB)
+                val linR = safeR.coerceIn(-65504f, 65504f)
+                val linG = safeG.coerceIn(-65504f, 65504f)
+                val linB = safeB.coerceIn(-65504f, 65504f)
+                val r2020 = max(0f, 0.6274039f * linR + 0.3292830f * linG + 0.0433131f * linB)
+                val g2020 = max(0f, 0.0690973f * linR + 0.9195404f * linG + 0.0113623f * linB)
+                val b2020 = max(0f, 0.0163914f * linR + 0.0880133f * linG + 0.8955953f * linB)
                 mapLinearHdrNitsToSrgbPixel(
                     rNits = (r2020 * SDR_REFERENCE_WHITE_NITS).coerceAtMost(PQ_MAX_NITS),
                     gNits = (g2020 * SDR_REFERENCE_WHITE_NITS).coerceAtMost(PQ_MAX_NITS),
@@ -522,6 +631,18 @@ object HdrToneMapper {
                     y = y,
                     enableDither = enableDither
                 )
+            }
+            F16SignalEncoding.SRGB -> {
+                val dither = if (enableDither) {
+                    val threshold = BAYER_8X8[((y and 7) shl 3) or (x and 7)]
+                    (threshold + 0.5f) / 64f - 0.5f
+                } else {
+                    0f
+                }
+                val outR = quantize8BitWithDither(safeR.coerceIn(0f, 1f), dither)
+                val outG = quantize8BitWithDither(safeG.coerceIn(0f, 1f), dither)
+                val outB = quantize8BitWithDither(safeB.coerceIn(0f, 1f), dither)
+                (alpha8 shl 24) or (outR shl 16) or (outG shl 8) or outB
             }
         }
     }
@@ -740,9 +861,16 @@ object HdrToneMapper {
         }
     }
 
-    private fun extendedSrgbEotf(encoded: Float): Float {
-        val magnitude = srgbEotf(abs(encoded))
-        return if (encoded < 0f) -magnitude else magnitude
+    internal fun extendedSrgbEotf(encoded: Float): Float {
+        if (encoded.isNaN()) return 0f
+        val clamped = encoded.coerceIn(-65504f, 65504f)
+        val v = abs(clamped)
+        val magnitude = if (v <= 0.04045f) {
+            v / 12.92f
+        } else {
+            ((v + 0.055) / 1.055).pow(2.4).toFloat()
+        }
+        return if (clamped < 0f) -magnitude else magnitude
     }
 
     /**

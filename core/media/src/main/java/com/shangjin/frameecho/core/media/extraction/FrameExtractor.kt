@@ -9,6 +9,8 @@ import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.RequiresApi
 import androidx.core.graphics.scale
 import androidx.media3.common.Effect
@@ -28,6 +30,7 @@ import com.shangjin.frameecho.core.model.ColorSpaceInfo
 import com.shangjin.frameecho.core.model.VideoMetadata
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executor
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -52,7 +55,7 @@ import kotlinx.coroutines.withContext
  *     `sRGB` tone mapping at original resolution (and GPU [Presentation] downscaling for
  *     timeline thumbnails).
  *   - Fallback path uses [MediaMetadataRetriever] (`OPTION_CLOSEST`, requesting `RGBA_F16`
- *     via `BitmapParams` on API 28+ when supported) paired with [HdrToneMapper]'s perceptual
+ *     via `BitmapParams` on API 30+ when supported) paired with [HdrToneMapper]'s perceptual
  *     BT.2408 EETF + `BT.2020 -> BT.709` + dithering pipeline.
  */
 class FrameExtractor(
@@ -96,16 +99,27 @@ class FrameExtractor(
     private val sessionLock = Any()
     private val hdrCaptureMutex = Mutex()
 
+    private class HdrSessionHandle(
+        val key: CacheKey,
+        val session: Media3FrameSession
+    ) {
+        // Guarded by sessionLock: 1 for activeHdrCaptureHandle slot + 1 per active borrow.
+        var refCount: Int = 1
+        var evicted: Boolean = false
+    }
+
     @Volatile
     private var cachedMetadata: Pair<CacheKey, VideoMetadata>? = null
 
     @Volatile
     private var cachedColorSpace: Pair<CacheKey, ColorSpaceInfo>? = null
 
-    private var activeHdrCaptureSession: Media3FrameSession? = null
-    private var activeHdrCaptureKey: CacheKey? = null
+    private var activeHdrCaptureHandle: HdrSessionHandle? = null
+    // Guarded by sessionLock: incremented on every releaseSession() so an in-progress
+    // acquireHdrCaptureSession cannot cache a session after releaseSession() / onCleared() ran.
+    private var sessionEpoch: Long = 0L
 
-    internal var media3SessionFactory: (Media3SessionConfig) -> Media3FrameSession =
+    internal var media3SessionFactory: suspend (Media3SessionConfig) -> Media3FrameSession =
         ::createDefaultMedia3Session
 
     /**
@@ -123,17 +137,17 @@ class FrameExtractor(
     }
 
     /**
-     * Deterministically closes any open Media3 HDR frame-extraction session while retaining
+     * Deterministically releases any open Media3 HDR frame-extraction session while retaining
      * cached metadata and color-space info for the current video URI.
      *
-     * Safe to call from any thread (e.g. idle timeout, video switch, or `ViewModel.onCleared`).
+     * Safe to call from any thread (e.g. idle timeout, video switch, or `ViewModel.onCleared`):
+     * if an extraction is currently borrowing the session, actual `close()` is deferred until
+     * that extraction finishes or cancels so `getFrame()` never races a concurrent `close()`.
      */
     fun releaseSession() {
         val sessionToClose = synchronized(sessionLock) {
-            val current = activeHdrCaptureSession
-            activeHdrCaptureSession = null
-            activeHdrCaptureKey = null
-            current
+            sessionEpoch += 1L
+            dropSlotRefLocked(activeHdrCaptureHandle)
         }
         sessionToClose?.closeQuietly()
     }
@@ -307,7 +321,7 @@ class FrameExtractor(
      *   `setExtractHdrFrames(false)`) and marks [CapturedFrame.isToneMapped] = `true` so
      *   `FrameExporter` / [HdrToneMapper] skips double tone mapping. If GPU extraction throws
      *   or returns `null`, falls back to [MediaMetadataRetriever] (`OPTION_CLOSEST`, requesting
-     *   `RGBA_F16` on API 28+) with [CapturedFrame.isToneMapped] = `false` so [HdrToneMapper]
+     *   `RGBA_F16` on API 30+) with [CapturedFrame.isToneMapped] = `false` so [HdrToneMapper]
      *   applies perceptual software EETF + `BT.2020 -> BT.709` + dithering during export.
      *
      * Caller is responsible for calling [releaseBitmap] when done.
@@ -441,8 +455,11 @@ class FrameExtractor(
 
             val (width, height) = thumbnailDimensions(videoWidth, videoHeight, targetWidth)
 
-            val rawThumb = extractThumbnailInternal(retriever, timestampUs, width, height)
-                ?: return@useRetriever null
+            val rawThumb = if (colorSpace.isHdr) {
+                extractHdrFallbackThumbnailInternal(retriever, timestampUs, width, height)
+            } else {
+                extractThumbnailInternal(retriever, timestampUs, width, height)
+            } ?: return@useRetriever null
             toneMapThumbnailIfHdr(rawThumb, colorSpace)
         }
     }
@@ -517,7 +534,11 @@ class FrameExtractor(
                 for (i in 0 until limit) {
                     currentCoroutineContext().ensureActive()
                     val ts = timestampsUs[i]
-                    val rawThumb = extractThumbnailInternal(retriever, ts, width, height)
+                    val rawThumb = if (colorSpace.isHdr) {
+                        extractHdrFallbackThumbnailInternal(retriever, ts, width, height)
+                    } else {
+                        extractThumbnailInternal(retriever, ts, width, height)
+                    }
                     val bitmap = rawThumb?.let { toneMapThumbnailIfHdr(it, colorSpace) }
                     if (bitmap != null) {
                         results.add(ts to bitmap)
@@ -610,7 +631,11 @@ class FrameExtractor(
                 for (i in 0 until limit) {
                     currentCoroutineContext().ensureActive()
                     val ts = timestampsUs[i]
-                    val rawThumb = extractThumbnailInternal(retriever, ts, width, height)
+                    val rawThumb = if (colorSpace.isHdr) {
+                        extractHdrFallbackThumbnailInternal(retriever, ts, width, height)
+                    } else {
+                        extractThumbnailInternal(retriever, ts, width, height)
+                    }
                     val bitmap = rawThumb?.let { toneMapThumbnailIfHdr(it, colorSpace) }
                     if (bitmap != null) {
                         pendingChunk.add(ts to bitmap)
@@ -797,61 +822,66 @@ class FrameExtractor(
             currentCoroutineContext().ensureActive()
             val key = CacheKey(videoUri.toString(), generation)
             val positionMs = timestampUsToPositionMs(timestampUs)
-            var session: Media3FrameSession? = null
+            var handle: HdrSessionHandle? = null
             try {
-                session = getOrCreateHdrCaptureSession(videoUri, key, generation)
-                var bitmap = session.extractFrame(positionMs)
+                handle = acquireHdrCaptureSession(videoUri, key, generation)
+                var bitmap = handle.session.extractFrame(positionMs)
                 if (bitmap != null && bitmap.isRecycled) {
                     // If caller recycled a previously captured bitmap at the exact same timestamp,
                     // Media3's internal dedupe cache could return that recycled Bitmap. Recreate
                     // the session with a fresh mediaId nonce to force a clean GPU frame decode.
-                    evictHdrCaptureSession(session)
-                    session = getOrCreateHdrCaptureSession(videoUri, key, generation)
-                    bitmap = session.extractFrame(positionMs)
+                    evictHdrCaptureSession(handle)
+                    releaseBorrowedHdrSession(handle)
+                    handle = null
+                    handle = acquireHdrCaptureSession(videoUri, key, generation)
+                    bitmap = handle.session.extractFrame(positionMs)
                 }
                 if (bitmap == null || bitmap.isRecycled) {
-                    evictHdrCaptureSession(session)
+                    evictHdrCaptureSession(handle)
                     return@withLock null
                 }
                 if (cacheGeneration.get() != generation) {
                     // Generation changed mid-flight; ensure stale session does not linger.
-                    evictHdrCaptureSession(session)
+                    evictHdrCaptureSession(handle)
                 }
                 bitmap
             } catch (e: CancellationException) {
                 // Deterministically close the session immediately on cancellation so hardware
                 // decoders and EGL contexts are released right away.
-                evictHdrCaptureSession(session)
+                evictHdrCaptureSession(handle)
                 throw e
             } catch (e: SecurityException) {
-                evictHdrCaptureSession(session)
+                evictHdrCaptureSession(handle)
                 throw e
             } catch (e: Exception) {
-                evictHdrCaptureSession(session)
+                evictHdrCaptureSession(handle)
                 safeLogW("Media3 GPU HDR extraction failed, falling back to MediaMetadataRetriever", e)
                 null
+            } finally {
+                releaseBorrowedHdrSession(handle)
             }
         }
     }
 
-    private fun getOrCreateHdrCaptureSession(
+    private suspend fun acquireHdrCaptureSession(
         videoUri: Uri,
         key: CacheKey,
         generation: Long
-    ): Media3FrameSession {
+    ): HdrSessionHandle {
         var staleToClose: Media3FrameSession? = null
+        val startSessionEpoch: Long
         synchronized(sessionLock) {
-            val existing = activeHdrCaptureSession
-            if (existing != null && activeHdrCaptureKey == key) {
+            val existing = activeHdrCaptureHandle
+            if (existing != null && !existing.evicted && existing.key == key) {
+                existing.refCount += 1
                 return existing
             }
-            staleToClose = existing
-            activeHdrCaptureSession = null
-            activeHdrCaptureKey = null
+            staleToClose = dropSlotRefLocked(existing)
+            startSessionEpoch = sessionEpoch
         }
         staleToClose?.closeQuietly()
 
-        val created = media3SessionFactory(
+        val createdSession = media3SessionFactory(
             Media3SessionConfig(
                 videoUri = videoUri,
                 mediaId = "hdr-capture-${sessionNonce.incrementAndGet()}:$videoUri",
@@ -859,28 +889,48 @@ class FrameExtractor(
                 extractHdrFrames = false
             )
         )
+        val createdHandle = HdrSessionHandle(key = key, session = createdSession)
 
         var orphanToClose: Media3FrameSession? = null
         synchronized(sessionLock) {
-            if (cacheGeneration.get() == generation) {
-                orphanToClose = activeHdrCaptureSession
-                activeHdrCaptureSession = created
-                activeHdrCaptureKey = key
+            if (cacheGeneration.get() == generation && sessionEpoch == startSessionEpoch) {
+                orphanToClose = dropSlotRefLocked(activeHdrCaptureHandle)
+                createdHandle.refCount = 2 // 1 for cache slot + 1 for caller's borrow
+                activeHdrCaptureHandle = createdHandle
+            } else {
+                createdHandle.evicted = true
+                createdHandle.refCount = 1 // Caller's borrow only; closed when borrow ends
             }
         }
-        orphanToClose?.takeIf { it !== created }?.closeQuietly()
-        return created
+        orphanToClose?.takeIf { it !== createdSession }?.closeQuietly()
+        return createdHandle
     }
 
-    private fun evictHdrCaptureSession(session: Media3FrameSession?) {
-        if (session == null) return
-        synchronized(sessionLock) {
-            if (activeHdrCaptureSession === session) {
-                activeHdrCaptureSession = null
-                activeHdrCaptureKey = null
-            }
+    private fun evictHdrCaptureSession(handle: HdrSessionHandle?) {
+        if (handle == null) return
+        val sessionToClose = synchronized(sessionLock) {
+            dropSlotRefLocked(handle)
         }
-        session.closeQuietly()
+        sessionToClose?.closeQuietly()
+    }
+
+    private fun releaseBorrowedHdrSession(handle: HdrSessionHandle?) {
+        if (handle == null) return
+        val sessionToClose = synchronized(sessionLock) {
+            handle.refCount -= 1
+            if (handle.refCount == 0) handle.session else null
+        }
+        sessionToClose?.closeQuietly()
+    }
+
+    private fun dropSlotRefLocked(handle: HdrSessionHandle?): Media3FrameSession? {
+        if (handle == null || handle.evicted) return null
+        handle.evicted = true
+        if (activeHdrCaptureHandle === handle) {
+            activeHdrCaptureHandle = null
+        }
+        handle.refCount -= 1
+        return if (handle.refCount == 0) handle.session else null
     }
 
     private suspend fun extractHdrThumbnailViaMedia3Single(
@@ -1057,8 +1107,48 @@ class FrameExtractor(
         }
     }
 
+    private suspend fun createDefaultMedia3Session(
+        config: Media3SessionConfig
+    ): Media3FrameSession {
+        val mainHandler = obtainMainHandlerOrNull()
+        val extractor = if (mainHandler != null) {
+            runOnMainLooper(
+                mainHandler = mainHandler,
+                onAbandonedResult = { abandoned -> abandoned.closeQuietly() }
+            ) {
+                buildMedia3Extractor(config)
+            }
+        } else {
+            buildMedia3Extractor(config)
+        }
+        val closed = AtomicBoolean(false)
+        return object : Media3FrameSession {
+            override suspend fun extractFrame(positionMs: Long): Bitmap? {
+                val future = if (mainHandler != null) {
+                    runOnMainLooper(mainHandler) {
+                        extractor.getFrame(positionMs)
+                    }
+                } else {
+                    extractor.getFrame(positionMs)
+                }
+                return future.awaitMedia3FrameBitmap()
+            }
+
+            override fun close() {
+                if (!closed.compareAndSet(false, true)) return
+                if (mainHandler == null || isCurrentThreadLooper(mainHandler.looper)) {
+                    extractor.closeQuietly()
+                } else {
+                    if (!mainHandler.post { extractor.closeQuietly() }) {
+                        extractor.closeQuietly()
+                    }
+                }
+            }
+        }
+    }
+
     @SuppressLint("NewApi") // Runtime-guarded by sdkInt >= UPSIDE_DOWN_CAKE (API 34)
-    private fun createDefaultMedia3Session(config: Media3SessionConfig): Media3FrameSession {
+    private fun buildMedia3Extractor(config: Media3SessionConfig): Media3FrameExtractor {
         val mediaItem = MediaItem.Builder()
             .setUri(config.videoUri)
             .setMediaId(config.mediaId)
@@ -1079,15 +1169,64 @@ class FrameExtractor(
                 )
             )
         }
-        val extractor = builder.build()
-        return object : Media3FrameSession {
-            override suspend fun extractFrame(positionMs: Long): Bitmap? {
-                return extractor.getFrame(positionMs).awaitMedia3FrameBitmap()
-            }
+        return builder.build()
+    }
 
-            override fun close() {
-                extractor.close()
+    private fun obtainMainHandlerOrNull(): Handler? {
+        return try {
+            Looper.getMainLooper()?.let { Handler(it) }
+        } catch (_: RuntimeException) {
+            null
+        }
+    }
+
+    private fun isCurrentThreadLooper(targetLooper: Looper): Boolean {
+        return try {
+            Looper.myLooper() == targetLooper
+        } catch (_: RuntimeException) {
+            false
+        }
+    }
+
+    private suspend fun <T> runOnMainLooper(
+        mainHandler: Handler,
+        onAbandonedResult: ((T) -> Unit)? = null,
+        block: () -> T
+    ): T {
+        if (isCurrentThreadLooper(mainHandler.looper)) {
+            currentCoroutineContext().ensureActive()
+            return block()
+        }
+        return suspendCancellableCoroutine { continuation ->
+            val runnable = Runnable {
+                if (!continuation.isActive) return@Runnable
+                try {
+                    val result = block()
+                    if (continuation.isActive) {
+                        continuation.resume(result)
+                    } else {
+                        onAbandonedResult?.invoke(result)
+                    }
+                } catch (t: Throwable) {
+                    if (continuation.isActive) {
+                        continuation.resumeWithException(t)
+                    }
+                }
             }
+            continuation.invokeOnCancellation {
+                mainHandler.removeCallbacks(runnable)
+            }
+            if (!mainHandler.post(runnable)) {
+                continuation.cancel(CancellationException("Main handler rejected runnable"))
+            }
+        }
+    }
+
+    private fun Media3FrameExtractor.closeQuietly() {
+        try {
+            close()
+        } catch (_: Exception) {
+            // Extractor is being discarded either way.
         }
     }
 
@@ -1198,23 +1337,20 @@ class FrameExtractor(
     /**
      * Internal HDR fallback frame extraction via [MediaMetadataRetriever].
      *
-     * Always preserves frame-exact seeking (`OPTION_CLOSEST`). On API 30+ (and API 28–29 via
-     * `BitmapParams` when supported), requests [Bitmap.Config.RGBA_F16] to retain >8-bit HDR
+     * Always preserves frame-exact timestamp seeking (`OPTION_CLOSEST`). On API 30+, requests
+     * [Bitmap.Config.RGBA_F16] via `getFrameAtTime(..., BitmapParams)` to retain >8-bit HDR
      * highlight precision before [HdrToneMapper] executes perceptual EETF roll-off, falling back
-     * to standard `getFrameAtTime(timestampUs, OPTION_CLOSEST)` if `RGBA_F16` is unsupported.
+     * to timestamp-exact `getFrameAtTime(timestampUs, OPTION_CLOSEST)` on API 26–29 or when
+     * `RGBA_F16` is unsupported (never estimating frame indices from duration and frame count,
+     * which can select the wrong frame on VFR or edit-list videos).
      */
-    @SuppressLint("NewApi") // Runtime-guarded by sdkInt checks
+    @SuppressLint("NewApi") // Runtime-guarded by sdkInt >= Build.VERSION_CODES.R (API 30)
     private fun extractHdrFallbackFrameInternal(
         retriever: MediaMetadataRetriever,
         timestampUs: Long
     ): Bitmap? {
         if (sdkInt >= Build.VERSION_CODES.R) {
             val f16Bitmap = extractHdrFrameApi30(retriever, timestampUs)
-            if (f16Bitmap != null) {
-                return f16Bitmap
-            }
-        } else if (sdkInt >= Build.VERSION_CODES.P) {
-            val f16Bitmap = extractHdrFrameApi28(retriever, timestampUs)
             if (f16Bitmap != null) {
                 return f16Bitmap
             }
@@ -1242,31 +1378,47 @@ class FrameExtractor(
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.P)
-    private fun extractHdrFrameApi28(
+    @SuppressLint("NewApi") // Runtime-guarded by sdkInt >= Build.VERSION_CODES.R (API 30)
+    private fun extractHdrFallbackThumbnailInternal(
         retriever: MediaMetadataRetriever,
-        timestampUs: Long
+        timestampUs: Long,
+        targetWidth: Int,
+        targetHeight: Int
+    ): Bitmap? {
+        if (sdkInt >= Build.VERSION_CODES.R) {
+            val f16Thumb = extractHdrScaledThumbnailApi30(
+                retriever = retriever,
+                timestampUs = timestampUs,
+                targetWidth = targetWidth,
+                targetHeight = targetHeight
+            )
+            if (f16Thumb != null) {
+                return f16Thumb
+            }
+        }
+        return extractThumbnailInternal(retriever, timestampUs, targetWidth, targetHeight)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun extractHdrScaledThumbnailApi30(
+        retriever: MediaMetadataRetriever,
+        timestampUs: Long,
+        targetWidth: Int,
+        targetHeight: Int
     ): Bitmap? {
         return try {
-            val frameCount = retriever.extractMetadata(
-                MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT
-            )?.toIntOrNull() ?: return null
-            val durationMs = retriever.extractMetadata(
-                MediaMetadataRetriever.METADATA_KEY_DURATION
-            )?.toLongOrNull() ?: return null
-            if (frameCount <= 0 || durationMs <= 0L) return null
-
-            val durationUs = durationMs * 1_000L
-            val clampedUs = timestampUs.coerceIn(0L, durationUs)
-            val frameIndex = ((clampedUs.toDouble() / durationUs.toDouble()) * (frameCount - 1))
-                .roundToInt()
-                .coerceIn(0, frameCount - 1)
             val params = MediaMetadataRetriever.BitmapParams().apply {
                 preferredConfig = Bitmap.Config.RGBA_F16
             }
-            retriever.getFrameAtIndex(frameIndex, params)
+            retriever.getScaledFrameAtTime(
+                timestampUs,
+                MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                targetWidth,
+                targetHeight,
+                params
+            )
         } catch (e: Exception) {
-            safeLogW("API 28 RGBA_F16 getFrameAtIndex unsupported, falling back to OPTION_CLOSEST", e)
+            safeLogW("API 30 RGBA_F16 getScaledFrameAtTime unsupported, falling back to 8-bit thumbnail", e)
             null
         }
     }

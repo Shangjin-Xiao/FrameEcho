@@ -999,4 +999,320 @@ class FrameExtractorTest {
         assertEquals(68, thumbConfig!!.targetHeight)
         assertEquals("Thumbnail session must be deterministically closed after batch", 1, thumbClosed)
     }
+
+    @Test
+    fun `concurrent releaseSession during in-flight Media3 HDR extraction defers close until borrow finishes`() = runBlocking {
+        mockkObject(MetadataExtractor, ColorSpaceDetector)
+        val uri = mockk<Uri> {
+            every { this@mockk.toString() } returns "content://videos/concurrent_release_hdr.mp4"
+        }
+        val mediaFormat = mockk<MediaFormat>(relaxed = true)
+        val gpuBitmap = mockk<Bitmap>(relaxed = true) {
+            every { isRecycled } returns false
+            every { width } returns 3840
+            every { height } returns 2160
+        }
+        every { MetadataExtractor.getVideoTrackFormat(context, uri) } returns mediaFormat
+        every { ColorSpaceDetector.detect(mediaFormat) } returns ColorSpaceInfo(
+            type = ColorSpaceType.HDR10,
+            colorGamut = ColorGamut.BT2020
+        )
+        every { MetadataExtractor.extract(context, uri, null, any()) } returns VideoMetadata()
+
+        val enteredExtract = CountDownLatch(1)
+        val allowFinish = CountDownLatch(1)
+        var closeCount = 0
+        val extractor = FrameExtractor(context, sdkInt = 34)
+        extractor.media3SessionFactory = {
+            object : FrameExtractor.Media3FrameSession {
+                override suspend fun extractFrame(positionMs: Long): Bitmap {
+                    enteredExtract.countDown()
+                    assertTrue(allowFinish.await(5, TimeUnit.SECONDS))
+                    assertEquals(
+                        "Session must NOT be closed while extractFrame borrow is still in flight",
+                        0,
+                        synchronized(this@FrameExtractorTest) { closeCount }
+                    )
+                    return gpuBitmap
+                }
+
+                override fun close() {
+                    synchronized(this@FrameExtractorTest) {
+                        closeCount += 1
+                    }
+                }
+            }
+        }
+
+        val deferred = async(Dispatchers.Default) {
+            extractor.extractFrameWithInfo(uri, 2_000_000L)
+        }
+        assertTrue(enteredExtract.await(5, TimeUnit.SECONDS))
+
+        // Main/idle thread calls releaseSession while extraction is in flight
+        extractor.releaseSession()
+        assertEquals(0, synchronized(this@FrameExtractorTest) { closeCount })
+
+        allowFinish.countDown()
+        val result = deferred.await()
+        org.junit.Assert.assertNotNull(result)
+        assertSame(gpuBitmap, result!!.first)
+        assertTrue(result.second.isToneMapped)
+        assertEquals(
+            "Session must close deterministically once the in-flight borrow completes",
+            1,
+            synchronized(this@FrameExtractorTest) { closeCount }
+        )
+        verify(exactly = 0) { anyConstructed<MediaMetadataRetriever>().getFrameAtTime(any(), any()) }
+    }
+
+    @Test
+    fun `API 28 and 29 HDR fallback uses timestamp-exact OPTION_CLOSEST instead of duration-based frame index estimation`() = runBlocking {
+        mockkObject(MetadataExtractor, ColorSpaceDetector)
+        val uri = mockk<Uri> {
+            every { this@mockk.toString() } returns "content://videos/vfr_hdr_api29.mp4"
+        }
+        val mediaFormat = mockk<MediaFormat>(relaxed = true)
+        val fallbackBitmap = mockk<Bitmap>(relaxed = true) {
+            every { isRecycled } returns false
+            every { width } returns 1920
+            every { height } returns 1080
+        }
+        every { MetadataExtractor.getVideoTrackFormat(context, uri) } returns mediaFormat
+        every { ColorSpaceDetector.detect(mediaFormat) } returns ColorSpaceInfo(
+            type = ColorSpaceType.HDR10,
+            colorGamut = ColorGamut.BT2020
+        )
+        every { MetadataExtractor.extract(context, uri, any(), any()) } returns VideoMetadata()
+        every { anyConstructed<MediaMetadataRetriever>().setDataSource(any<Context>(), any<Uri>()) } returns Unit
+        every {
+            anyConstructed<MediaMetadataRetriever>().getFrameAtTime(
+                3_333_333L,
+                MediaMetadataRetriever.OPTION_CLOSEST
+            )
+        } returns fallbackBitmap
+        every { anyConstructed<MediaMetadataRetriever>().release() } returns Unit
+
+        for (sdk in listOf(28, 29)) {
+            val extractor = FrameExtractor(context, sdkInt = sdk)
+            extractor.media3SessionFactory = {
+                object : FrameExtractor.Media3FrameSession {
+                    override suspend fun extractFrame(positionMs: Long): Bitmap? = null
+                    override fun close() = Unit
+                }
+            }
+            val result = extractor.extractFrameWithInfo(uri, 3_333_333L)
+            org.junit.Assert.assertNotNull(result)
+            assertSame(fallbackBitmap, result!!.first)
+            org.junit.Assert.assertFalse(result.second.isToneMapped)
+        }
+
+        verify(exactly = 2) {
+            anyConstructed<MediaMetadataRetriever>().getFrameAtTime(
+                3_333_333L,
+                MediaMetadataRetriever.OPTION_CLOSEST
+            )
+        }
+        verify(exactly = 0) { anyConstructed<MediaMetadataRetriever>().getFrameAtIndex(any(), any()) }
+        verify(exactly = 0) { anyConstructed<MediaMetadataRetriever>().getFrameAtIndex(any()) }
+    }
+
+    @Test
+    fun `API 30 HDR thumbnail fallback requests RGBA_F16 via getScaledFrameAtTime BitmapParams and tone-maps`() = runBlocking {
+        mockkObject(MetadataExtractor, ColorSpaceDetector, com.shangjin.frameecho.core.media.colorspace.HdrToneMapper)
+        mockkConstructor(MediaMetadataRetriever.BitmapParams::class)
+        every {
+            anyConstructed<MediaMetadataRetriever.BitmapParams>().preferredConfig = any()
+        } returns Unit
+
+        val uri = mockk<Uri> {
+            every { this@mockk.toString() } returns "content://videos/hdr_thumb_fallback.mp4"
+        }
+        val hdrInfo = ColorSpaceInfo(
+            type = ColorSpaceType.HDR10,
+            transferFunction = com.shangjin.frameecho.core.model.TransferFunction.PQ,
+            colorGamut = ColorGamut.BT2020,
+            bitDepth = 10
+        )
+        val mediaFormat = mockk<MediaFormat>(relaxed = true) {
+            every { containsKey(MediaFormat.KEY_WIDTH) } returns true
+            every { getInteger(MediaFormat.KEY_WIDTH) } returns 3840
+            every { containsKey(MediaFormat.KEY_HEIGHT) } returns true
+            every { getInteger(MediaFormat.KEY_HEIGHT) } returns 2160
+        }
+        val f16ScaledThumb = mockk<Bitmap>(relaxed = true) {
+            every { isRecycled } returns false
+            every { config } returns Bitmap.Config.RGBA_F16
+        }
+        val mappedSdrThumb = mockk<Bitmap>(relaxed = true) {
+            every { isRecycled } returns false
+            every { config } returns Bitmap.Config.ARGB_8888
+        }
+
+        every { MetadataExtractor.getVideoTrackFormat(context, uri) } returns mediaFormat
+        every { ColorSpaceDetector.detect(mediaFormat) } returns hdrInfo
+        stubRetriever(3840, 2160)
+        every {
+            anyConstructed<MediaMetadataRetriever>().getScaledFrameAtTime(
+                1_000_000L,
+                MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                120,
+                68,
+                any()
+            )
+        } returns f16ScaledThumb
+        every {
+            com.shangjin.frameecho.core.media.colorspace.HdrToneMapper.process(
+                bitmap = f16ScaledThumb,
+                colorSpaceInfo = hdrInfo,
+                isAlreadyToneMapped = false
+            )
+        } returns mappedSdrThumb
+
+        val extractor = FrameExtractor(context, sdkInt = 30)
+        extractor.media3SessionFactory = {
+            object : FrameExtractor.Media3FrameSession {
+                override suspend fun extractFrame(positionMs: Long): Bitmap? = null
+                override fun close() = Unit
+            }
+        }
+
+        val thumb = extractor.extractThumbnail(uri, 1_000_000L, 120)
+        assertSame(mappedSdrThumb, thumb)
+        verify(exactly = 1) {
+            anyConstructed<MediaMetadataRetriever.BitmapParams>().preferredConfig = Bitmap.Config.RGBA_F16
+        }
+        verify(exactly = 1) {
+            anyConstructed<MediaMetadataRetriever>().getScaledFrameAtTime(
+                1_000_000L,
+                MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                120,
+                68,
+                any()
+            )
+        }
+        verify(exactly = 1) { f16ScaledThumb.recycle() }
+    }
+
+    @Test
+    fun `switching video via invalidateCache while media3SessionFactory is creating session closes orphan session without leak`() = runBlocking {
+        mockkObject(MetadataExtractor, ColorSpaceDetector)
+        val uri = mockk<Uri> {
+            every { this@mockk.toString() } returns "content://videos/mid_create_switch.mp4"
+        }
+        val mediaFormat = mockk<MediaFormat>(relaxed = true)
+        val gpuBitmap = mockk<Bitmap>(relaxed = true) {
+            every { isRecycled } returns false
+            every { width } returns 3840
+            every { height } returns 2160
+        }
+        every { MetadataExtractor.getVideoTrackFormat(context, uri) } returns mediaFormat
+        every { ColorSpaceDetector.detect(mediaFormat) } returns ColorSpaceInfo(
+            type = ColorSpaceType.HDR10,
+            colorGamut = ColorGamut.BT2020
+        )
+        every { MetadataExtractor.extract(context, uri, null, any()) } returns VideoMetadata()
+
+        val enteredFactory = CountDownLatch(1)
+        val allowFactoryFinish = CountDownLatch(1)
+        var closeCount = 0
+
+        val extractor = FrameExtractor(context, sdkInt = 34)
+        extractor.media3SessionFactory = {
+            enteredFactory.countDown()
+            assertTrue(allowFactoryFinish.await(5, TimeUnit.SECONDS))
+            object : FrameExtractor.Media3FrameSession {
+                override suspend fun extractFrame(positionMs: Long): Bitmap = gpuBitmap
+                override fun close() {
+                    synchronized(this@FrameExtractorTest) {
+                        closeCount += 1
+                    }
+                }
+            }
+        }
+
+        val deferred = async(Dispatchers.Default) {
+            extractor.extractFrameWithInfo(uri, 1_000_000L)
+        }
+        assertTrue(enteredFactory.await(5, TimeUnit.SECONDS))
+
+        // Switch video while media3SessionFactory is still building the session
+        extractor.invalidateCache()
+        assertEquals(0, synchronized(this@FrameExtractorTest) { closeCount })
+
+        allowFactoryFinish.countDown()
+        deferred.await()
+
+        assertEquals(
+            "Session created across generation boundary must be closed immediately after borrow ends",
+            1,
+            synchronized(this@FrameExtractorTest) { closeCount }
+        )
+    }
+
+    @Test
+    fun `onCleared style async cancel plus immediate releaseSession never closes session while extractFrame is still running`() = runBlocking {
+        mockkObject(MetadataExtractor, ColorSpaceDetector)
+        val uri = mockk<Uri> {
+            every { this@mockk.toString() } returns "content://videos/oncleared_race.mp4"
+        }
+        val mediaFormat = mockk<MediaFormat>(relaxed = true)
+        every { MetadataExtractor.getVideoTrackFormat(context, uri) } returns mediaFormat
+        every { ColorSpaceDetector.detect(mediaFormat) } returns ColorSpaceInfo(
+            type = ColorSpaceType.HLG,
+            colorGamut = ColorGamut.BT2020
+        )
+        every { MetadataExtractor.extract(context, uri, null, any()) } returns VideoMetadata()
+
+        val enteredExtract = CountDownLatch(1)
+        val allowCancelledExtractExit = CountDownLatch(1)
+        var closeCount = 0
+
+        val extractor = FrameExtractor(context, sdkInt = 34)
+        extractor.media3SessionFactory = {
+            object : FrameExtractor.Media3FrameSession {
+                override suspend fun extractFrame(positionMs: Long): Bitmap? {
+                    enteredExtract.countDown()
+                    try {
+                        kotlinx.coroutines.suspendCancellableCoroutine<Unit> { }
+                    } finally {
+                        // Simulate in-flight asynchronous teardown/decode work still running after job.cancel()
+                        assertTrue(allowCancelledExtractExit.await(5, TimeUnit.SECONDS))
+                    }
+                    return null
+                }
+
+                override fun close() {
+                    synchronized(this@FrameExtractorTest) {
+                        closeCount += 1
+                    }
+                }
+            }
+        }
+
+        val job = launch(Dispatchers.Default) {
+            extractor.extractFrameWithInfo(uri, 2_000_000L)
+        }
+        assertTrue(enteredExtract.await(5, TimeUnit.SECONDS))
+
+        // Mirrors ViewModel.onCleared(): cancel() returns asynchronously, followed immediately by releaseSession()
+        job.cancel()
+        extractor.releaseSession()
+
+        // While extractFrame has not yet exited, session.close() MUST NOT have raced in-flight work
+        assertEquals(
+            "releaseSession must defer close() while cancelled capture is still unwinding extractFrame",
+            0,
+            synchronized(this@FrameExtractorTest) { closeCount }
+        )
+
+        allowCancelledExtractExit.countDown()
+        job.join()
+
+        assertEquals(
+            "Session must close deterministically as soon as the cancelled capture finishes unwinding",
+            1,
+            synchronized(this@FrameExtractorTest) { closeCount }
+        )
+    }
 }
