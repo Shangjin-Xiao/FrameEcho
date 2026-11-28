@@ -7,7 +7,13 @@
         android:name="android.permission.INTERNET"
         tools:node="remove" />
 
-    <!-- Video selection uses GetContent / inbound content:// grants; gallery exports use MediaStore (API 29+) or SAF -->
+    <!--
+        Video selection uses GetContent / inbound content:// URI grants; Android 10+ saves use
+        MediaStore scoped storage and custom folders use SAF; frame card thumbnails render from
+        in-memory Bitmaps while Share/View reads app-owned content:// URIs. Legacy API 26-28
+        MediaStore DATA saves (and implicit read access on Android 8-9) keep WRITE_EXTERNAL_STORAGE
+        (maxSdkVersion="28") from the main manifest.
+    -->
     <uses-permission
         android:name="android.permission.READ_MEDIA_VIDEO"
         tools:node="remove" />

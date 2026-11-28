@@ -98,8 +98,8 @@ class DistributionAndPermissionPolicyTest {
         val playManifest = resolveAppFile("src/play/AndroidManifest.xml")
         val mainManifest = resolveAppFile("src/main/AndroidManifest.xml")
 
-        val playRemovals = parseUsesPermissionNodes(playManifest)
-        val mainPermissions = parseUsesPermissionNodes(mainManifest)
+        val playRemovals = parseUsesPermissionDeclarations(playManifest)
+        val mainPermissions = parseUsesPermissionDeclarations(mainManifest)
 
         val expectedRemoved = setOf(
             "android.permission.INTERNET",
@@ -114,13 +114,17 @@ class DistributionAndPermissionPolicyTest {
             assertEquals(
                 "$permission should be removed with tools:node=\"remove\" in play manifest",
                 "remove",
-                playRemovals[permission]
+                playRemovals[permission]?.toolsNode
             )
         }
 
         // Android 8/9 MediaStore gallery fallback still relies on WRITE_EXTERNAL_STORAGE (maxSdkVersion=28)
         assertTrue("android.permission.WRITE_EXTERNAL_STORAGE" in mainPermissions)
         assertFalse("android.permission.WRITE_EXTERNAL_STORAGE" in playRemovals)
+        assertEquals(
+            "28",
+            mainPermissions["android.permission.WRITE_EXTERNAL_STORAGE"]?.maxSdkVersion
+        )
     }
 
     @Test
@@ -190,19 +194,26 @@ class DistributionAndPermissionPolicyTest {
             .firstOrNull { it.isFile }
             ?: throw AssertionError("Could not locate $relativeToApp from ${File(".").absolutePath}")
 
-    private fun parseUsesPermissionNodes(manifestFile: File): Map<String, String> {
+    private data class PermissionDeclaration(
+        val toolsNode: String,
+        val maxSdkVersion: String
+    )
+
+    private fun parseUsesPermissionDeclarations(manifestFile: File): Map<String, PermissionDeclaration> {
         val doc = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
         }.newDocumentBuilder().parse(manifestFile)
 
         val nodes = doc.getElementsByTagName("uses-permission")
-        val result = linkedMapOf<String, String>()
+        val result = linkedMapOf<String, PermissionDeclaration>()
         for (i in 0 until nodes.length) {
             val element = nodes.item(i) as Element
             val name = element.getAttributeNS("http://schemas.android.com/apk/res/android", "name")
-            val toolsNode = element.getAttributeNS("http://schemas.android.com/tools", "node")
             if (name.isNotBlank()) {
-                result[name] = toolsNode
+                result[name] = PermissionDeclaration(
+                    toolsNode = element.getAttributeNS("http://schemas.android.com/tools", "node"),
+                    maxSdkVersion = element.getAttributeNS("http://schemas.android.com/apk/res/android", "maxSdkVersion")
+                )
             }
         }
         return result

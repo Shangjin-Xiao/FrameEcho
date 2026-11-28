@@ -25,12 +25,22 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      GITHUB_REPOSITORY_SLUG: ${{ github.repository }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-tags: true
+
+      - name: Validate release version
+        run: |
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid semantic version: $RELEASE_VERSION" >&2
+            exit 1
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -49,7 +59,7 @@ jobs:
       - name: Build GitHub Release APK (signed)
         run: |
           ./gradlew assembleGithubRelease --no-daemon --stacktrace \
-            -PVERSION_NAME="${{ inputs.version }}" \
+            -PVERSION_NAME="$RELEASE_VERSION" \
             -PVERSION_CODE="${{ github.run_number }}" \
             -PRELEASE_STORE_FILE=$RUNNER_TEMP/frameecho-release.jks \
             -PRELEASE_STORE_PASSWORD="${{ secrets.RELEASE_STORE_PASSWORD }}" \
@@ -60,7 +70,7 @@ jobs:
         if: ${{ inputs.build_play_aab == true }}
         run: |
           ./gradlew bundlePlayRelease --no-daemon --stacktrace \
-            -PVERSION_NAME="${{ inputs.version }}" \
+            -PVERSION_NAME="$RELEASE_VERSION" \
             -PVERSION_CODE="${{ github.run_number }}" \
             -PRELEASE_STORE_FILE=$RUNNER_TEMP/frameecho-release.jks \
             -PRELEASE_STORE_PASSWORD="${{ secrets.RELEASE_STORE_PASSWORD }}" \
@@ -76,7 +86,6 @@ jobs:
         with:
           name: frameecho-release-apk-${{ inputs.version }}
           path: app/build/outputs/apk/github/release/app-github-release.apk
-          archive: false
           if-no-files-found: error
           retention-days: 30
 
@@ -86,22 +95,21 @@ jobs:
         with:
           name: frameecho-play-aab-${{ inputs.version }}
           path: app/build/outputs/bundle/playRelease/app-play-release.aab
-          archive: false
           if-no-files-found: error
           retention-days: 30
 
       - name: Resolve release notes
         if: ${{ inputs.publish_release == true }}
         run: |
-          PREV_TAG=$(git tag --sort=-v:refname | grep -v -x -e "${{ inputs.version }}" -e "v${{ inputs.version }}" | head -n 1 || true)
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v -x -e "$RELEASE_VERSION" -e "v$RELEASE_VERSION" | head -n 1 || true)
           echo "Previous tag: $PREV_TAG"
           python3 scripts/resolve_release_notes.py \
-            --version "${{ inputs.version }}" \
-            --output $RUNNER_TEMP/release-body.md \
-            --repo "${{ github.repository }}" \
+            --version "$RELEASE_VERSION" \
+            --output "$RUNNER_TEMP/release-body.md" \
+            --repo "$GITHUB_REPOSITORY_SLUG" \
             --previous-tag "$PREV_TAG"
           echo "--- release body preview ---"
-          cat $RUNNER_TEMP/release-body.md
+          cat "$RUNNER_TEMP/release-body.md"
 
       - name: Create GitHub Release
         if: ${{ inputs.publish_release == true }}
